@@ -47,7 +47,7 @@ interface ExperienceProviderProps {
 }
 
 export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({ children }) => {
-  const [totalExperience, setTotalExperience] = useState(500);
+  const [totalExperience, setTotalExperience] = useState(0);
   const levelData = calculateLevelAndProgress(totalExperience);
 
   const addExperience = (amount: number): void => {

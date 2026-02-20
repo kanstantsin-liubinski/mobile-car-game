@@ -91,7 +91,8 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                 key={car.id}
                 onPress={() => {
                   repairCar(car.id, mechanicMultiplier);
-                  addExperience(5);
+                  // XP = (0.1 * mechanicLevel) * 10 = mechanicLevel
+                  addExperience(mechanicMultiplier);
                 }}
                 activeOpacity={0.7}
               >
@@ -186,7 +187,8 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                       ]}
                       onPress={() => {
                         repairCar(car.id, mechanicMultiplier);
-                        addExperience(5);
+                        // XP = (0.1 * mechanicLevel) * 10 = mechanicLevel
+                        addExperience(mechanicMultiplier);
                       }}
                       disabled={car.condition >= car.maxCondition}
                     >
