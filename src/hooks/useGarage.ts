@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import type { Car, GarageCar } from '@/types';
 import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalculator';
 
 export const useGarage = (onSellCar?: (amount: number) => void) => {
   const [garage, setGarage] = useState<GarageCar[]>([]);
 
-  const addCar = (car: Car) => {
+  const addCar = useCallback((car: Car) => {
     // Вычисляем базовую цену (цену при состоянии 100%)
     const basePrice = calculateBasePrice(car.price, {
       year: car.year,
@@ -27,17 +27,21 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       maxCondition,
     };
     setGarage((prev) => [...prev, garageCar]);
-  };
+  }, []);
 
-  const removeCar = (carId: string) => {
-    setGarage((prev) => prev.filter((car) => car.id !== carId));
-  };
+  const removeCar = useCallback((carId: string) => {
+    setGarage((prev) => {
+      const filtered = prev.filter((car) => car.id !== carId);
+      return filtered;
+    });
+  }, [garage]);
 
-  const hasCar = (carId: string) => {
-    return garage.some((car) => car.id === carId);
-  };
+  const hasCar = useCallback((carId: string) => {
+    const has = garage.some((car) => car.id === carId);
+    return has;
+  }, [garage]);
 
-  const repairCar = (carId: string) => {
+  const repairCar = useCallback((carId: string) => {
     setGarage((prev) =>
       prev.map((car) => {
         if (car.id === carId) {
@@ -53,16 +57,23 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
         return car;
       })
     );
-  };
+  }, []);
 
-  const getCar = (carId: string) => {
+  const getCar = useCallback((carId: string) => {
     return garage.find((car) => car.id === carId);
-  };
+  }, [garage]);
 
-  const sellCar = (carId: string, sellPrice: number) => {
+  const sellCar = useCallback((carId: string, sellPrice: number) => {
     removeCar(carId);
     onSellCar?.(sellPrice);
-  };
+  }, [removeCar, onSellCar]);
 
-  return { garage, addCar, removeCar, hasCar, repairCar, getCar, sellCar };
+  // Оборачиваем возвращаемый объект в useMemo с зависимостью на garage
+  // Это обеспечивает, что Context получает новый объект только когда garage изменяется
+  const garageState = useMemo(
+    () => ({ garage, addCar, removeCar, hasCar, repairCar, getCar, sellCar }),
+    [garage, addCar, removeCar, hasCar, repairCar, getCar, sellCar]
+  );
+
+  return garageState;
 };

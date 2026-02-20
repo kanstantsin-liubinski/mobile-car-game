@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { marketStyles } from '@styles/styles';
-import { useBalance } from '@hooks/useBalance';
+import { useBalanceContext } from '@hooks/BalanceContext';
 import { useGarageContext } from '@hooks/GarageContext';
+import { useSoldCarsContext } from '@hooks/SoldCarsContext';
 import { colors } from '@styles/colors';
 import { calculateMaxCondition } from '../utils/priceCalculator';
 import type { Car } from '@/types';
@@ -99,8 +100,9 @@ const AVAILABLE_CARS: Car[] = [
 ];
 
 export const MarketScreen = () => {
-  const { balance, removeBalance } = useBalance();
-  const { addCar, hasCar } = useGarageContext();
+  const { balance, removeBalance } = useBalanceContext();
+  const { addCar, hasCar, garage } = useGarageContext();
+  const { isSold } = useSoldCarsContext();
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -122,7 +124,18 @@ export const MarketScreen = () => {
       <View style={marketStyles.carsList}>
         {AVAILABLE_CARS.map((car) => {
           const owned = hasCar(car.id);
-          const canAfford = balance >= car.price && !owned;
+          const sold = isSold(car.id);
+          
+          // Если машина уже куплена или продана, не показываем её на авторынке
+          if (owned) {
+            return null;
+          }
+
+          if (sold) {
+            return null;
+          }
+          
+          const canAfford = balance >= car.price;
           const maxCondition = calculateMaxCondition(car.year, car.mileage);
 
           return (
@@ -191,8 +204,8 @@ export const MarketScreen = () => {
                 onPress={() => handleBuyCar(car)}
                 disabled={!canAfford}
               >
-                <Text style={owned ? marketStyles.buyButtonOwnedText : marketStyles.buyButtonText}>
-                  {owned ? '✓ Владеешь' : 'Купить'}
+                <Text style={canAfford ? marketStyles.buyButtonText : marketStyles.buyButtonOwnedText}>
+                  {canAfford ? 'Купить' : 'Недостаточно денег'}
                 </Text>
               </TouchableOpacity>
             </View>

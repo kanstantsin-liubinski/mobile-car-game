@@ -347,4 +347,73 @@ export const garageStyles = StyleSheet.create({
     fontWeight: '600',
     color: colors.darkBg,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.darkBg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalInfoBlock: {
+    marginBottom: 16,
+    paddingBottom: 12,
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: colors.textTertiary,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  modalCarName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  modalPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  modalProfit: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cancelButton: {
+    backgroundColor: colors.buttonBg,
+  },
+  confirmButton: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
 });

@@ -1,15 +1,24 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { garageStyles } from '@styles/styles';
 import { useGarageContext } from '@hooks/GarageContext';
-import { useBalance } from '@hooks/useBalance';
 import { colors } from '@styles/colors';
 import { calculateCarPrice } from '../utils/priceCalculator';
 
-export const GarageScreen = () => {
+interface GarageScreenProps {
+  onSellCar?: (carId: string, sellPrice: number) => void;
+}
+
+export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const { garage, repairCar, sellCar } = useGarageContext();
-  const { addBalance } = useBalance();
-  const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
+  const [selectedCarForSale, setSelectedCarForSale] = useState<{
+    id: string;
+    name: string;
+    boughtPrice: number;
+    sellPrice: number;
+    profit: number;
+    profitPercent: number;
+  } | null>(null);
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -28,26 +37,24 @@ export const GarageScreen = () => {
       condition: car.condition,
     });
 
-    Alert.alert(
-      'Продать машину?',
-      `${car.name}\nПолучишь: $${sellPrice.toLocaleString()}`,
-      [
-        {
-          text: 'Отмена',
-          onPress: () => setSelectedCarId(null),
-          style: 'cancel',
-        },
-        {
-          text: 'Продать',
-          onPress: () => {
-            addBalance(sellPrice);
-            sellCar(carId, sellPrice);
-            setSelectedCarId(null);
-          },
-          style: 'destructive',
-        },
-      ]
-    );
+    const profit = sellPrice - car.price;
+    const profitPercent = ((profit / car.price) * 100).toFixed(1);
+
+    setSelectedCarForSale({
+      id: carId,
+      name: car.name,
+      boughtPrice: car.price,
+      sellPrice,
+      profit,
+      profitPercent: parseFloat(profitPercent),
+    });
+  };
+
+  const confirmSell = () => {
+    if (!selectedCarForSale) return;
+    sellCar(selectedCarForSale.id, selectedCarForSale.sellPrice);
+    onSellCar?.(selectedCarForSale.id, selectedCarForSale.sellPrice);
+    setSelectedCarForSale(null);
   };
 
   return (
@@ -181,6 +188,83 @@ export const GarageScreen = () => {
           })}
         </View>
       )}
+
+      <Modal
+        visible={selectedCarForSale !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedCarForSale(null)}
+      >
+        <View style={garageStyles.modalOverlay}>
+          <View style={garageStyles.modalContent}>
+            <Text style={garageStyles.modalTitle}>Продажа машины</Text>
+
+            <View style={garageStyles.modalInfoBlock}>
+              <Text style={garageStyles.modalLabel}>Машина:</Text>
+              <Text style={garageStyles.modalCarName}>{selectedCarForSale?.name}</Text>
+            </View>
+
+            <View style={garageStyles.modalInfoBlock}>
+              <Text style={garageStyles.modalLabel}>Купили за:</Text>
+              <Text style={garageStyles.modalPrice}>
+                ${selectedCarForSale?.boughtPrice.toLocaleString()}
+              </Text>
+            </View>
+
+            <View style={garageStyles.modalInfoBlock}>
+              <Text style={garageStyles.modalLabel}>Продаём за:</Text>
+              <Text style={[garageStyles.modalPrice, { color: colors.primary }]}>
+                ${selectedCarForSale?.sellPrice.toLocaleString()}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                garageStyles.modalInfoBlock,
+                {
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                  paddingTop: 16,
+                  marginTop: 16,
+                },
+              ]}
+            >
+              <Text style={garageStyles.modalLabel}>Прибыль:</Text>
+              <Text
+                style={[
+                  garageStyles.modalProfit,
+                  {
+                    color:
+                      (selectedCarForSale?.profit ?? 0) >= 0 ? colors.primary : '#EF4444',
+                  },
+                ]}
+              >
+                {(selectedCarForSale?.profit ?? 0) >= 0 ? '+' : ''}
+                ${selectedCarForSale?.profit.toLocaleString()} (
+                {selectedCarForSale?.profitPercent}%)
+              </Text>
+            </View>
+
+            <View style={garageStyles.modalButtonsContainer}>
+              <TouchableOpacity
+                style={[garageStyles.modalButton, garageStyles.cancelButton]}
+                onPress={() => setSelectedCarForSale(null)}
+              >
+                <Text style={garageStyles.modalButtonText}>Отмена</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[garageStyles.modalButton, garageStyles.confirmButton]}
+                onPress={confirmSell}
+              >
+                <Text style={[garageStyles.modalButtonText, { color: '#FFF' }]}>
+                  Продать
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };

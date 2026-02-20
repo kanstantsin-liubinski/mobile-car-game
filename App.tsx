@@ -6,31 +6,34 @@ import { GarageScreen, MarketScreen } from '@screens';
 import { BottomMenu } from '@components/BottomMenu';
 import { TopMenu } from '@components/TopMenu';
 import { useNavigation } from '@hooks/useNavigation';
-import { useBalance } from '@hooks/useBalance';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { GarageProvider } from '@hooks/GarageContext';
+import { BalanceProvider, useBalanceContext } from '@hooks/BalanceContext';
+import { SoldCarsProvider, useSoldCarsContext } from '@hooks/SoldCarsContext';
 import { commonStyles } from '@styles/styles';
 
 function AppContent() {
   const { currentScreen, goToScreen } = useNavigation();
-  const { balance, addBalance } = useBalance();
+  const { balance, addBalance } = useBalanceContext();
+  const { markAsSold } = useSoldCarsContext();
   
   // Используем нативные insets на мобильных, веб-версию на браузере
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
-  const handleSellCar = (sellPrice: number) => {
+  const handleSellCar = (carId: string, sellPrice: number) => {
     addBalance(sellPrice);
+    markAsSold(carId);
   };
 
   return (
-    <GarageProvider onSellCar={handleSellCar}>
+    <GarageProvider onSellCar={(sellPrice) => {}}>
       <View style={commonStyles.container}>
         <TopMenu balance={balance} insets={insets} />
         
         <View style={commonStyles.content}>
-          {currentScreen === 'garage' && <GarageScreen />}
+          {currentScreen === 'garage' && <GarageScreen onSellCar={handleSellCar} />}
           {currentScreen === 'market' && <MarketScreen />}
         </View>
 
@@ -45,7 +48,11 @@ function AppContent() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AppContent />
+      <BalanceProvider>
+        <SoldCarsProvider>
+          <AppContent />
+        </SoldCarsProvider>
+      </BalanceProvider>
     </SafeAreaProvider>
   );
 }
