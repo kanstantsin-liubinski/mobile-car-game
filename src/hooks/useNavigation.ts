@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Screen } from '../types';
+import type { Screen } from '@types';
 
 export const useNavigation = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>('garage');

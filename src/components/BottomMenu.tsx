@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, TouchableOpacity } from 'react-native';
+import { View, TouchableOpacity, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@expo/vector-icons';
-import { menuStyles } from '../styles/styles';
-import { colors } from '../styles/colors';
-import type { Screen } from '../types';
+import { menuStyles } from '@styles/styles';
+import { colors } from '@styles/colors';
+import { GarageIcon, MarketIcon } from '@img/index';
+import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
+import type { Screen } from '@/types/index';
 
 interface BottomMenuProps {
   currentScreen: Screen;
@@ -12,7 +13,9 @@ interface BottomMenuProps {
 }
 
 export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) => {
-  const insets = useSafeAreaInsets();
+  const nativeInsets = useSafeAreaInsets();
+  const webInsets = useSafeAreaWeb();
+  const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
   return (
     <View style={[menuStyles.bottomMenu, { paddingBottom: insets.bottom }]}>
@@ -20,10 +23,9 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
         style={[menuStyles.menuButton, currentScreen === 'garage' && menuStyles.menuButtonActive]}
         onPress={() => onScreenChange('garage')}
       >
-        <MaterialIcons
-          name="garage"
+        <GarageIcon
           size={24}
-          color={currentScreen === 'garage' ? colors.white : colors.inactive}
+          color={currentScreen === 'garage' ? colors.textPrimary : colors.menuInactive}
         />
       </TouchableOpacity>
 
@@ -31,10 +33,9 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
         style={[menuStyles.menuButton, currentScreen === 'market' && menuStyles.menuButtonActive]}
         onPress={() => onScreenChange('market')}
       >
-        <MaterialIcons
-          name="store"
+        <MarketIcon
           size={24}
-          color={currentScreen === 'market' ? colors.white : colors.inactive}
+          color={currentScreen === 'market' ? colors.textPrimary : colors.menuInactive}
         />
       </TouchableOpacity>
     </View>

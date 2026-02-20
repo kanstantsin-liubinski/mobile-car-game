@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text } from 'react-native';
-import { commonStyles } from '../styles/styles';
+import { commonStyles } from '@styles/styles';
 
 export const GarageScreen = () => {
   return (

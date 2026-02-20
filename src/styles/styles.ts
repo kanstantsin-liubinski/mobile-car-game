@@ -16,38 +16,62 @@ export const commonStyles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   screenTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: colors.textDark,
+    fontSize: 32,
+    fontWeight: '700',
+    marginBottom: 16,
+    color: colors.textPrimary,
   },
   screenText: {
     fontSize: 16,
-    color: colors.textGray,
+    color: colors.textTertiary,
+    fontWeight: '500',
+  },
+});
+
+export const headerStyles = StyleSheet.create({
+  topMenu: {
+    backgroundColor: colors.darkBg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  balanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  balanceValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });
 
 export const menuStyles = StyleSheet.create({
   bottomMenu: {
     flexDirection: 'row',
-    backgroundColor: colors.white,
+    backgroundColor: colors.darkBg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 10,
-    paddingTop: 8,
+    paddingTop: 12,
     justifyContent: 'space-around',
   },
   menuButton: {
     width: 60,
     height: 50,
-    borderRadius: 10,
-    backgroundColor: colors.light,
+    borderRadius: 12,
+    backgroundColor: colors.buttonBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   menuButtonActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.buttonActive,
+    borderColor: colors.primary,
   },
 });

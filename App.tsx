@@ -1,18 +1,28 @@
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GarageScreen, MarketScreen } from './src/screens';
-import { BottomMenu } from './src/components/BottomMenu';
-import { useNavigation } from './src/hooks/useNavigation';
-import { commonStyles } from './src/styles/styles';
+import { GarageScreen, MarketScreen } from '@screens';
+import { BottomMenu } from '@components/BottomMenu';
+import { TopMenu } from '@components/TopMenu';
+import { useNavigation } from '@hooks/useNavigation';
+import { useBalance } from '@hooks/useBalance';
+import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
+import { commonStyles } from '@styles/styles';
 
 function AppContent() {
   const { currentScreen, goToScreen } = useNavigation();
-  const insets = useSafeAreaInsets();
+  const { balance } = useBalance();
+  
+  // Используем нативные insets на мобильных, веб-версию на браузере
+  const nativeInsets = useSafeAreaInsets();
+  const webInsets = useSafeAreaWeb();
+  const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
   return (
-    <View style={[commonStyles.container, { paddingTop: insets.top }]}>
+    <View style={commonStyles.container}>
+      <TopMenu balance={balance} insets={insets} />
+      
       <View style={commonStyles.content}>
         {currentScreen === 'garage' && <GarageScreen />}
         {currentScreen === 'market' && <MarketScreen />}
