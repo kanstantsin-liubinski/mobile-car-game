@@ -1,20 +1,34 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function App() {
+import { GarageScreen, MarketScreen } from './src/screens';
+import { BottomMenu } from './src/components/BottomMenu';
+import { useNavigation } from './src/hooks/useNavigation';
+import { commonStyles } from './src/styles/styles';
+
+function AppContent() {
+  const { currentScreen, goToScreen } = useNavigation();
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
+    <View style={[commonStyles.container, { paddingTop: insets.top }]}>
+      <View style={commonStyles.content}>
+        {currentScreen === 'garage' && <GarageScreen />}
+        {currentScreen === 'market' && <MarketScreen />}
+      </View>
+
+      <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
+
       <StatusBar style="auto" />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppContent />
+    </SafeAreaProvider>
+  );
+}
