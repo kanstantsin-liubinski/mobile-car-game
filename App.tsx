@@ -8,6 +8,7 @@ import { TopMenu } from '@components/TopMenu';
 import { useNavigation } from '@hooks/useNavigation';
 import { useBalance } from '@hooks/useBalance';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
+import { GarageProvider } from '@hooks/GarageContext';
 import { commonStyles } from '@styles/styles';
 
 function AppContent() {
@@ -38,7 +39,9 @@ function AppContent() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AppContent />
+      <GarageProvider>
+        <AppContent />
+      </GarageProvider>
     </SafeAreaProvider>
   );
 }
