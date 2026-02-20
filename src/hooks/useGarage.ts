@@ -41,12 +41,14 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     return has;
   }, [garage]);
 
-  const repairCar = useCallback((carId: string) => {
+  const repairCar = useCallback((carId: string, skillMultiplier: number = 1) => {
     setGarage((prev) =>
       prev.map((car) => {
         if (car.id === carId) {
-          // Добавляем 0.1 и всегда округляем до одного знака после запятой
-          const newCondition = Math.round((car.condition + 0.1) * 10) / 10;
+          // Базовый ремонт 0.1%, умноженный на множитель скилла (уровень механика)
+          const repairAmount = 0.1 * skillMultiplier;
+          // Добавляем и всегда округляем до одного знака после запятой
+          const newCondition = Math.round((car.condition + repairAmount) * 10) / 10;
           // Ограничиваем максимумом, тоже с округлением
           const cappedCondition = Math.min(
             Math.round(car.maxCondition * 10) / 10,

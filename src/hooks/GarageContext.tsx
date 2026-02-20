@@ -7,7 +7,7 @@ interface GarageContextType {
   addCar: (car: Car) => void;
   removeCar: (carId: string) => void;
   hasCar: (carId: string) => boolean;
-  repairCar: (carId: string) => void;
+  repairCar: (carId: string, skillMultiplier?: number) => void;
   getCar: (carId: string) => GarageCar | undefined;
   sellCar: (carId: string, sellPrice: number) => void;
 }

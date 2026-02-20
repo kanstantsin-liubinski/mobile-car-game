@@ -3,7 +3,7 @@ import { View, TouchableOpacity, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { menuStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
-import { GarageIcon, MarketIcon } from '@img/index';
+import { GarageIcon, MarketIcon, SkillsIcon } from '@img/index';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import type { Screen } from '@/types/index';
 
@@ -36,6 +36,16 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
         <MarketIcon
           size={24}
           color={currentScreen === 'market' ? colors.textPrimary : colors.menuInactive}
+        />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[menuStyles.menuButton, currentScreen === 'skills' && menuStyles.menuButtonActive]}
+        onPress={() => onScreenChange('skills')}
+      >
+        <SkillsIcon
+          size={24}
+          color={currentScreen === 'skills' ? colors.textPrimary : colors.menuInactive}
         />
       </TouchableOpacity>
     </View>

@@ -1,4 +1,4 @@
-export type Screen = 'garage' | 'market';
+export type Screen = 'garage' | 'market' | 'skills';
 
 export interface Car {
   id: string;

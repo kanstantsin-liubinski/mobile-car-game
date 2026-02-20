@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, Platform } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { useGarageContext } from '@hooks/GarageContext';
+import { useSkillsContext } from '@hooks/SkillsContext';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
 import { calculateCarPrice } from '../utils/priceCalculator';
@@ -13,6 +14,7 @@ interface GarageScreenProps {
 
 export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const { garage, repairCar, sellCar } = useGarageContext();
+  const { getSkill } = useSkillsContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
@@ -24,6 +26,9 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     profit: number;
     profitPercent: number;
   } | null>(null);
+
+  const mechanicSkill = getSkill('mechanic');
+  const mechanicMultiplier = mechanicSkill?.level ?? 1;
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -82,7 +87,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
             return (
               <TouchableOpacity
                 key={car.id}
-                onPress={() => repairCar(car.id)}
+                onPress={() => repairCar(car.id, mechanicMultiplier)}
                 activeOpacity={0.7}
               >
                 <View style={garageStyles.carCard}>
@@ -174,11 +179,11 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                         garageStyles.repairButton,
                         car.condition >= car.maxCondition && garageStyles.repairButtonDisabled,
                       ]}
-                      onPress={() => repairCar(car.id)}
+                      onPress={() => repairCar(car.id, mechanicMultiplier)}
                       disabled={car.condition >= car.maxCondition}
                     >
                       <Text style={garageStyles.buttonText}>
-                        {car.condition >= car.maxCondition ? '✓ Макс' : '🔧 Ремонт (+0.1%)'}
+                        {car.condition >= car.maxCondition ? '✓ Макс' : `🔧 Ремонт (+${(0.1 * mechanicMultiplier).toFixed(1)}%)`}
                       </Text>
                     </TouchableOpacity>
 
