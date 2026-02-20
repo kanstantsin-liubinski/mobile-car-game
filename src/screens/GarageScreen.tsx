@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { useGarageContext } from '@hooks/GarageContext';
+import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
 import { calculateCarPrice } from '../utils/priceCalculator';
 
@@ -11,6 +13,9 @@ interface GarageScreenProps {
 
 export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const { garage, repairCar, sellCar } = useGarageContext();
+  const nativeInsets = useSafeAreaInsets();
+  const webInsets = useSafeAreaWeb();
+  const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
   const [selectedCarForSale, setSelectedCarForSale] = useState<{
     id: string;
     name: string;
@@ -198,7 +203,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
         onRequestClose={() => setSelectedCarForSale(null)}
       >
         <View style={garageStyles.modalOverlay}>
-          <View style={garageStyles.modalContent}>
+          <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
             <Text style={garageStyles.modalTitle}>Продажа машины</Text>
 
             <View style={garageStyles.modalInfoBlock}>

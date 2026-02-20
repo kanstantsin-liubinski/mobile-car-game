@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 export const useBalance = () => {
-  const [balance, setBalance] = useState(7000);
+  const [balance, setBalance] = useState(25000);
 
   const addBalance = (amount: number) => {
     setBalance((prev) => prev + amount);
