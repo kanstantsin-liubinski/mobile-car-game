@@ -146,55 +146,55 @@ export const MarketScreen = () => {
                   <Text style={marketStyles.carName}>{car.name}</Text>
                   <Text style={marketStyles.carSpeed}>⚡ {car.speed} км/ч</Text>
                   <Text style={marketStyles.carMeta}>📅 {car.year} • 📏 {car.mileage.toLocaleString()} км</Text>
-                  
-                  <View style={marketStyles.conditionContainer}>
-                    <View style={marketStyles.conditionBar}>
-                      {/* Текущее состояние */}
-                      <View
-                        style={[
-                          marketStyles.conditionFill,
-                          {
-                            width: `${car.condition}%`,
-                            backgroundColor: getConditionColor(car.condition),
-                            position: 'absolute',
-                            left: 0,
-                          },
-                        ]}
-                      />
-                      {/* Максимально возможное состояние */}
-                      <View
-                        style={[
-                          marketStyles.conditionMaxFill,
-                          {
-                            width: `${maxCondition}%`,
-                            backgroundColor: colors.border,
-                            position: 'absolute',
-                            left: 0,
-                          },
-                        ]}
-                      />
-                      {/* Недостижимая часть */}
-                      <View
-                        style={[
-                          marketStyles.conditionUnachievableFill,
-                          {
-                            width: `${100 - maxCondition}%`,
-                            backgroundColor: '#27272A',
-                            position: 'absolute',
-                            right: 0,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <View style={marketStyles.conditionLabelContainer}>
-                      <Text style={[marketStyles.conditionText, { color: getConditionColor(car.condition) }]}>
-                        {car.condition.toFixed(0)}% состояние
-                      </Text>
-                      <Text style={marketStyles.maxConditionText}>макс {maxCondition.toFixed(1)}%</Text>
-                    </View>
-                  </View>
                 </View>
                 <Text style={marketStyles.carPrice}>${car.price.toLocaleString()}</Text>
+              </View>
+
+              <View style={marketStyles.conditionContainer}>
+                <View style={marketStyles.conditionBar}>
+                  {/* Текущее состояние */}
+                  <View
+                    style={[
+                      marketStyles.conditionFill,
+                      {
+                        width: `${car.condition}%`,
+                        backgroundColor: getConditionColor(car.condition),
+                        position: 'absolute',
+                        left: 0,
+                      },
+                    ]}
+                  />
+                  {/* Максимально возможное состояние */}
+                  <View
+                    style={[
+                      marketStyles.conditionMaxFill,
+                      {
+                        width: `${maxCondition}%`,
+                        backgroundColor: colors.border,
+                        position: 'absolute',
+                        left: 0,
+                      },
+                    ]}
+                  />
+                  {/* Недостижимая часть */}
+                  <View
+                    style={[
+                      marketStyles.conditionUnachievableFill,
+                      {
+                        width: `${100 - maxCondition}%`,
+                        backgroundColor: '#27272A',
+                        position: 'absolute',
+                        right: 0,
+                      },
+                    ]}
+                  />
+                </View>
+                <View style={marketStyles.conditionLabelContainer}>
+                  <Text style={[marketStyles.conditionText, { color: getConditionColor(car.condition) }]}>
+                    {car.condition.toFixed(0)}% состояние
+                  </Text>
+                  <Text style={marketStyles.maxConditionText}>макс {maxCondition.toFixed(1)}%</Text>
+                </View>
               </View>
 
               <Text style={marketStyles.carDescription}>{car.description}</Text>
@@ -204,8 +204,8 @@ export const MarketScreen = () => {
                 onPress={() => handleBuyCar(car)}
                 disabled={!canAfford}
               >
-                <Text style={canAfford ? marketStyles.buyButtonText : marketStyles.buyButtonOwnedText}>
-                  {canAfford ? 'Купить' : 'Недостаточно денег'}
+                <Text style={[marketStyles.buyButtonText, !canAfford && { color: colors.textTertiary }]}>
+                  Купить
                 </Text>
               </TouchableOpacity>
             </View>

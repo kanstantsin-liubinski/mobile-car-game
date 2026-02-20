@@ -102,7 +102,7 @@ export const marketStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   carEmoji: {
     fontSize: 48,
@@ -127,7 +127,8 @@ export const marketStyles = StyleSheet.create({
     marginTop: 2,
   },
   conditionContainer: {
-    marginTop: 8,
+    marginTop: 0,
+    marginBottom: 12,
     gap: 4,
   },
   conditionBar: {
@@ -185,18 +186,14 @@ export const marketStyles = StyleSheet.create({
     alignItems: 'center',
   },
   buyButtonDisabled: {
-    backgroundColor: colors.buttonBg,
-    opacity: 0.5,
+    backgroundColor: colors.darkBg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   buyButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.darkBg,
-  },
-  buyButtonOwnedText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textTertiary,
   },
 });
 
@@ -227,13 +224,15 @@ export const garageStyles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  carHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   carEmoji: {
     fontSize: 40,
     marginRight: 12,
-    marginTop: 4,
   },
   carInfo: {
     flex: 1,
@@ -254,7 +253,8 @@ export const garageStyles = StyleSheet.create({
     marginTop: 2,
   },
   conditionContainer: {
-    marginTop: 12,
+    marginTop: 0,
+    marginBottom: 12,
     gap: 6,
   },
   conditionBar: {
@@ -301,8 +301,6 @@ export const garageStyles = StyleSheet.create({
     fontStyle: 'italic',
   },
   priceContainer: {
-    marginTop: 12,
-    padding: 10,
     backgroundColor: colors.buttonBg,
     borderRadius: 8,
   },

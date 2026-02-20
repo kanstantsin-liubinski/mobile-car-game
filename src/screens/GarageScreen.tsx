@@ -81,106 +81,108 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                 activeOpacity={0.7}
               >
                 <View style={garageStyles.carCard}>
-                  <Text style={garageStyles.carEmoji}>{car.emoji}</Text>
-                  <View style={garageStyles.carInfo}>
-                    <Text style={garageStyles.carName}>{car.name}</Text>
-                    <Text style={garageStyles.carSpeed}>⚡ {car.speed} км/ч</Text>
-                    <Text style={garageStyles.carMeta}>
-                      📅 {car.year} • 📏 {car.mileage.toLocaleString()} км
-                    </Text>
-
-                    <View style={garageStyles.conditionContainer}>
-                      <View style={garageStyles.conditionBar}>
-                        {/* Текущее состояние */}
-                        <View
-                          style={[
-                            garageStyles.conditionFill,
-                            {
-                              width: `${car.condition}%`,
-                              backgroundColor: getConditionColor(car.condition),
-                              position: 'absolute',
-                              left: 0,
-                            },
-                          ]}
-                        />
-                        {/* Максимально возможное состояние */}
-                        <View
-                          style={[
-                            garageStyles.conditionMaxFill,
-                            {
-                              width: `${car.maxCondition}%`,
-                              backgroundColor: colors.border,
-                              position: 'absolute',
-                              left: 0,
-                            },
-                          ]}
-                        />
-                        {/* Недостижимая часть (разница между 100% и максимумом) */}
-                        <View
-                          style={[
-                            garageStyles.conditionUnachievableFill,
-                            {
-                              width: `${100 - car.maxCondition}%`,
-                              backgroundColor: '#27272A',
-                              position: 'absolute',
-                              right: 0,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <View style={garageStyles.conditionLabelContainer}>
-                        <Text
-                          style={[
-                            garageStyles.conditionText,
-                            { color: getConditionColor(car.condition) },
-                          ]}
-                        >
-                          {car.condition.toFixed(1)}%
-                        </Text>
-                        <Text style={garageStyles.maxConditionText}>
-                          макс {car.maxCondition.toFixed(1)}%
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={garageStyles.priceContainer}>
-                      <Text style={garageStyles.priceLabel}>Текущая цена:</Text>
-                      <Text style={garageStyles.currentPrice}>
-                        ${currentPrice.toLocaleString()}
+                  <View style={garageStyles.carHeader}>
+                    <Text style={garageStyles.carEmoji}>{car.emoji}</Text>
+                    <View style={garageStyles.carInfo}>
+                      <Text style={garageStyles.carName}>{car.name}</Text>
+                      <Text style={garageStyles.carSpeed}>⚡ {car.speed} км/ч</Text>
+                      <Text style={garageStyles.carMeta}>
+                        📅 {car.year} • 📏 {car.mileage.toLocaleString()} км
                       </Text>
+                    </View>
+                  </View>
+
+                  <View style={garageStyles.conditionContainer}>
+                    <View style={garageStyles.conditionBar}>
+                      {/* Текущее состояние */}
+                      <View
+                        style={[
+                          garageStyles.conditionFill,
+                          {
+                            width: `${car.condition}%`,
+                            backgroundColor: getConditionColor(car.condition),
+                            position: 'absolute',
+                            left: 0,
+                          },
+                        ]}
+                      />
+                      {/* Максимально возможное состояние */}
+                      <View
+                        style={[
+                          garageStyles.conditionMaxFill,
+                          {
+                            width: `${car.maxCondition}%`,
+                            backgroundColor: colors.border,
+                            position: 'absolute',
+                            left: 0,
+                          },
+                        ]}
+                      />
+                      {/* Недостижимая часть (разница между 100% и максимумом) */}
+                      <View
+                        style={[
+                          garageStyles.conditionUnachievableFill,
+                          {
+                            width: `${100 - car.maxCondition}%`,
+                            backgroundColor: '#27272A',
+                            position: 'absolute',
+                            right: 0,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <View style={garageStyles.conditionLabelContainer}>
                       <Text
                         style={[
-                          garageStyles.priceChange,
-                          { color: priceChange >= 0 ? colors.primary : '#EF4444' },
+                          garageStyles.conditionText,
+                          { color: getConditionColor(car.condition) },
                         ]}
                       >
-                        {priceChange >= 0 ? '+' : ''}{priceChange.toLocaleString()} (
-                        {priceChangePercent}%)
+                        {car.condition.toFixed(1)}%
+                      </Text>
+                      <Text style={garageStyles.maxConditionText}>
+                        макс {car.maxCondition.toFixed(1)}%
                       </Text>
                     </View>
+                  </View>
 
-                    <View style={garageStyles.buttonsContainer}>
-                      <TouchableOpacity
-                        style={[
-                          garageStyles.button,
-                          garageStyles.repairButton,
-                          car.condition >= car.maxCondition && garageStyles.repairButtonDisabled,
-                        ]}
-                        onPress={() => repairCar(car.id)}
-                        disabled={car.condition >= car.maxCondition}
-                      >
-                        <Text style={garageStyles.buttonText}>
-                          {car.condition >= car.maxCondition ? '✓ Макс' : '🔧 Ремонт (+0.1%)'}
-                        </Text>
-                      </TouchableOpacity>
+                  <View style={garageStyles.priceContainer}>
+                    <Text style={garageStyles.priceLabel}>Текущая цена:</Text>
+                    <Text style={garageStyles.currentPrice}>
+                      ${currentPrice.toLocaleString()}
+                    </Text>
+                    <Text
+                      style={[
+                        garageStyles.priceChange,
+                        { color: priceChange >= 0 ? colors.primary : '#EF4444' },
+                      ]}
+                    >
+                      {priceChange >= 0 ? '+' : ''}{priceChange.toLocaleString()}$ (
+                      {priceChangePercent}%)
+                    </Text>
+                  </View>
 
-                      <TouchableOpacity
-                        style={[garageStyles.button, garageStyles.sellButton]}
-                        onPress={() => handleSellCar(car.id)}
-                      >
-                        <Text style={garageStyles.buttonText}>💰 Продать</Text>
-                      </TouchableOpacity>
-                    </View>
+                  <View style={garageStyles.buttonsContainer}>
+                    <TouchableOpacity
+                      style={[
+                        garageStyles.button,
+                        garageStyles.repairButton,
+                        car.condition >= car.maxCondition && garageStyles.repairButtonDisabled,
+                      ]}
+                      onPress={() => repairCar(car.id)}
+                      disabled={car.condition >= car.maxCondition}
+                    >
+                      <Text style={garageStyles.buttonText}>
+                        {car.condition >= car.maxCondition ? '✓ Макс' : '🔧 Ремонт (+0.1%)'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[garageStyles.button, garageStyles.sellButton]}
+                      onPress={() => handleSellCar(car.id)}
+                    >
+                      <Text style={garageStyles.buttonText}>💰 Продать</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </TouchableOpacity>
