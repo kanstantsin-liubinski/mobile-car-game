@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useSkillsContext } from '@hooks/SkillsContext';
+import { useExperienceContext } from '@hooks/ExperienceContext';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
 import { calculateCarPrice } from '../utils/priceCalculator';
@@ -15,6 +16,7 @@ interface GarageScreenProps {
 export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const { garage, repairCar, sellCar } = useGarageContext();
   const { getSkill } = useSkillsContext();
+  const { addExperience } = useExperienceContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
@@ -87,7 +89,10 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
             return (
               <TouchableOpacity
                 key={car.id}
-                onPress={() => repairCar(car.id, mechanicMultiplier)}
+                onPress={() => {
+                  repairCar(car.id, mechanicMultiplier);
+                  addExperience(5);
+                }}
                 activeOpacity={0.7}
               >
                 <View style={garageStyles.carCard}>
@@ -179,7 +184,10 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                         garageStyles.repairButton,
                         car.condition >= car.maxCondition && garageStyles.repairButtonDisabled,
                       ]}
-                      onPress={() => repairCar(car.id, mechanicMultiplier)}
+                      onPress={() => {
+                        repairCar(car.id, mechanicMultiplier);
+                        addExperience(5);
+                      }}
                       disabled={car.condition >= car.maxCondition}
                     >
                       <Text style={garageStyles.buttonText}>

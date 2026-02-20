@@ -35,6 +35,9 @@ export const headerStyles = StyleSheet.create({
     borderBottomColor: colors.border,
     paddingHorizontal: 16,
     paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   balanceContainer: {
     flexDirection: 'row',
@@ -45,6 +48,28 @@ export const headerStyles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.primary,
+  },
+  levelIndicatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  levelCircleContainer: {
+    position: 'relative',
+    width: 56,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  levelText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  levelCounterText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textTertiary,
   },
 });
 

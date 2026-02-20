@@ -11,6 +11,7 @@ import { GarageProvider } from '@hooks/GarageContext';
 import { BalanceProvider, useBalanceContext } from '@hooks/BalanceContext';
 import { SoldCarsProvider, useSoldCarsContext } from '@hooks/SoldCarsContext';
 import { SkillsProvider } from '@hooks/SkillsContext';
+import { ExperienceProvider } from '@hooks/ExperienceContext';
 import { commonStyles } from '@styles/styles';
 
 function AppContent() {
@@ -53,7 +54,9 @@ export default function App() {
       <BalanceProvider>
         <SoldCarsProvider>
           <SkillsProvider>
-            <AppContent />
+            <ExperienceProvider>
+              <AppContent />
+            </ExperienceProvider>
           </SkillsProvider>
         </SoldCarsProvider>
       </BalanceProvider>
