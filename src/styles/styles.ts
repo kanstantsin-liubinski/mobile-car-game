@@ -126,6 +126,48 @@ export const marketStyles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: 2,
   },
+  conditionContainer: {
+    marginTop: 8,
+    gap: 4,
+  },
+  conditionBar: {
+    height: 6,
+    backgroundColor: colors.buttonBg,
+    borderRadius: 3,
+    overflow: 'hidden',
+    position: 'relative' as any,
+  },
+  conditionFill: {
+    height: '100%',
+    borderRadius: 3,
+    zIndex: 3,
+  },
+  conditionMaxFill: {
+    height: '100%',
+    borderRadius: 3,
+    zIndex: 2,
+    opacity: 0.4,
+  },
+  conditionUnachievableFill: {
+    height: '100%',
+    borderRadius: 3,
+    zIndex: 1,
+  },
+  conditionLabelContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  conditionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  maxConditionText: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    fontStyle: 'italic',
+  },
   carPrice: {
     fontSize: 20,
     fontWeight: '700',
@@ -220,19 +262,89 @@ export const garageStyles = StyleSheet.create({
     backgroundColor: colors.buttonBg,
     borderRadius: 4,
     overflow: 'hidden',
+    position: 'relative' as any,
   },
   conditionFill: {
     height: '100%',
     borderRadius: 4,
+    zIndex: 3,
+  },
+  conditionMaxFill: {
+    height: '100%',
+    borderRadius: 4,
+    zIndex: 2,
+    opacity: 0.4,
+  },
+  conditionUnachievableFill: {
+    height: '100%',
+    borderRadius: 4,
+    zIndex: 1,
   },
   conditionText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  conditionLabelContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  maxConditionText: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    fontStyle: 'italic',
   },
   repairHint: {
     fontSize: 12,
     color: colors.textTertiary,
     marginTop: 8,
     fontStyle: 'italic',
+  },
+  priceContainer: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: colors.buttonBg,
+    borderRadius: 8,
+  },
+  priceLabel: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    marginBottom: 4,
+  },
+  currentPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  priceChange: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  repairButton: {
+    backgroundColor: colors.primary,
+  },
+  repairButtonDisabled: {
+    backgroundColor: colors.buttonBg,
+    opacity: 0.6,
+  },
+  sellButton: {
+    backgroundColor: '#059669',
+  },
+  buttonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.darkBg,
   },
 });

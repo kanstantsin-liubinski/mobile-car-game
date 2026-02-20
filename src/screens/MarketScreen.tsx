@@ -3,6 +3,8 @@ import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { marketStyles } from '@styles/styles';
 import { useBalance } from '@hooks/useBalance';
 import { useGarageContext } from '@hooks/GarageContext';
+import { colors } from '@styles/colors';
+import { calculateMaxCondition } from '../utils/priceCalculator';
 import type { Car } from '@/types';
 
 const AVAILABLE_CARS: Car[] = [
@@ -15,6 +17,7 @@ const AVAILABLE_CARS: Car[] = [
     description: 'Надежная немецкая компактная машина',
     year: 2000,
     mileage: 180000,
+    condition: 35.0,
   },
   {
     id: 'car-2',
@@ -25,6 +28,7 @@ const AVAILABLE_CARS: Car[] = [
     description: 'Японская спортивная компактная',
     year: 2005,
     mileage: 140000,
+    condition: 45.0,
   },
   {
     id: 'car-3',
@@ -35,6 +39,7 @@ const AVAILABLE_CARS: Car[] = [
     description: 'Самая надежная машина в мире',
     year: 2010,
     mileage: 95000,
+    condition: 60.0,
   },
   {
     id: 'car-4',
@@ -45,6 +50,7 @@ const AVAILABLE_CARS: Car[] = [
     description: 'Легендарный американский спортсмен',
     year: 2015,
     mileage: 65000,
+    condition: 72.0,
   },
   {
     id: 'car-5',
@@ -55,6 +61,7 @@ const AVAILABLE_CARS: Car[] = [
     description: 'Немецкий премиум с отличным дизайном',
     year: 2018,
     mileage: 32000,
+    condition: 85.0,
   },
   {
     id: 'car-6',
@@ -65,6 +72,7 @@ const AVAILABLE_CARS: Car[] = [
     description: 'Икона спортивного автомобилестроения',
     year: 2019,
     mileage: 18000,
+    condition: 92.0,
   },
   {
     id: 'car-7',
@@ -75,6 +83,7 @@ const AVAILABLE_CARS: Car[] = [
     description: 'Красная машина мечты каждого',
     year: 2020,
     mileage: 8000,
+    condition: 96.0,
   },
   {
     id: 'car-8',
@@ -85,12 +94,20 @@ const AVAILABLE_CARS: Car[] = [
     description: 'Самая быстрая серийная машина в мире',
     year: 2023,
     mileage: 500,
+    condition: 99.0,
   },
 ];
 
 export const MarketScreen = () => {
   const { balance, removeBalance } = useBalance();
   const { addCar, hasCar } = useGarageContext();
+
+  const getConditionColor = (condition: number) => {
+    if (condition >= 80) return colors.primary;
+    if (condition >= 50) return '#F59E0B';
+    if (condition >= 20) return '#EF4444';
+    return '#991B1B';
+  };
 
   const handleBuyCar = (car: Car) => {
     if (removeBalance(car.price)) {
@@ -106,6 +123,7 @@ export const MarketScreen = () => {
         {AVAILABLE_CARS.map((car) => {
           const owned = hasCar(car.id);
           const canAfford = balance >= car.price && !owned;
+          const maxCondition = calculateMaxCondition(car.year, car.mileage);
 
           return (
             <View key={car.id} style={marketStyles.carCard}>
@@ -115,6 +133,53 @@ export const MarketScreen = () => {
                   <Text style={marketStyles.carName}>{car.name}</Text>
                   <Text style={marketStyles.carSpeed}>⚡ {car.speed} км/ч</Text>
                   <Text style={marketStyles.carMeta}>📅 {car.year} • 📏 {car.mileage.toLocaleString()} км</Text>
+                  
+                  <View style={marketStyles.conditionContainer}>
+                    <View style={marketStyles.conditionBar}>
+                      {/* Текущее состояние */}
+                      <View
+                        style={[
+                          marketStyles.conditionFill,
+                          {
+                            width: `${car.condition}%`,
+                            backgroundColor: getConditionColor(car.condition),
+                            position: 'absolute',
+                            left: 0,
+                          },
+                        ]}
+                      />
+                      {/* Максимально возможное состояние */}
+                      <View
+                        style={[
+                          marketStyles.conditionMaxFill,
+                          {
+                            width: `${maxCondition}%`,
+                            backgroundColor: colors.border,
+                            position: 'absolute',
+                            left: 0,
+                          },
+                        ]}
+                      />
+                      {/* Недостижимая часть */}
+                      <View
+                        style={[
+                          marketStyles.conditionUnachievableFill,
+                          {
+                            width: `${100 - maxCondition}%`,
+                            backgroundColor: '#27272A',
+                            position: 'absolute',
+                            right: 0,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <View style={marketStyles.conditionLabelContainer}>
+                      <Text style={[marketStyles.conditionText, { color: getConditionColor(car.condition) }]}>
+                        {car.condition.toFixed(0)}% состояние
+                      </Text>
+                      <Text style={marketStyles.maxConditionText}>макс {maxCondition.toFixed(1)}%</Text>
+                    </View>
+                  </View>
                 </View>
                 <Text style={marketStyles.carPrice}>${car.price.toLocaleString()}</Text>
               </View>

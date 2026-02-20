@@ -9,12 +9,18 @@ interface GarageContextType {
   hasCar: (carId: string) => boolean;
   repairCar: (carId: string) => void;
   getCar: (carId: string) => GarageCar | undefined;
+  sellCar: (carId: string, sellPrice: number) => void;
 }
 
 const GarageContext = createContext<GarageContextType | undefined>(undefined);
 
-export const GarageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const garageState = useGarage();
+interface GarageProviderProps {
+  children: React.ReactNode;
+  onSellCar?: (amount: number) => void;
+}
+
+export const GarageProvider: React.FC<GarageProviderProps> = ({ children, onSellCar }) => {
+  const garageState = useGarage(onSellCar);
 
   return (
     <GarageContext.Provider value={garageState}>

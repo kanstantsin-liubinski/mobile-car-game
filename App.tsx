@@ -13,35 +13,39 @@ import { commonStyles } from '@styles/styles';
 
 function AppContent() {
   const { currentScreen, goToScreen } = useNavigation();
-  const { balance } = useBalance();
+  const { balance, addBalance } = useBalance();
   
   // Используем нативные insets на мобильных, веб-версию на браузере
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
+  const handleSellCar = (sellPrice: number) => {
+    addBalance(sellPrice);
+  };
+
   return (
-    <View style={commonStyles.container}>
-      <TopMenu balance={balance} insets={insets} />
-      
-      <View style={commonStyles.content}>
-        {currentScreen === 'garage' && <GarageScreen />}
-        {currentScreen === 'market' && <MarketScreen />}
+    <GarageProvider onSellCar={handleSellCar}>
+      <View style={commonStyles.container}>
+        <TopMenu balance={balance} insets={insets} />
+        
+        <View style={commonStyles.content}>
+          {currentScreen === 'garage' && <GarageScreen />}
+          {currentScreen === 'market' && <MarketScreen />}
+        </View>
+
+        <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
+
+        <StatusBar style="auto" />
       </View>
-
-      <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
-
-      <StatusBar style="auto" />
-    </View>
+    </GarageProvider>
   );
 }
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <GarageProvider>
-        <AppContent />
-      </GarageProvider>
+      <AppContent />
     </SafeAreaProvider>
   );
 }
