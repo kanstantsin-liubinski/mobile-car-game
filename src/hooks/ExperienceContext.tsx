@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ExperienceContextType {
   totalExperience: number;
@@ -9,6 +10,8 @@ interface ExperienceContextType {
 }
 
 const ExperienceContext = createContext<ExperienceContextType | undefined>(undefined);
+
+const EXPERIENCE_KEY = 'game_experience';
 
 // Formula: to reach level (level + 1), need (level + 1) * 1000 XP
 const getExperienceRequired = (level: number): number => {
@@ -48,7 +51,41 @@ interface ExperienceProviderProps {
 
 export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({ children }) => {
   const [totalExperience, setTotalExperience] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
   const levelData = calculateLevelAndProgress(totalExperience);
+
+  // Загружаем опыт при монтировании
+  useEffect(() => {
+    loadExperience();
+  }, []);
+
+  // Сохраняем опыт при изменении
+  useEffect(() => {
+    if (isLoaded) {
+      saveExperience(totalExperience);
+    }
+  }, [totalExperience, isLoaded]);
+
+  const loadExperience = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(EXPERIENCE_KEY);
+      if (saved !== null) {
+        setTotalExperience(parseInt(saved, 10));
+      }
+    } catch (error) {
+      console.error('Error loading experience:', error);
+    } finally {
+      setIsLoaded(true);
+    }
+  };
+
+  const saveExperience = async (exp: number) => {
+    try {
+      await AsyncStorage.setItem(EXPERIENCE_KEY, exp.toString());
+    } catch (error) {
+      console.error('Error saving experience:', error);
+    }
+  };
 
   const addExperience = (amount: number): void => {
     setTotalExperience((prev) => prev + amount);

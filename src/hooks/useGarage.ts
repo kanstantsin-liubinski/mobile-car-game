@@ -1,9 +1,47 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Car, GarageCar } from '@/types';
 import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalculator';
 
+const GARAGE_KEY = 'game_garage';
+
 export const useGarage = (onSellCar?: (amount: number) => void) => {
   const [garage, setGarage] = useState<GarageCar[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Загружаем гараж при монтировании
+  useEffect(() => {
+    loadGarage();
+  }, []);
+
+  // Сохраняем гараж при изменении
+  useEffect(() => {
+    if (isLoaded) {
+      saveGarage(garage);
+    }
+  }, [garage, isLoaded]);
+
+  const loadGarage = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(GARAGE_KEY);
+      if (saved !== null) {
+        const garageData = JSON.parse(saved) as GarageCar[];
+        setGarage(garageData);
+      }
+    } catch (error) {
+      console.error('Error loading garage:', error);
+    } finally {
+      setIsLoaded(true);
+    }
+  };
+
+  const saveGarage = async (garageData: GarageCar[]) => {
+    try {
+      await AsyncStorage.setItem(GARAGE_KEY, JSON.stringify(garageData));
+    } catch (error) {
+      console.error('Error saving garage:', error);
+    }
+  };
 
   const addCar = useCallback((car: Car) => {
     // Вычисляем базовую цену (цену при состоянии 100%)
@@ -34,7 +72,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       const filtered = prev.filter((car) => car.id !== carId);
       return filtered;
     });
-  }, [garage]);
+  }, []);
 
   const hasCar = useCallback((carId: string) => {
     const has = garage.some((car) => car.id === carId);

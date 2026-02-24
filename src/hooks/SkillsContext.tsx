@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface Skill {
   id: string;
@@ -15,6 +16,9 @@ interface SkillsContextType {
 
 const SkillsContext = createContext<SkillsContextType | undefined>(undefined);
 
+const SKILLS_KEY = 'game_skills';
+const POINTS_PER_LEVEL = 100; // Нужно 100 кликов для уровня
+
 const INITIAL_SKILLS: Skill[] = [
   {
     id: 'mechanic',
@@ -24,10 +28,43 @@ const INITIAL_SKILLS: Skill[] = [
   },
 ];
 
-const POINTS_PER_LEVEL = 100; // Нужно 100 кликов для уровня
-
 export const SkillsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [skills, setSkills] = useState<Skill[]>(INITIAL_SKILLS);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Загружаем скилы при монтировании
+  useEffect(() => {
+    loadSkills();
+  }, []);
+
+  // Сохраняем скилы при изменении
+  useEffect(() => {
+    if (isLoaded) {
+      saveSkills(skills);
+    }
+  }, [skills, isLoaded]);
+
+  const loadSkills = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(SKILLS_KEY);
+      if (saved !== null) {
+        const skillsData = JSON.parse(saved) as Skill[];
+        setSkills(skillsData);
+      }
+    } catch (error) {
+      console.error('Error loading skills:', error);
+    } finally {
+      setIsLoaded(true);
+    }
+  };
+
+  const saveSkills = async (skillsData: Skill[]) => {
+    try {
+      await AsyncStorage.setItem(SKILLS_KEY, JSON.stringify(skillsData));
+    } catch (error) {
+      console.error('Error saving skills:', error);
+    }
+  };
 
   const upgradeSkill = (skillId: string) => {
     setSkills((prev) =>
