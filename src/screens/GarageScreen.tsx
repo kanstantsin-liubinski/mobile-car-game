@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, Platform } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useSkillsContext } from '@hooks/SkillsContext';
 import { useExperienceContext } from '@hooks/ExperienceContext';
+import { useGlobalTimer } from '@hooks/GlobalTimerContext';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
 import { calculateCarPrice } from '../utils/priceCalculator';
@@ -13,10 +15,17 @@ interface GarageScreenProps {
   onSellCar?: (carId: string, sellPrice: number) => void;
 }
 
+interface ActiveSell {
+  timerId: string;
+  sellPrice: number;
+  duration: number;
+}
+
 export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
-  const { garage, repairCar, sellCar } = useGarageContext();
+  const { garage, repairCar, sellCar, removeCar } = useGarageContext();
   const { getSkill } = useSkillsContext();
   const { addExperience } = useExperienceContext();
+  const { addTimer, getProgress, removeTimer } = useGlobalTimer();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
@@ -24,13 +33,49 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     id: string;
     name: string;
     boughtPrice: number;
+    baseSellPrice: number;
     sellPrice: number;
     profit: number;
     profitPercent: number;
   } | null>(null);
+  const [priceAdjustment, setPriceAdjustment] = useState(10); // 0-20, где 10 = 0% (центр)
+  const [activeSells, setActiveSells] = useState<Record<string, ActiveSell>>({});
+  const [activeSellsProgress, setActiveSellsProgress] = useState<Record<string, number>>({});
+  const [modalOpenCount, setModalOpenCount] = useState(0); // Счетчик для пересоздания Slider
 
   const mechanicSkill = getSkill('mechanic');
   const mechanicMultiplier = mechanicSkill?.level ?? 1;
+
+  // Преобразуем значение слайдера (0-20) в процент (-10 до +10)
+  const sliderValueToPercent = (sliderValue: number): number => {
+    return sliderValue - 10;
+  };
+
+  // Сбрасываем ползунок на 0% при открытии модали
+  useEffect(() => {
+    if (selectedCarForSale !== null) {
+      setPriceAdjustment(10);
+      setModalOpenCount((prev) => prev + 1);
+    }
+  }, [selectedCarForSale?.id]);
+
+  // Обновляем прогресс активных продаж
+  useEffect(() => {
+    if (Object.keys(activeSells).length === 0) {
+      setActiveSellsProgress({});
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const newProgress: Record<string, number> = {};
+      Object.entries(activeSells).forEach(([carId, sell]) => {
+        newProgress[carId] = getProgress(sell.timerId);
+      });
+      setActiveSellsProgress(newProgress);
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [activeSells, getProgress]);
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -39,34 +84,145 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     return '#991B1B';
   };
 
+  // Расчет времени продажи в зависимости от корректировки цены
+  // -10% = 0 мин (мгновенно)
+  // 0% = 2.5 мин = 150 сек
+  // +10% = 5 мин = 300 сек
+  const calculateSellDuration = (adjustment: number): number => {
+    // Линейная интерполяция: от 0% при -10% до 100% при +10%
+    const normalizedAdjustment = (adjustment + 10) / 20; // 0 to 1
+    const durationSeconds = normalizedAdjustment * 300; // 0 to 300 seconds
+    return durationSeconds * 1000; // Convert to milliseconds
+  };
+
+  const calculateFinalSellPrice = (basePrice: number, adjustment: number): number => {
+    const adjustmentPercent = adjustment / 100; // Convert to decimal (e.g., 5 -> 0.05)
+    return Math.round(basePrice * (1 + adjustmentPercent));
+  };
+
   const handleSellCar = (carId: string) => {
     const car = garage.find((c) => c.id === carId);
     if (!car) return;
 
-    const sellPrice = calculateCarPrice(car.basePrice, {
+    const baseSellPrice = calculateCarPrice(car.basePrice, {
       year: car.year,
       mileage: car.mileage,
       condition: car.condition,
     });
 
-    const profit = sellPrice - car.price;
+    const finalSellPrice = calculateFinalSellPrice(baseSellPrice, 0); // 0% at start
+    const profit = finalSellPrice - car.price;
     const profitPercent = ((profit / car.price) * 100).toFixed(1);
 
     setSelectedCarForSale({
       id: carId,
       name: car.name,
       boughtPrice: car.price,
-      sellPrice,
+      baseSellPrice,
+      sellPrice: finalSellPrice,
       profit,
       profitPercent: parseFloat(profitPercent),
+    });
+    setPriceAdjustment(10);
+  };
+
+  const handleSliderChange = (sliderValue: number) => {
+    if (!selectedCarForSale) return;
+    setPriceAdjustment(sliderValue);
+
+    const percentAdjustment = sliderValueToPercent(sliderValue);
+    const finalSellPrice = calculateFinalSellPrice(selectedCarForSale.baseSellPrice, percentAdjustment);
+    const profit = finalSellPrice - selectedCarForSale.boughtPrice;
+    const profitPercent = ((profit / selectedCarForSale.boughtPrice) * 100).toFixed(1);
+
+    // Обновляем целиком объект машины для полной синхронизации
+    setSelectedCarForSale((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        sellPrice: finalSellPrice,
+        profit,
+        profitPercent: parseFloat(profitPercent),
+      };
     });
   };
 
   const confirmSell = () => {
     if (!selectedCarForSale) return;
-    sellCar(selectedCarForSale.id, selectedCarForSale.sellPrice);
-    onSellCar?.(selectedCarForSale.id, selectedCarForSale.sellPrice);
+
+    // Начинаем процесс продажи
+    const percentAdjustment = sliderValueToPercent(priceAdjustment);
+    const duration = calculateSellDuration(percentAdjustment);
+
+    const timerId = addTimer(
+      {
+        type: 'sell',
+        duration,
+        onComplete: () => {
+          // Когда таймер завершился - продаем машину
+          sellCar(selectedCarForSale.id, selectedCarForSale.sellPrice);
+          onSellCar?.(selectedCarForSale.id, selectedCarForSale.sellPrice);
+          
+          // Удаляем из activeSells
+          setActiveSells((prev) => {
+            const updated = { ...prev };
+            delete updated[selectedCarForSale.id];
+            return updated;
+          });
+          setActiveSellsProgress((prev) => {
+            const updated = { ...prev };
+            delete updated[selectedCarForSale.id];
+            return updated;
+          });
+        },
+        metadata: {
+          carId: selectedCarForSale.id,
+          sellPrice: selectedCarForSale.sellPrice,
+        },
+      },
+      duration
+    );
+
+    // Добавляем в активные продажи и закрываем модаль
+    setActiveSells((prev) => ({
+      ...prev,
+      [selectedCarForSale.id]: {
+        timerId,
+        sellPrice: selectedCarForSale.sellPrice,
+        duration,
+      },
+    }));
+
     setSelectedCarForSale(null);
+    setPriceAdjustment(10);
+  };
+
+  const handleCancelSell = (carId: string) => {
+    const activeSell = activeSells[carId];
+    if (!activeSell) return;
+
+    // Удаляем таймер
+    removeTimer(activeSell.timerId);
+
+    // Удаляем из activeSells
+    setActiveSells((prev) => {
+      const updated = { ...prev };
+      delete updated[carId];
+      return updated;
+    });
+    setActiveSellsProgress((prev) => {
+      const updated = { ...prev };
+      delete updated[carId];
+      return updated;
+    });
+  };
+
+  // Форматирование времени
+  const formatTime = (milliseconds: number): string => {
+    const totalSeconds = Math.ceil(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -90,13 +246,19 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
               <TouchableOpacity
                 key={car.id}
                 onPress={() => {
+                  if (activeSells[car.id]) return; // Не ремонтируем машину во время продажи
                   repairCar(car.id, mechanicMultiplier);
                   // XP = (0.1 * mechanicLevel) * 10 = mechanicLevel
                   addExperience(mechanicMultiplier);
                 }}
-                activeOpacity={0.7}
+                activeOpacity={activeSells[car.id] ? 1 : 0.7}
+                disabled={!!activeSells[car.id]}
               >
-                <View style={garageStyles.carCard}>
+                <View
+                  style={[
+                    garageStyles.carCard,
+                  ]}
+                >
                   <View style={garageStyles.carHeader}>
                     <Text style={garageStyles.carEmoji}>{car.emoji}</Text>
                     <View style={garageStyles.carInfo}>
@@ -179,30 +341,114 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                   </View>
 
                   <View style={garageStyles.buttonsContainer}>
-                    <TouchableOpacity
-                      style={[
-                        garageStyles.button,
-                        garageStyles.repairButton,
-                        car.condition >= car.maxCondition && garageStyles.repairButtonDisabled,
-                      ]}
-                      onPress={() => {
-                        repairCar(car.id, mechanicMultiplier);
-                        // XP = (0.1 * mechanicLevel) * 10 = mechanicLevel
-                        addExperience(mechanicMultiplier);
-                      }}
-                      disabled={car.condition >= car.maxCondition}
-                    >
-                      <Text style={garageStyles.buttonText}>
-                        {car.condition >= car.maxCondition ? '✓ Макс' : `🔧 Ремонт (+${(0.1 * mechanicMultiplier).toFixed(1)}%)`}
-                      </Text>
-                    </TouchableOpacity>
+                    {activeSells[car.id] ? (
+                      <View style={{ flex: 1, gap: 10 }}>
+                        {/* Timer Card */}
+                        <View
+                          style={{
+                            backgroundColor: colors.primary,
+                            borderRadius: 12,
+                            padding: 16,
+                            alignItems: 'center',
+                            gap: 12,
+                          }}
+                        >
+                          <Text style={{ color: colors.textPrimary, fontSize: 11, fontWeight: '600' }}>
+                            Продажа в процессе
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 32,
+                              fontWeight: '900',
+                              color: colors.textPrimary,
+                              fontVariant: ['tabular-nums'],
+                            }}
+                          >
+                            {formatTime(
+                              activeSells[car.id].duration -
+                                (activeSellsProgress[car.id] ?? 0) / 100 * activeSells[car.id].duration
+                            )}
+                          </Text>
+                          <View
+                            style={{
+                              height: 6,
+                              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                              borderRadius: 3,
+                              overflow: 'hidden',
+                              width: '100%',
+                            }}
+                          >
+                            <View
+                              style={{
+                                height: '100%',
+                                width: `${activeSellsProgress[car.id] ?? 0}%`,
+                                backgroundColor: colors.textPrimary,
+                                borderRadius: 3,
+                              }}
+                            />
+                          </View>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: 'rgba(255, 255, 255, 0.7)',
+                              fontWeight: '500',
+                            }}
+                          >
+                            {Math.round(activeSellsProgress[car.id] ?? 0)}%
+                          </Text>
+                        </View>
 
-                    <TouchableOpacity
-                      style={[garageStyles.button, garageStyles.sellButton]}
-                      onPress={() => handleSellCar(car.id)}
-                    >
-                      <Text style={garageStyles.buttonText}>💰 Продать</Text>
-                    </TouchableOpacity>
+                        {/* Cancel Button */}
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: '#DC2626',
+                            borderRadius: 10,
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            alignItems: 'center',
+                            borderWidth: 2,
+                            borderColor: '#991B1B',
+                          }}
+                          onPress={() => handleCancelSell(car.id)}
+                        >
+                          <Text
+                            style={{
+                              color: '#FFF',
+                              fontSize: 14,
+                              fontWeight: '700',
+                            }}
+                          >
+                            ✕ Отменить
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={{ flex: 1, flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                          style={[
+                            garageStyles.button,
+                            garageStyles.repairButton,
+                            car.condition >= car.maxCondition && garageStyles.repairButtonDisabled,
+                          ]}
+                          onPress={() => {
+                            repairCar(car.id, mechanicMultiplier);
+                            addExperience(mechanicMultiplier);
+                          }}
+                          disabled={car.condition >= car.maxCondition}
+                        >
+                          <Text style={garageStyles.buttonText}>
+                            {car.condition >= car.maxCondition ? '✓ Макс' : `🔧 Ремонт (+${(0.1 * mechanicMultiplier).toFixed(1)}%)`}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[garageStyles.button, garageStyles.sellButton]}
+                          onPress={() => handleSellCar(car.id)}
+                        >
+                          <Text style={garageStyles.buttonText}>💰 Продать</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 </View>
               </TouchableOpacity>
@@ -215,7 +461,10 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
         visible={selectedCarForSale !== null}
         transparent
         animationType="slide"
-        onRequestClose={() => setSelectedCarForSale(null)}
+        onRequestClose={() => {
+          setSelectedCarForSale(null);
+          setPriceAdjustment(10);
+        }}
       >
         <View style={garageStyles.modalOverlay}>
           <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
@@ -237,6 +486,53 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
               <Text style={garageStyles.modalLabel}>Продаём за:</Text>
               <Text style={[garageStyles.modalPrice, { color: colors.primary }]}>
                 ${selectedCarForSale?.sellPrice.toLocaleString()}
+              </Text>
+            </View>
+
+            {/* Price Adjustment Slider */}
+            <View style={garageStyles.modalInfoBlock}>
+              <View style={{ marginBottom: 12 }}>
+                <Text style={garageStyles.modalLabel}>Регулировка цены:</Text>
+                <Text
+                  style={[
+                    garageStyles.modalPrice,
+                    {
+                      color:
+                        priceAdjustment > 10
+                          ? colors.primary
+                          : priceAdjustment < 10
+                            ? '#EF4444'
+                            : colors.textTertiary,
+                    },
+                  ]}
+                >
+                  {sliderValueToPercent(priceAdjustment) > 0 ? '+' : ''}
+                  {sliderValueToPercent(priceAdjustment)}%
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: colors.textTertiary, fontSize: 12 }}>-10%</Text>
+                <Slider
+                  key={`slider-${modalOpenCount}`}
+                  style={{ flex: 1, height: 40 }}
+                  minimumValue={0}
+                  maximumValue={20}
+                  step={1}
+                  value={priceAdjustment}
+                  onValueChange={handleSliderChange}
+                  minimumTrackTintColor={colors.primary}
+                  maximumTrackTintColor={colors.border}
+                  thumbTintColor={colors.primary}
+                />
+                <Text style={{ color: colors.textTertiary, fontSize: 12 }}>+10%</Text>
+              </View>
+            </View>
+
+            {/* Time to sell display */}
+            <View style={garageStyles.modalInfoBlock}>
+              <Text style={garageStyles.modalLabel}>Время продажи:</Text>
+              <Text style={[garageStyles.modalPrice, { color: colors.primary }]}>
+                {`${formatTime(calculateSellDuration(sliderValueToPercent(priceAdjustment)))} мин`}
               </Text>
             </View>
 
@@ -270,7 +566,10 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
             <View style={garageStyles.modalButtonsContainer}>
               <TouchableOpacity
                 style={[garageStyles.modalButton, garageStyles.cancelButton]}
-                onPress={() => setSelectedCarForSale(null)}
+                onPress={() => {
+                  setSelectedCarForSale(null);
+                  setPriceAdjustment(10);
+                }}
               >
                 <Text style={garageStyles.modalButtonText}>Отмена</Text>
               </TouchableOpacity>

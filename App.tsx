@@ -13,6 +13,7 @@ import { SoldCarsProvider, useSoldCarsContext } from '@hooks/SoldCarsContext';
 import { SkillsProvider } from '@hooks/SkillsContext';
 import { ExperienceProvider } from '@hooks/ExperienceContext';
 import { GameStateProvider, useGameState } from '@hooks/GameStateContext';
+import { GlobalTimerProvider } from '@hooks/GlobalTimerContext';
 import { commonStyles } from '@styles/styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -120,17 +121,19 @@ function AppWrapper() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <GameStateProvider>
-        <BalanceProvider>
-          <SoldCarsProvider>
-            <SkillsProvider>
-              <ExperienceProvider>
-                <AppWrapper />
-              </ExperienceProvider>
-            </SkillsProvider>
-          </SoldCarsProvider>
-        </BalanceProvider>
-      </GameStateProvider>
+      <GlobalTimerProvider>
+        <GameStateProvider>
+          <BalanceProvider>
+            <SoldCarsProvider>
+              <SkillsProvider>
+                <ExperienceProvider>
+                  <AppWrapper />
+                </ExperienceProvider>
+              </SkillsProvider>
+            </SoldCarsProvider>
+          </BalanceProvider>
+        </GameStateProvider>
+      </GlobalTimerProvider>
     </SafeAreaProvider>
   );
 }
