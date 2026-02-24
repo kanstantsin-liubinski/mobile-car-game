@@ -346,21 +346,23 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                         {/* Timer Card */}
                         <View
                           style={{
-                            backgroundColor: colors.primary,
+                            backgroundColor: colors.cardBg,
                             borderRadius: 12,
                             padding: 16,
                             alignItems: 'center',
                             gap: 12,
+                            borderWidth: 2,
+                            borderColor: colors.primary,
                           }}
                         >
-                          <Text style={{ color: colors.textPrimary, fontSize: 11, fontWeight: '600' }}>
-                            Продажа в процессе
+                          <Text style={{ color: colors.textTertiary, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                            💰 Продажа в процессе
                           </Text>
                           <Text
                             style={{
-                              fontSize: 32,
+                              fontSize: 36,
                               fontWeight: '900',
-                              color: colors.textPrimary,
+                              color: colors.primary,
                               fontVariant: ['tabular-nums'],
                             }}
                           >
@@ -371,9 +373,9 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                           </Text>
                           <View
                             style={{
-                              height: 6,
-                              backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                              borderRadius: 3,
+                              height: 8,
+                              backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                              borderRadius: 4,
                               overflow: 'hidden',
                               width: '100%',
                             }}
@@ -382,43 +384,43 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                               style={{
                                 height: '100%',
                                 width: `${activeSellsProgress[car.id] ?? 0}%`,
-                                backgroundColor: colors.textPrimary,
-                                borderRadius: 3,
+                                backgroundColor: colors.primary,
+                                borderRadius: 4,
                               }}
                             />
                           </View>
                           <Text
                             style={{
                               fontSize: 12,
-                              color: 'rgba(255, 255, 255, 0.7)',
-                              fontWeight: '500',
+                              color: colors.textTertiary,
+                              fontWeight: '600',
                             }}
                           >
-                            {Math.round(activeSellsProgress[car.id] ?? 0)}%
+                            {Math.round(activeSellsProgress[car.id] ?? 0)}% завершено
                           </Text>
                         </View>
 
                         {/* Cancel Button */}
                         <TouchableOpacity
                           style={{
-                            backgroundColor: '#DC2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.15)',
                             borderRadius: 10,
                             paddingVertical: 12,
                             paddingHorizontal: 16,
                             alignItems: 'center',
                             borderWidth: 2,
-                            borderColor: '#991B1B',
+                            borderColor: '#EF4444',
                           }}
                           onPress={() => handleCancelSell(car.id)}
                         >
                           <Text
                             style={{
-                              color: '#FFF',
+                              color: '#EF4444',
                               fontSize: 14,
                               fontWeight: '700',
                             }}
                           >
-                            ✕ Отменить
+                            ✕ Отменить продажу
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -467,7 +469,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
         }}
       >
         <View style={garageStyles.modalOverlay}>
-          <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12 }]}>
             <Text style={garageStyles.modalTitle}>Продажа машины</Text>
 
             <View style={garageStyles.modalInfoBlock}>
@@ -542,8 +544,8 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                 {
                   borderTopWidth: 1,
                   borderTopColor: colors.border,
-                  paddingTop: 16,
-                  marginTop: 16,
+                  paddingTop: 12,
+                  marginTop: 12,
                 },
               ]}
             >
