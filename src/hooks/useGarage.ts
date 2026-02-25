@@ -1,17 +1,44 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Car, GarageCar } from '@/types';
+import type { Car, GarageCar, Mechanic } from '@/types';
 import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalculator';
 
 const GARAGE_KEY = 'game_garage';
+const GARAGE_CONFIG_KEY = 'game_garage_config';
+
+const MECHANIC_NAMES = [
+  'Иван',
+  'Сергей',
+  'Дмитрий',
+  'Петр',
+  'Анатолий',
+  'Владимир',
+  'Алексей',
+  'Юрий',
+  'Николай',
+  'Валентин',
+];
 
 export const useGarage = (onSellCar?: (amount: number) => void) => {
   const [garage, setGarage] = useState<GarageCar[]>([]);
+  const [garageSlots, setGarageSlots] = useState(1);
+  const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Helper functions for generating mechanic data
+  const generateMechanicName = (): string => {
+    const randomIndex = Math.floor(Math.random() * MECHANIC_NAMES.length);
+    return MECHANIC_NAMES[randomIndex];
+  };
+
+  const generateMechanicId = (): string => {
+    return `mechanic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
 
   // Загружаем гараж при монтировании
   useEffect(() => {
     loadGarage();
+    loadGarageConfig();
   }, []);
 
   // Сохраняем гараж при изменении
@@ -20,6 +47,13 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       saveGarage(garage);
     }
   }, [garage, isLoaded]);
+
+  // Сохраняем конфиг гаража при изменении
+  useEffect(() => {
+    if (isLoaded) {
+      saveGarageConfig();
+    }
+  }, [garageSlots, mechanics, isLoaded]);
 
   const loadGarage = async () => {
     try {
@@ -40,6 +74,56 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       await AsyncStorage.setItem(GARAGE_KEY, JSON.stringify(garageData));
     } catch (error) {
       console.error('Error saving garage:', error);
+    }
+  };
+
+  const loadGarageConfig = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(GARAGE_CONFIG_KEY);
+      if (saved !== null) {
+        const config = JSON.parse(saved);
+        const garageSlots = config.garageSlots || 1;
+        
+        setGarageSlots(garageSlots);
+        
+        // Обработка старого формата данных (mechanics как число)
+        if (typeof config.mechanics === 'number') {
+          // Конвертируем старый формат (число) в новый (массив)
+          // Создаем массив механиков на основе количества слотов
+          const newMechanics: Mechanic[] = [];
+          
+          for (let i = 0; i < garageSlots; i++) {
+            newMechanics.push({
+              id: generateMechanicId(),
+              name: generateMechanicName(),
+              slotIndex: -1,
+              skillLevel: 1,
+              experience: 0,
+              hired: false,
+            });
+          }
+          
+          setMechanics(newMechanics);
+        } else if (Array.isArray(config.mechanics)) {
+          const updatedMechanics = config.mechanics.map((m: any) => ({
+            ...m,
+            hired: m.hired !== undefined ? m.hired : false,
+          }));
+          setMechanics(updatedMechanics);
+        } else {
+          setMechanics([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading garage config:', error);
+    }
+  };
+
+  const saveGarageConfig = async () => {
+    try {
+      await AsyncStorage.setItem(GARAGE_CONFIG_KEY, JSON.stringify({ garageSlots, mechanics }));
+    } catch (error) {
+      console.error('Error saving garage config:', error);
     }
   };
 
@@ -108,11 +192,118 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     onSellCar?.(sellPrice);
   }, [removeCar, onSellCar]);
 
-  // Оборачиваем возвращаемый объект в useMemo с зависимостью на garage
-  // Это обеспечивает, что Context получает новый объект только когда garage изменяется
+  const upgradeGarageSlot = useCallback(() => {
+    setGarageSlots((prev) => prev + 1);
+  }, []);
+
+  // Синхронизируем количество механиков с количеством слотов
+  useEffect(() => {
+    setMechanics((prevMechanics) => {
+      let updatedMechanics = [...prevMechanics];
+
+      // Если слотов больше, добавляем новых механиков
+      while (updatedMechanics.length < garageSlots) {
+        const newMechanic: Mechanic = {
+          id: generateMechanicId(),
+          name: generateMechanicName(),
+          slotIndex: -1,
+          skillLevel: 1,
+          experience: 0,
+          hired: false,
+        };
+        updatedMechanics.push(newMechanic);
+      }
+
+      // Если слотов меньше, удаляем лишних механиков
+      if (updatedMechanics.length > garageSlots) {
+        updatedMechanics = updatedMechanics.slice(0, garageSlots);
+      }
+
+      return updatedMechanics;
+    });
+  }, [garageSlots]);
+
+  const upgradeMechanicSkill = useCallback((mechanicId: string): boolean => {
+    const mechanic = mechanics.find((m) => m.id === mechanicId);
+    if (!mechanic) return false;
+
+    setMechanics((prev) =>
+      prev.map((m) => {
+        if (m.id === mechanicId) {
+          return {
+            ...m,
+            skillLevel: m.skillLevel + 1,
+            experience: m.experience + 100,
+          };
+        }
+        return m;
+      })
+    );
+    return true;
+  }, [mechanics]);
+
+  const changeMechanicSlot = useCallback((mechanicId: string, newSlotIndex: number): boolean => {
+    // Разрешаем -1 для открепления и 0-garageSlots для прикрепления
+    if (newSlotIndex !== -1 && (newSlotIndex < 0 || newSlotIndex >= garageSlots)) return false;
+
+    setMechanics((prev) =>
+      prev.map((m) => {
+        if (m.id === mechanicId) {
+          return { ...m, slotIndex: newSlotIndex };
+        }
+        return m;
+      })
+    );
+    return true;
+  }, [garageSlots]);
+
+  const hireMechanic = useCallback((mechanicId: string): boolean => {
+    const mechanic = mechanics.find((m) => m.id === mechanicId);
+    if (!mechanic || mechanic.hired) return false;
+
+    setMechanics((prev) =>
+      prev.map((m) => {
+        if (m.id === mechanicId) {
+          return { ...m, hired: true };
+        }
+        return m;
+      })
+    );
+    return true;
+  }, [mechanics]);
+
+  // Оборачиваем возвращаемый объект в useMemo с зависимостью на все состояния
   const garageState = useMemo(
-    () => ({ garage, addCar, removeCar, hasCar, repairCar, getCar, sellCar }),
-    [garage, addCar, removeCar, hasCar, repairCar, getCar, sellCar]
+    () => ({
+      garage,
+      garageSlots,
+      mechanics,
+      addCar,
+      removeCar,
+      hasCar,
+      repairCar,
+      getCar,
+      sellCar,
+      upgradeGarageSlot,
+      upgradeMechanicSkill,
+      changeMechanicSlot,
+      hireMechanic,
+    }),
+    [
+      garage,
+      garageSlots,
+      mechanics,
+      addCar,
+      removeCar,
+      hasCar,
+      repairCar,
+      getCar,
+      sellCar,
+      upgradeGarageSlot,
+      upgradeMechanicSkill,
+      changeMechanicSlot,
+      hireMechanic,
+    ]
   );
 
   return garageState;

@@ -1,15 +1,21 @@
 import React, { createContext, useContext } from 'react';
-import type { Car, GarageCar } from '@/types';
+import type { Car, GarageCar, Mechanic } from '@/types';
 import { useGarage } from '@hooks/useGarage';
 
 interface GarageContextType {
   garage: GarageCar[];
+  garageSlots: number;
+  mechanics: Mechanic[];
   addCar: (car: Car) => void;
   removeCar: (carId: string) => void;
   hasCar: (carId: string) => boolean;
   repairCar: (carId: string, skillMultiplier?: number) => void;
   getCar: (carId: string) => GarageCar | undefined;
   sellCar: (carId: string, sellPrice: number) => void;
+  upgradeGarageSlot: () => void;
+  upgradeMechanicSkill: (mechanicId: string) => boolean;
+  changeMechanicSlot: (mechanicId: string, newSlotIndex: number) => boolean;
+  hireMechanic: (mechanicId: string) => boolean;
 }
 
 const GarageContext = createContext<GarageContextType | undefined>(undefined);
