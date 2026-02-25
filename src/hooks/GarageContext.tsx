@@ -5,6 +5,7 @@ import { useGarage } from '@hooks/useGarage';
 interface GarageContextType {
   garage: GarageCar[];
   garageSlots: number;
+  maxGarageSlots: number;
   mechanics: Mechanic[];
   addCar: (car: Car) => void;
   removeCar: (carId: string) => void;

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Car, GarageCar, Mechanic } from '@/types';
 import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalculator';
@@ -22,8 +22,10 @@ const MECHANIC_NAMES = [
 export const useGarage = (onSellCar?: (amount: number) => void) => {
   const [garage, setGarage] = useState<GarageCar[]>([]);
   const [garageSlots, setGarageSlots] = useState(1);
+  const [maxGarageSlots, setMaxGarageSlots] = useState(3); // Максимум слотов на текущем уровне гаража
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const isInitialized = useRef(false);
 
   // Helper functions for generating mechanic data
   const generateMechanicName = (): string => {
@@ -37,6 +39,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
 
   // Загружаем гараж при монтировании
   useEffect(() => {
+    isInitialized.current = false;
     loadGarage();
     loadGarageConfig();
   }, []);
@@ -53,7 +56,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     if (isLoaded) {
       saveGarageConfig();
     }
-  }, [garageSlots, mechanics, isLoaded]);
+  }, [garageSlots, maxGarageSlots, mechanics, isLoaded]);
 
   const loadGarage = async () => {
     try {
@@ -83,8 +86,10 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       if (saved !== null) {
         const config = JSON.parse(saved);
         const garageSlots = config.garageSlots || 1;
+        const maxGarageSlots = config.maxGarageSlots || 3;
         
         setGarageSlots(garageSlots);
+        setMaxGarageSlots(maxGarageSlots);
         
         // Обработка старого формата данных (mechanics как число)
         if (typeof config.mechanics === 'number') {
@@ -114,14 +119,16 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
           setMechanics([]);
         }
       }
+      isInitialized.current = true;
     } catch (error) {
       console.error('Error loading garage config:', error);
+      isInitialized.current = true;
     }
   };
 
   const saveGarageConfig = async () => {
     try {
-      await AsyncStorage.setItem(GARAGE_CONFIG_KEY, JSON.stringify({ garageSlots, mechanics }));
+      await AsyncStorage.setItem(GARAGE_CONFIG_KEY, JSON.stringify({ garageSlots, maxGarageSlots, mechanics }));
     } catch (error) {
       console.error('Error saving garage config:', error);
     }
@@ -193,8 +200,21 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
   }, [removeCar, onSellCar]);
 
   const upgradeGarageSlot = useCallback(() => {
-    setGarageSlots((prev) => prev + 1);
+    setMaxGarageSlots((prev) => prev + 3);
   }, []);
+
+  // Синхронизируем количество слотов с максимумом и механиков с количеством слотов
+  useEffect(() => {
+    // Пропускаем первую инициализацию, включаем только при реальном улучшении
+    if (!isInitialized.current) {
+      isInitialized.current = true;
+      return;
+    }
+    // Если достигли максимума, добавляем слот
+    if (garageSlots < maxGarageSlots) {
+      setGarageSlots((prev) => prev + 1);
+    }
+  }, [maxGarageSlots]);
 
   // Синхронизируем количество механиков с количеством слотов
   useEffect(() => {
@@ -277,6 +297,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     () => ({
       garage,
       garageSlots,
+      maxGarageSlots,
       mechanics,
       addCar,
       removeCar,
@@ -292,6 +313,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     [
       garage,
       garageSlots,
+      maxGarageSlots,
       mechanics,
       addCar,
       removeCar,
