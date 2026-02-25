@@ -5,6 +5,7 @@ import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalcula
 
 const GARAGE_KEY = 'game_garage';
 const GARAGE_CONFIG_KEY = 'game_garage_config';
+const MAX_GARAGE_SLOTS_LEVEL_1 = 3; // Максимум слотов для первого уровня гаража
 
 const MECHANIC_NAMES = [
   'Иван',
@@ -200,8 +201,11 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
   }, [removeCar, onSellCar]);
 
   const upgradeGarageSlot = useCallback(() => {
-    setMaxGarageSlots((prev) => prev + 3);
-  }, []);
+    // Позволяем улучшать только если текущее количество слотов меньше максимума
+    if (garageSlots < MAX_GARAGE_SLOTS_LEVEL_1) {
+      setMaxGarageSlots((prev) => prev + 1);
+    }
+  }, [garageSlots]);
 
   // Синхронизируем количество слотов с максимумом и механиков с количеством слотов
   useEffect(() => {
@@ -292,6 +296,10 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     return true;
   }, [mechanics]);
 
+  const canUpgradeGarage = (): boolean => {
+    return garageSlots < MAX_GARAGE_SLOTS_LEVEL_1;
+  };
+
   // Оборачиваем возвращаемый объект в useMemo с зависимостью на все состояния
   const garageState = useMemo(
     () => ({
@@ -309,6 +317,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       upgradeMechanicSkill,
       changeMechanicSlot,
       hireMechanic,
+      canUpgradeGarage,
     }),
     [
       garage,

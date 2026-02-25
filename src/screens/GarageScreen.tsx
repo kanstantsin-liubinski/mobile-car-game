@@ -23,7 +23,7 @@ interface ActiveSell {
 }
 
 export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
-  const { garage, garageSlots, maxGarageSlots, mechanics, repairCar, sellCar, removeCar, upgradeGarageSlot, upgradeMechanicSkill, hireMechanic, changeMechanicSlot } = useGarageContext();
+  const { garage, garageSlots, maxGarageSlots, mechanics, repairCar, sellCar, removeCar, upgradeGarageSlot, upgradeMechanicSkill, hireMechanic, changeMechanicSlot, canUpgradeGarage } = useGarageContext();
   const { balance, removeBalance } = useBalanceContext();
   const { getSkill } = useSkillsContext();
   const { addExperience } = useExperienceContext();
@@ -313,10 +313,10 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
               borderRadius: 10,
               paddingVertical: 12,
               alignItems: 'center',
-              opacity: garageSlots >= maxGarageSlots ? 0.6 : 1,
+              opacity: canUpgradeGarage() ? 1 : 0.6,
             }}
             onPress={() => setShowUpgradeModal(true)}
-            disabled={garageSlots >= maxGarageSlots}
+            disabled={!canUpgradeGarage()}
           >
             <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '700' }}>
               Улучшить гараж

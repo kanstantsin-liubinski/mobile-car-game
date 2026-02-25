@@ -17,6 +17,7 @@ interface GarageContextType {
   upgradeMechanicSkill: (mechanicId: string) => boolean;
   changeMechanicSlot: (mechanicId: string, newSlotIndex: number) => boolean;
   hireMechanic: (mechanicId: string) => boolean;
+  canUpgradeGarage: () => boolean;
 }
 
 const GarageContext = createContext<GarageContextType | undefined>(undefined);
