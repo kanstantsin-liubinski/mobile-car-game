@@ -43,6 +43,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     upgradeMechanicSkill,
     hireMechanic,
     changeMechanicSlot,
+    changeCarSlot,
     canUpgradeGarage,
   } = useGarageContext();
   const { balance, removeBalance } = useBalanceContext();
@@ -75,6 +76,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   >(null);
   const [showMechanicsModal, setShowMechanicsModal] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<number>(0); // Выбранный слот гаража
 
   const mechanicSkill = getSkill("mechanic");
   const mechanicMultiplier = mechanicSkill?.level ?? 1;
@@ -457,35 +459,104 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
         </View>
       </View>
 
+      {/* Garage Slots Selector */}
+      <View
+        style={{
+          marginBottom: 16,
+          paddingHorizontal: 0,
+        }}
+      >
+        <View style={{ marginBottom: 10 }}>
+          <Text
+            style={{
+              color: colors.textTertiary,
+              fontSize: 11,
+              fontWeight: "600",
+            }}
+          >
+            ВЫБЕРИТЕ СЛОТ
+          </Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{
+            gap: 8,
+          }}
+        >
+          {Array.from({ length: garageSlots }).map((_, slotIndex) => {
+            const carInSlot = garage.find((c) => c.slotIndex === slotIndex);
+            const isSelected = selectedSlot === slotIndex;
+
+            return (
+              <TouchableOpacity
+                key={slotIndex}
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 10,
+                  backgroundColor: isSelected
+                    ? colors.primary
+                    : carInSlot
+                      ? "rgba(251, 191, 36, 0.15)"
+                      : "rgba(99, 102, 241, 0.08)",
+                  borderWidth: 2,
+                  borderColor: isSelected
+                    ? colors.primary
+                    : carInSlot
+                      ? "#FBBF24"
+                      : "rgba(99, 102, 241, 0.2)",
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+                onPress={() => setSelectedSlot(slotIndex)}
+              >
+                <Text
+                  style={{
+                    color: isSelected ? "#FFF" : colors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: "700",
+                  }}
+                >
+                  {slotIndex + 1}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {garage.length === 0 ? (
         <Text style={garageStyles.emptyText}>
           Ещё нет машин. Купи её на авторынке!
         </Text>
       ) : (
         <View style={garageStyles.carsList}>
-          {garage.map((car) => {
-            const currentPrice = calculateCarPrice(car.basePrice, {
-              year: car.year,
-              mileage: car.mileage,
-              condition: car.condition,
-            });
-            const priceChange = currentPrice - car.price;
-            const priceChangePercent = (
-              (currentPrice / car.price - 1) *
-              100
-            ).toFixed(1);
+          {garage
+            .filter((car) => car.slotIndex === selectedSlot)
+            .map((car) => {
+              const currentPrice = calculateCarPrice(car.basePrice, {
+                year: car.year,
+                mileage: car.mileage,
+                condition: car.condition,
+              });
+              const priceChange = currentPrice - car.price;
+              const priceChangePercent = (
+                (currentPrice / car.price - 1) *
+                100
+              ).toFixed(1);
 
-            return (
-              <TouchableOpacity
-                key={car.id}
-                onPress={() => {
-                  if (activeSells[car.id]) return; // Не ремонтируем машину во время продажи
-                  repairCar(car.id, mechanicMultiplier);
-                  // XP = (0.1 * mechanicLevel) * 10 = mechanicLevel
-                  addExperience(mechanicMultiplier);
-                }}
-                activeOpacity={activeSells[car.id] ? 1 : 0.7}
-                disabled={!!activeSells[car.id]}
+              return (
+                <TouchableOpacity
+                  key={car.id}
+                  onPress={() => {
+                    if (activeSells[car.id]) return; // Не ремонтируем машину во время продажи
+                    repairCar(car.id, mechanicMultiplier);
+                    // XP = (0.1 * mechanicLevel) * 10 = mechanicLevel
+                    addExperience(mechanicMultiplier);
+                  }}
+                  activeOpacity={activeSells[car.id] ? 1 : 0.7}
+                  disabled={!!activeSells[car.id]}
               >
                 <View style={[garageStyles.carCard]}>
                   <View style={garageStyles.carHeader}>

@@ -63,7 +63,12 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     try {
       const saved = await AsyncStorage.getItem(GARAGE_KEY);
       if (saved !== null) {
-        const garageData = JSON.parse(saved) as GarageCar[];
+        let garageData = JSON.parse(saved) as GarageCar[];
+        // Добавляем slotIndex для старых машин, если его нет
+        garageData = garageData.map((car) => ({
+          ...car,
+          slotIndex: car.slotIndex !== undefined ? car.slotIndex : -1,
+        }));
         setGarage(garageData);
       }
     } catch (error) {
@@ -150,14 +155,26 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     // Округляем исходное состояние до одного знака для точности
     const roundedCondition = Math.round(car.condition * 10) / 10;
 
-    const garageCar: GarageCar = {
-      ...car,
-      condition: roundedCondition,
-      basePrice,
-      maxCondition,
-    };
-    setGarage((prev) => [...prev, garageCar]);
-  }, []);
+    setGarage((prevGarage) => {
+      // Находим первый свободный слот
+      let firstFreeSlot = -1;
+      for (let i = 0; i < garageSlots; i++) {
+        if (!prevGarage.some((c) => c.slotIndex === i)) {
+          firstFreeSlot = i;
+          break;
+        }
+      }
+
+      const garageCar: GarageCar = {
+        ...car,
+        condition: roundedCondition,
+        basePrice,
+        maxCondition,
+        slotIndex: firstFreeSlot, // Назначаем первый свободный слот
+      };
+      return [...prevGarage, garageCar];
+    });
+  }, [garageSlots]);
 
   const removeCar = useCallback((carId: string) => {
     setGarage((prev) => {
@@ -300,6 +317,27 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     return garageSlots < MAX_GARAGE_SLOTS_LEVEL_1;
   };
 
+  const changeCarSlot = useCallback((carId: string, newSlotIndex: number): boolean => {
+    // Проверяем, что слот в допустимом диапазоне
+    if (newSlotIndex !== -1 && (newSlotIndex < 0 || newSlotIndex >= garageSlots)) return false;
+
+    // Проверяем, что в целевом слоте нет другой машины
+    if (newSlotIndex !== -1) {
+      const carInSlot = garage.find((car) => car.slotIndex === newSlotIndex && car.id !== carId);
+      if (carInSlot) return false;
+    }
+
+    setGarage((prev) =>
+      prev.map((car) => {
+        if (car.id === carId) {
+          return { ...car, slotIndex: newSlotIndex };
+        }
+        return car;
+      })
+    );
+    return true;
+  }, [garage, garageSlots]);
+
   // Оборачиваем возвращаемый объект в useMemo с зависимостью на все состояния
   const garageState = useMemo(
     () => ({
@@ -313,6 +351,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       repairCar,
       getCar,
       sellCar,
+      changeCarSlot,
       upgradeGarageSlot,
       upgradeMechanicSkill,
       changeMechanicSlot,
@@ -330,6 +369,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       repairCar,
       getCar,
       sellCar,
+      changeCarSlot,
       upgradeGarageSlot,
       upgradeMechanicSkill,
       changeMechanicSlot,

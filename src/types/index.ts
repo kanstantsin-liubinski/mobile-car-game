@@ -15,6 +15,7 @@ export interface Car {
 export interface GarageCar extends Car {
   basePrice: number; // Цена при состоянии 100% (вычисляется при покупке)
   maxCondition: number; // Максимально возможное состояние (зависит от года и пробега)
+  slotIndex: number; // Индекс слота гаража (-1 = не назначена)
 }
 
 export interface Mechanic {

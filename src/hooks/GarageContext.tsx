@@ -13,6 +13,7 @@ interface GarageContextType {
   repairCar: (carId: string, skillMultiplier?: number) => void;
   getCar: (carId: string) => GarageCar | undefined;
   sellCar: (carId: string, sellPrice: number) => void;
+  changeCarSlot: (carId: string, slotIndex: number) => boolean;
   upgradeGarageSlot: () => void;
   upgradeMechanicSkill: (mechanicId: string) => boolean;
   changeMechanicSlot: (mechanicId: string, newSlotIndex: number) => boolean;
