@@ -193,8 +193,9 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
 
     const interval = setInterval(() => {
       // Вызываем repairCar для каждой машины в ремонте
+      // 0.25 → repairAmount = 0.1 * 0.25 = 0.025% за 500мс = 0.05%/сек
       Object.keys(mechanicRepairs).forEach((carId) => {
-        repairCar(carId, 0.025);
+        repairCar(carId, 0.25);
       });
       
       // Обновляем таймер
@@ -244,6 +245,10 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
       if (currentCar && currentCar.condition >= currentCar.maxCondition) {
         // Машина достигла максимума - завершаем ремонт
         removeTimer(repair.timerId);
+
+        // Открепляем механика от слота
+        changeMechanicSlot(repair.mechanicId, -1);
+
         setMechanicRepairs((prev) => {
           const updated = { ...prev };
           delete updated[carId];
@@ -428,6 +433,9 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
         onComplete: () => {
           addExperience(1); // Добавляем опыт
 
+          // Открепляем механика от слота
+          changeMechanicSlot(mechanicId, -1);
+
           // Удаляем из mechanicRepairs
           setMechanicRepairs((prev) => {
             const updated = { ...prev };
@@ -468,6 +476,9 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
 
     // Удаляем таймер
     removeTimer(repair.timerId);
+
+    // Открепляем механика от слота (состояние машины уже сохранено)
+    changeMechanicSlot(repair.mechanicId, -1);
 
     // Удаляем из mechanicRepairs
     setMechanicRepairs((prev) => {

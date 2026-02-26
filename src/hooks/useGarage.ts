@@ -198,11 +198,11 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
         if (car.id === carId) {
           // Базовый ремонт 0.1%, умноженный на множитель скилла (уровень механика)
           const repairAmount = 0.1 * skillMultiplier;
-          // Добавляем и всегда округляем до одного знака после запятой
-          const newCondition = Math.round((car.condition + repairAmount) * 10) / 10;
+          // Добавляем и округляем до трёх знаков после запятой (чтобы малые приращения не терялись)
+          const newCondition = Math.round((car.condition + repairAmount) * 1000) / 1000;
           // Ограничиваем максимумом, тоже с округлением
           const cappedCondition = Math.min(
-            Math.round(car.maxCondition * 10) / 10,
+            Math.round(car.maxCondition * 1000) / 1000,
             newCondition
           );
           return { ...car, condition: cappedCondition };
