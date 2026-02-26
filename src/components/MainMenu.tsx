@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, BackHandler, Platform } from 'react-native';
 import { colors } from '@styles/colors';
 
 interface MainMenuProps {
@@ -49,6 +49,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({
     }
   };
 
+  const handleExit = () => {
+    if (Platform.OS === 'web') {
+      window.close();
+    } else {
+      BackHandler.exitApp();
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -81,13 +89,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             onPress={() => setShowSettings(true)}
           >
             <Text style={styles.buttonText}>Настройки</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, styles.dangerButton]}
-            onPress={onExit}
-          >
-            <Text style={styles.buttonText}>Выход</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -175,7 +176,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 style={[styles.confirmButton, styles.deleteButton]}
                 onPress={handleConfirmNewGame}
               >
-                <Text style={styles.deleteButtonText}>Удалить сохранение</Text>
+                <Text style={styles.deleteButtonText}>Да</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -215,7 +216,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   button: {
-    paddingVertical: 20,
+    height: 86,
     paddingHorizontal: 24,
     borderRadius: 16,
     alignItems: 'center',
@@ -308,7 +309,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   difficultyButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.textTertiary,
   },
@@ -355,10 +356,12 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   confirmModalButtons: {
+    flexDirection: 'row',
     width: '100%',
     gap: 12,
   },
   confirmButton: {
+    flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
