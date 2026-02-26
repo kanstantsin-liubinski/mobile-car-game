@@ -56,8 +56,8 @@ export const headerStyles = StyleSheet.create({
   },
   levelCircleContainer: {
     position: 'relative',
-    width: 48,
-    height: 48,
+    width: 24,
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -67,7 +67,7 @@ export const headerStyles = StyleSheet.create({
     alignItems: 'center',
   },
   levelText: {
-    fontSize: 16,
+    fontSize: 10,
     fontWeight: '800',
     color: colors.primary,
   },

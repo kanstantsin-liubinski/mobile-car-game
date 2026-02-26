@@ -12,8 +12,8 @@ interface TopMenuProps {
 }
 
 const CircularProgressBar = ({ percentage, level }: { percentage: number; level: number }) => {
-  const size = 48;
-  const strokeWidth = 3;
+  const size = 24;
+  const strokeWidth = 2;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const progressOffset = circumference - (percentage / 100) * circumference;
@@ -75,14 +75,10 @@ export const TopMenu = ({ balance, insets }: TopMenuProps) => {
         />
         
         {/* Counter text */}
-        <View style={{ gap: 1 }}>
-          <Text style={[headerStyles.levelCounterText, { fontWeight: '700', color: colors.primary, fontSize: 12 }]}>
-            {current}
-          </Text>
-          <Text style={[headerStyles.levelCounterText, { fontSize: 10 }]}>
-            /{required}
-          </Text>
-        </View>
+        <Text style={headerStyles.levelCounterText}>
+          <Text style={{ fontWeight: '700', color: colors.primary }}>{current}</Text>
+          <Text>/{required}</Text>
+        </Text>
       </View>
     </View>
   );

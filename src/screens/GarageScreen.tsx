@@ -474,7 +474,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
 
       {garage.length === 0 ? (
         <Text style={garageStyles.emptyText}>
-          Ещё нет машин. Купи её на авторынке!
+          Ещё нет машин. Купи на авторынке!
         </Text>
       ) : (
         <View style={garageStyles.carsList}>
