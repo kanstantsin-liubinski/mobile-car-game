@@ -4,111 +4,33 @@ import { marketStyles, garageStyles } from '@styles/styles';
 import { useBalanceContext } from '@hooks/BalanceContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useSoldCarsContext } from '@hooks/SoldCarsContext';
+import { useMarketContext } from '@hooks/MarketContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
 import { calculateMaxCondition } from '../utils/priceCalculator';
+import { TIER_NAMES, TIER_EMOJIS, TOTAL_TIERS } from '../data/carModels';
 import type { Car } from '@/types';
 
-const AVAILABLE_CARS: Car[] = [
-  {
-    id: 'car-1',
-    name: 'VW Golf 2000',
-    price: 5000,
-    emoji: '🚗',
-    speed: 180,
-    description: 'Надежная немецкая компактная машина',
-    year: 2000,
-    mileage: 180000,
-    condition: 35.0,
-  },
-  {
-    id: 'car-2',
-    name: 'Honda Civic',
-    price: 8000,
-    emoji: '🚙',
-    speed: 195,
-    description: 'Японская спортивная компактная',
-    year: 2005,
-    mileage: 140000,
-    condition: 45.0,
-  },
-  {
-    id: 'car-3',
-    name: 'Toyota Corolla',
-    price: 10000,
-    emoji: '🚗',
-    speed: 190,
-    description: 'Самая надежная машина в мире',
-    year: 2010,
-    mileage: 95000,
-    condition: 60.0,
-  },
-  {
-    id: 'car-4',
-    name: 'Ford Mustang',
-    price: 18000,
-    emoji: '🏎️',
-    speed: 240,
-    description: 'Легендарный американский спортсмен',
-    year: 2015,
-    mileage: 65000,
-    condition: 72.0,
-  },
-  {
-    id: 'car-5',
-    name: 'BMW 330i',
-    price: 25000,
-    emoji: '🚘',
-    speed: 250,
-    description: 'Немецкий премиум с отличным дизайном',
-    year: 2018,
-    mileage: 32000,
-    condition: 85.0,
-  },
-  {
-    id: 'car-6',
-    name: 'Porsche 911',
-    price: 40000,
-    emoji: '🏎️',
-    speed: 300,
-    description: 'Икона спортивного автомобилестроения',
-    year: 2019,
-    mileage: 18000,
-    condition: 92.0,
-  },
-  {
-    id: 'car-7',
-    name: 'Ferrari F430',
-    price: 60000,
-    emoji: '🏁',
-    speed: 330,
-    description: 'Красная машина мечты каждого',
-    year: 2020,
-    mileage: 8000,
-    condition: 96.0,
-  },
-  {
-    id: 'car-8',
-    name: 'Bugatti Veyron',
-    price: 100000,
-    emoji: '⚡',
-    speed: 407,
-    description: 'Самая быстрая серийная машина в мире',
-    year: 2023,
-    mileage: 500,
-    condition: 99.0,
-  },
-];
+/** Форматирует оставшееся время: MM:SS */
+function formatTimeRemaining(ms: number): string {
+  if (ms <= 0) return '0:00';
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 export const MarketScreen = () => {
   const { balance, removeBalance } = useBalanceContext();
   const { addCar, hasCar, garage, garageSlots } = useGarageContext();
   const { isSold } = useSoldCarsContext();
+  const { getListingsForTier, removeListing, getTimeRemaining, currentTime } = useMarketContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
+  const [selectedTier, setSelectedTier] = useState(1);
   const [showSlotModal, setShowSlotModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [carToBuy, setCarToBuy] = useState<Car | null>(null);
@@ -131,35 +53,82 @@ export const MarketScreen = () => {
   const confirmPurchase = () => {
     if (carToBuy && selectedSlot !== null) {
       addCar(carToBuy, selectedSlot);
+      removeListing(carToBuy.id);
       setShowSlotModal(false);
       setCarToBuy(null);
       setSelectedSlot(null);
     }
   };
 
+  const tierListings = getListingsForTier(selectedTier);
+
   return (
     <ScrollView style={marketStyles.container}>
       <Text style={marketStyles.title}>Авторынок</Text>
 
+      {/* ─── Tier Tabs ──────────────────────────────────────────── */}
+      <View style={marketStyles.tierTabsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={marketStyles.tierTabsContent}
+        >
+          {Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).map((tier) => {
+            const isActive = selectedTier === tier;
+            return (
+              <TouchableOpacity
+                key={tier}
+                style={[marketStyles.tierTab, isActive && marketStyles.tierTabActive]}
+                onPress={() => setSelectedTier(tier)}
+              >
+                <Text style={marketStyles.tierTabEmoji}>{TIER_EMOJIS[tier]}</Text>
+                <Text
+                  style={[marketStyles.tierTabText, isActive && marketStyles.tierTabTextActive]}
+                >
+                  {TIER_NAMES[tier]}
+                </Text>
+                <Text
+                  style={[marketStyles.tierTabLevel, isActive && marketStyles.tierTabLevelActive]}
+                >
+                  Ур. {tier}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* ─── Cars List ──────────────────────────────────────────── */}
       <View style={marketStyles.carsList}>
-        {AVAILABLE_CARS.map((car) => {
+        {tierListings.length === 0 && (
+          <View style={marketStyles.emptyContainer}>
+            <Text style={marketStyles.emptyText}>
+              Нет доступных автомобилей. Новые появятся скоро!
+            </Text>
+          </View>
+        )}
+
+        {tierListings.map((listing) => {
+          const { car } = listing;
           const owned = hasCar(car.id);
           const sold = isSold(car.id);
-          
-          // Если машина уже куплена или продана, не показываем её на авторынке
-          if (owned) {
-            return null;
-          }
 
-          if (sold) {
-            return null;
-          }
-          
+          if (owned || sold) return null;
+
           const canAfford = balance >= car.price;
           const maxCondition = calculateMaxCondition(car.year, car.mileage);
+          const timeRemaining = getTimeRemaining(car.id);
+          const isUrgent = timeRemaining > 0 && timeRemaining < 2 * 60 * 1000; // < 2 мин
 
           return (
             <View key={car.id} style={marketStyles.carCard}>
+              {/* Таймер */}
+              <View style={marketStyles.timerContainer}>
+                <Text style={[marketStyles.timerText, isUrgent && marketStyles.timerTextUrgent]}>
+                  ⏱ {formatTimeRemaining(timeRemaining)}
+                </Text>
+              </View>
+
               <View style={marketStyles.carHeader}>
                 <Text style={marketStyles.carEmoji}>{car.emoji}</Text>
                 <View style={marketStyles.carInfo}>

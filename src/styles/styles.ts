@@ -104,17 +104,78 @@ export const menuStyles = StyleSheet.create({
 export const marketStyles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 16,
     paddingVertical: 20,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    marginBottom: 20,
+    marginBottom: 16,
     color: colors.textPrimary,
+    paddingHorizontal: 16,
   },
+  // ─── Tier tabs ─────────────────────────────────────────────────────
+  tierTabsContainer: {
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  tierTabsContent: {
+    gap: 8,
+  },
+  tierTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.darkBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  tierTabActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  tierTabEmoji: {
+    fontSize: 18,
+    marginBottom: 2,
+  },
+  tierTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  tierTabTextActive: {
+    color: '#FFF',
+  },
+  tierTabLevel: {
+    fontSize: 10,
+    color: colors.textTertiary,
+    marginTop: 1,
+  },
+  tierTabLevelActive: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  // ─── Timer ─────────────────────────────────────────────────────────
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    position: 'absolute',
+    top: 12,
+    right: 12,
+  },
+  timerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  timerTextUrgent: {
+    color: '#EF4444',
+  },
+  // ─── Cars list ─────────────────────────────────────────────────────
   carsList: {
     gap: 16,
+    paddingHorizontal: 16,
   },
   carCard: {
     backgroundColor: colors.darkBg,
@@ -122,6 +183,7 @@ export const marketStyles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
+    position: 'relative',
   },
   carHeader: {
     flexDirection: 'row',
@@ -219,6 +281,18 @@ export const marketStyles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.darkBg,
+  },
+  // ─── Empty state ───────────────────────────────────────────────────
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.textTertiary,
+    textAlign: 'center',
   },
 });
 

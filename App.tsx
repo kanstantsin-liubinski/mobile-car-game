@@ -14,6 +14,7 @@ import { SkillsProvider } from '@hooks/SkillsContext';
 import { ExperienceProvider } from '@hooks/ExperienceContext';
 import { GameStateProvider, useGameState } from '@hooks/GameStateContext';
 import { GlobalTimerProvider } from '@hooks/GlobalTimerContext';
+import { MarketProvider } from '@hooks/MarketContext';
 import { commonStyles } from '@styles/styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -33,21 +34,23 @@ function GameContent() {
   };
 
   return (
-    <GarageProvider onSellCar={(sellPrice) => {}}>
-      <View style={commonStyles.container}>
-        <TopMenu balance={balance} insets={insets} />
-        
-        <View style={commonStyles.content}>
-          {currentScreen === 'garage' && <GarageScreen onSellCar={handleSellCar} />}
-          {currentScreen === 'market' && <MarketScreen />}
-          {currentScreen === 'skills' && <SkillsScreen />}
+    <MarketProvider>
+      <GarageProvider onSellCar={(sellPrice) => {}}>
+        <View style={commonStyles.container}>
+          <TopMenu balance={balance} insets={insets} />
+          
+          <View style={commonStyles.content}>
+            {currentScreen === 'garage' && <GarageScreen onSellCar={handleSellCar} />}
+            {currentScreen === 'market' && <MarketScreen />}
+            {currentScreen === 'skills' && <SkillsScreen />}
+          </View>
+
+          <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
+
+          <StatusBar style="auto" />
         </View>
-
-        <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
-
-        <StatusBar style="auto" />
-      </View>
-    </GarageProvider>
+      </GarageProvider>
+    </MarketProvider>
   );
 }
 
