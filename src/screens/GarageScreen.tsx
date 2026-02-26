@@ -500,14 +500,8 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
               const canUseMechanic = mechanicAtSlot && mechanicAtSlot.hired && car.condition < car.maxCondition;
 
               return (
-                <TouchableOpacity
+                <View
                   key={mechanicRepairs[car.id] ? `${car.id}-${timerRefresh}` : car.id}
-                  onPress={() => {
-                    if (activeSells[car.id]) return; // Не ремонтируем машину во время продажи
-                    repairCar(car.id, mechanicMultiplier);
-                  }}
-                  activeOpacity={activeSells[car.id] ? 1 : 0.7}
-                  disabled={!!activeSells[car.id]}
               >
                 <View style={[garageStyles.carCard]}>
                   <View style={garageStyles.carHeader}>
@@ -865,7 +859,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                     )}
                   </View>
                 </View>
-              </TouchableOpacity>
+              </View>
             );
           })}
         </View>
