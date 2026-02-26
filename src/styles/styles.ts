@@ -121,15 +121,28 @@ export const marketStyles = StyleSheet.create({
   tierTabsContent: {
     gap: 8,
   },
+  scrollTrack: {
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 1.5,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  scrollThumb: {
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 1.5,
+    position: 'absolute',
+  },
   tierTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    width: 80,
+    height: 64,
     borderRadius: 12,
     backgroundColor: colors.darkBg,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
-    minWidth: 80,
+    justifyContent: 'center',
   },
   tierTabActive: {
     backgroundColor: colors.primary,
@@ -176,6 +189,7 @@ export const marketStyles = StyleSheet.create({
   carsList: {
     gap: 16,
     paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   carCard: {
     backgroundColor: colors.darkBg,
@@ -316,6 +330,7 @@ export const garageStyles = StyleSheet.create({
   },
   carsList: {
     gap: 16,
+    paddingBottom: 24,
   },
   carCard: {
     backgroundColor: colors.darkBg,

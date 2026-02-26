@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Platform, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { marketStyles, garageStyles } from '@styles/styles';
 import { useBalanceContext } from '@hooks/BalanceContext';
 import { useGarageContext } from '@hooks/GarageContext';
@@ -34,6 +34,30 @@ export const MarketScreen = () => {
   const [showSlotModal, setShowSlotModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [carToBuy, setCarToBuy] = useState<Car | null>(null);
+
+  // Custom scrollbar state for tier tabs
+  const [scrollIndicator, setScrollIndicator] = useState({ thumbWidth: 0, thumbLeft: 0, visible: false });
+  const tierScrollContentWidth = useRef(0);
+  const tierScrollViewWidth = useRef(0);
+
+  const updateScrollIndicator = (scrollX: number) => {
+    const contentW = tierScrollContentWidth.current;
+    const viewW = tierScrollViewWidth.current;
+    if (contentW <= viewW || viewW === 0) {
+      setScrollIndicator({ thumbWidth: 0, thumbLeft: 0, visible: false });
+      return;
+    }
+    const trackWidth = viewW;
+    const thumbW = Math.max((viewW / contentW) * trackWidth, 30);
+    const maxScroll = contentW - viewW;
+    const scrollFraction = scrollX / maxScroll;
+    const thumbLeft = scrollFraction * (trackWidth - thumbW);
+    setScrollIndicator({ thumbWidth: thumbW, thumbLeft, visible: true });
+  };
+
+  const onTierScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    updateScrollIndicator(e.nativeEvent.contentOffset.x);
+  };
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -72,6 +96,16 @@ export const MarketScreen = () => {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={marketStyles.tierTabsContent}
+          onScroll={onTierScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={(w) => {
+            tierScrollContentWidth.current = w;
+            updateScrollIndicator(0);
+          }}
+          onLayout={(e) => {
+            tierScrollViewWidth.current = e.nativeEvent.layout.width;
+            updateScrollIndicator(0);
+          }}
         >
           {Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).map((tier) => {
             const isActive = selectedTier === tier;
@@ -96,6 +130,16 @@ export const MarketScreen = () => {
             );
           })}
         </ScrollView>
+        {scrollIndicator.visible && (
+          <View style={marketStyles.scrollTrack}>
+            <View
+              style={[
+                marketStyles.scrollThumb,
+                { width: scrollIndicator.thumbWidth, left: scrollIndicator.thumbLeft },
+              ]}
+            />
+          </View>
+        )}
       </View>
 
       {/* ─── Cars List ──────────────────────────────────────────── */}
