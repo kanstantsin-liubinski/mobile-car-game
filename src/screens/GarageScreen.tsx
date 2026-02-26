@@ -30,6 +30,14 @@ interface ActiveSell {
   duration: number;
 }
 
+interface MechanicRepair {
+  timerId: string;
+  mechanicId: string;
+  startCondition: number;
+  maxCondition: number;
+  startTime: number;
+}
+
 export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const {
     garage,
@@ -69,6 +77,12 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const [activeSellsProgress, setActiveSellsProgress] = useState<
     Record<string, number>
   >({});
+  const [mechanicRepairs, setMechanicRepairs] = useState<
+    Record<string, MechanicRepair>
+  >({});
+  const [mechanicRepairsProgress, setMechanicRepairsProgress] = useState<
+    Record<string, number>
+  >({});
   const [modalOpenCount, setModalOpenCount] = useState(0); // Счетчик для пересоздания Slider
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedMechanicForUpgrade, setSelectedMechanicForUpgrade] = useState<
@@ -77,6 +91,10 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const [showMechanicsModal, setShowMechanicsModal] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number>(0); // Выбранный слот гаража
+  const [timerRefresh, setTimerRefresh] = useState(0); // Для форсирования ре-рендера таймера
+  const [mechanicRepairsCondition, setMechanicRepairsCondition] = useState<
+    Record<string, number>
+  >({}); // Текущее состояние машины во время ремонта механиком
 
   const mechanicSkill = getSkill("mechanic");
   const mechanicMultiplier = mechanicSkill?.level ?? 1;
@@ -135,6 +153,57 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     return () => clearInterval(interval);
   }, [activeSells, getProgress]);
 
+  // Обновляем прогресс механического ремонта и текущее состояние
+  useEffect(() => {
+    if (Object.keys(mechanicRepairs).length === 0) {
+      setMechanicRepairsProgress({});
+      setMechanicRepairsCondition({});
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const newProgress: Record<string, number> = {};
+      const newCondition: Record<string, number> = {};
+      
+      Object.entries(mechanicRepairs).forEach(([carId, repair]) => {
+        newProgress[carId] = getProgress(repair.timerId);
+        
+        // Вычисляем текущее состояние машины на основе времени
+        // 0.05% в секунду от момента старта ремонта
+        const elapsedSeconds = (Date.now() - repair.startTime) / 1000;
+        const repairAmount = elapsedSeconds * 0.05;
+        const currentCondition = Math.round(
+          (repair.startCondition + repairAmount) * 100
+        ) / 100;
+        newCondition[carId] = Math.min(repair.maxCondition, currentCondition);
+      });
+      
+      setMechanicRepairsProgress(newProgress);
+      setMechanicRepairsCondition(newCondition);
+    }, 50); // Обновляем каждые 50ms для плавного обновления
+
+    return () => clearInterval(interval);
+  }, [mechanicRepairs, getProgress]);
+
+  // Ремонт машины механиком - каждые пол-секунды добавляем 0.025% (итого 0.05% в сек)
+  useEffect(() => {
+    if (Object.keys(mechanicRepairs).length === 0) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      // Вызываем repairCar для каждой машины в ремонте
+      Object.keys(mechanicRepairs).forEach((carId) => {
+        repairCar(carId, 0.025);
+      });
+      
+      // Обновляем таймер
+      setTimerRefresh((prev) => prev + 1);
+    }, 500); // Каждые пол-секунды!
+
+    return () => clearInterval(interval);
+  }, [mechanicRepairs, repairCar]);
+
   // Система вычитания денег за нанятых механиков
   const MECHANIC_HOURLY_COST = 5; // $5 в секунду
   useEffect(() => {
@@ -151,6 +220,44 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
 
     return () => clearInterval(interval);
   }, [mechanics, removeBalance]);
+
+  // Обновляем таймер механического ремонта и экран каждую секунду
+  useEffect(() => {
+    if (Object.keys(mechanicRepairs).length === 0) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setTimerRefresh((prev) => prev + 1);
+    }, 1000); // Обновляем каждую секунду вместе с repairCar
+
+    return () => clearInterval(interval);
+  }, [mechanicRepairs]);
+
+  // Проверяем достигла ли машина максимума и завершаем ремонт
+  useEffect(() => {
+    Object.keys(mechanicRepairs).forEach((carId) => {
+      const repair = mechanicRepairs[carId];
+      if (!repair) return;
+
+      const currentCar = garage.find((c) => c.id === carId);
+      if (currentCar && currentCar.condition >= currentCar.maxCondition) {
+        // Машина достигла максимума - завершаем ремонт
+        removeTimer(repair.timerId);
+        setMechanicRepairs((prev) => {
+          const updated = { ...prev };
+          delete updated[carId];
+          return updated;
+        });
+        setMechanicRepairsProgress((prev) => {
+          const updated = { ...prev };
+          delete updated[carId];
+          return updated;
+        });
+        addExperience(1);
+      }
+    });
+  }, [garage]);
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -295,6 +402,80 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
       return updated;
     });
     setActiveSellsProgress((prev) => {
+      const updated = { ...prev };
+      delete updated[carId];
+      return updated;
+    });
+  };
+
+  // Начало механического ремонта
+  const handleMechanicRepair = (carId: string, mechanicId: string) => {
+    const car = garage.find((c) => c.id === carId);
+    if (!car || car.condition >= car.maxCondition) return;
+
+    // Скорость ремонта: 0.05% в секунду
+    // Нужно улучшить на (maxCondition - condition)%
+    const improvementNeeded = car.maxCondition - car.condition;
+    const repairSpeedPerSecond = 0.05;
+    const durationSeconds = improvementNeeded / repairSpeedPerSecond;
+    const durationMs = durationSeconds * 1000;
+
+    // Создаем таймер просто для отслеживания прогресса паузы
+    const timerId = addTimer(
+      {
+        type: "repair",
+        duration: durationMs,
+        onComplete: () => {
+          addExperience(1); // Добавляем опыт
+
+          // Удаляем из mechanicRepairs
+          setMechanicRepairs((prev) => {
+            const updated = { ...prev };
+            delete updated[carId];
+            return updated;
+          });
+          setMechanicRepairsProgress((prev) => {
+            const updated = { ...prev };
+            delete updated[carId];
+            return updated;
+          });
+        },
+        metadata: {
+          carId,
+          mechanicId,
+        },
+      },
+      durationMs,
+    );
+
+    // Добавляем в активные ремонты
+    setMechanicRepairs((prev) => ({
+      ...prev,
+      [carId]: {
+        timerId,
+        mechanicId,
+        startCondition: car.condition,
+        maxCondition: car.maxCondition,
+        startTime: Date.now(),
+      },
+    }));
+  };
+
+  // Отмена механического ремонта
+  const handleCancelMechanicRepair = (carId: string) => {
+    const repair = mechanicRepairs[carId];
+    if (!repair) return;
+
+    // Удаляем таймер
+    removeTimer(repair.timerId);
+
+    // Удаляем из mechanicRepairs
+    setMechanicRepairs((prev) => {
+      const updated = { ...prev };
+      delete updated[carId];
+      return updated;
+    });
+    setMechanicRepairsProgress((prev) => {
       const updated = { ...prev };
       delete updated[carId];
       return updated;
@@ -535,6 +716,9 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
           {garage
             .filter((car) => car.slotIndex === selectedSlot)
             .map((car) => {
+              // Используем timerRefresh для форсирования пересчета при ремонте
+              const refreshKey = mechanicRepairs[car.id] ? timerRefresh : undefined;
+              
               const currentPrice = calculateCarPrice(car.basePrice, {
                 year: car.year,
                 mileage: car.mileage,
@@ -546,9 +730,13 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                 100
               ).toFixed(1);
 
+              // Получаем механика на этом слоте
+              const mechanicAtSlot = getMechanicAtSlot(car.slotIndex);
+              const canUseMechanic = mechanicAtSlot && mechanicAtSlot.hired && car.condition < car.maxCondition;
+
               return (
                 <TouchableOpacity
-                  key={car.id}
+                  key={mechanicRepairs[car.id] ? `${car.id}-${timerRefresh}` : car.id}
                   onPress={() => {
                     if (activeSells[car.id]) return; // Не ремонтируем машину во время продажи
                     repairCar(car.id, mechanicMultiplier);
@@ -576,11 +764,16 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                     <View style={garageStyles.conditionBar}>
                       {/* Текущее состояние */}
                       <View
+                        key={`cond-${car.id}-${mechanicRepairsCondition[car.id] ?? car.condition}`}
                         style={[
                           garageStyles.conditionFill,
                           {
-                            width: `${car.condition}%`,
-                            backgroundColor: getConditionColor(car.condition),
+                            width: `${mechanicRepairs[car.id] ? mechanicRepairsCondition[car.id] ?? car.condition : car.condition}%`,
+                            backgroundColor: getConditionColor(
+                              mechanicRepairs[car.id]
+                                ? mechanicRepairsCondition[car.id] ?? car.condition
+                                : car.condition
+                            ),
                             position: "absolute",
                             left: 0,
                           },
@@ -615,10 +808,19 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                       <Text
                         style={[
                           garageStyles.conditionText,
-                          { color: getConditionColor(car.condition) },
+                          {
+                            color: getConditionColor(
+                              mechanicRepairs[car.id]
+                                ? mechanicRepairsCondition[car.id] ?? car.condition
+                                : car.condition
+                            ),
+                          },
                         ]}
                       >
-                        {car.condition.toFixed(1)}%
+                        {(mechanicRepairs[car.id]
+                          ? mechanicRepairsCondition[car.id] ?? car.condition
+                          : car.condition
+                        ).toFixed(2)}%
                       </Text>
                       <Text style={garageStyles.maxConditionText}>
                         макс {car.maxCondition.toFixed(1)}%
@@ -738,36 +940,165 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                           </Text>
                         </TouchableOpacity>
                       </View>
-                    ) : (
-                      <View style={{ flex: 1, flexDirection: "row", gap: 8 }}>
-                        <TouchableOpacity
-                          style={[
-                            garageStyles.button,
-                            garageStyles.repairButton,
-                            car.condition >= car.maxCondition &&
-                              garageStyles.repairButtonDisabled,
-                          ]}
-                          onPress={() => {
-                            repairCar(car.id, mechanicMultiplier);
-                            addExperience(mechanicMultiplier);
+                    ) : mechanicRepairs[car.id] ? (
+                      <View style={{ flex: 1, gap: 10 }}>
+                        {/* Mechanic Repair Timer Card */}
+                        <View
+                          style={{
+                            backgroundColor: colors.cardBg,
+                            borderRadius: 12,
+                            padding: 16,
+                            alignItems: "center",
+                            gap: 12,
+                            borderWidth: 2,
+                            borderColor: "#10B981",
                           }}
-                          disabled={car.condition >= car.maxCondition}
                         >
-                          <Text style={garageStyles.buttonText}>
-                            {car.condition >= car.maxCondition
-                              ? "✓ Макс"
-                              : `🔧 Ремонт (+${(0.1 * mechanicMultiplier).toFixed(1)}%)`}
+                          <Text
+                            style={{
+                              color: colors.textTertiary,
+                              fontSize: 12,
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              letterSpacing: 0.5,
+                            }}
+                          >
+                            🔧 Механик ремонтирует
                           </Text>
-                        </TouchableOpacity>
+                          <Text
+                            style={{
+                              fontSize: 36,
+                              fontWeight: "900",
+                              color: "#10B981",
+                              fontVariant: ["tabular-nums"],
+                            }}
+                          >
+                            {(() => {
+                              // Используем timerRefresh для форсирования ре-рендера
+                              void timerRefresh;
+                              
+                              const repair = mechanicRepairs[car.id];
+                              if (!repair) return "0:00";
+                              
+                              const elapsedMs = Date.now() - repair.startTime;
+                              const totalDurationMs =
+                                (repair.maxCondition - repair.startCondition) / 0.05 * 1000;
+                              const remainingMs = Math.max(0, totalDurationMs - elapsedMs);
+                              
+                              return formatTime(remainingMs);
+                            })()}
+                          </Text>
+                          <View
+                            style={{
+                              height: 8,
+                              backgroundColor: "rgba(16, 185, 129, 0.1)",
+                              borderRadius: 4,
+                              overflow: "hidden",
+                              width: "100%",
+                            }}
+                          >
+                            <View
+                              style={{
+                                height: "100%",
+                                width: `${mechanicRepairsProgress[car.id] ?? 0}%`,
+                                backgroundColor: "#10B981",
+                                borderRadius: 4,
+                              }}
+                            />
+                          </View>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: colors.textTertiary,
+                              fontWeight: "600",
+                            }}
+                          >
+                            {Math.round(mechanicRepairsProgress[car.id] ?? 0)}%
+                            завершено
+                          </Text>
+                        </View>
 
+                        {/* Cancel Button */}
                         <TouchableOpacity
-                          style={[garageStyles.button, garageStyles.sellButton]}
-                          onPress={() => handleSellCar(car.id)}
+                          style={{
+                            backgroundColor: "rgba(220, 38, 38, 0.15)",
+                            borderRadius: 10,
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            alignItems: "center",
+                            borderWidth: 2,
+                            borderColor: "#EF4444",
+                          }}
+                          onPress={() => handleCancelMechanicRepair(car.id)}
                         >
-                          <Text style={garageStyles.buttonText}>
-                            💰 Продать
+                          <Text
+                            style={{
+                              color: "#EF4444",
+                              fontSize: 14,
+                              fontWeight: "700",
+                            }}
+                          >
+                            ✕ Остановить ремонт
                           </Text>
                         </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View
+                        style={{
+                          flex: 1,
+                          flexDirection: canUseMechanic ? "column" : "row",
+                          gap: canUseMechanic ? 8 : 8,
+                        }}
+                      >
+                        <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                          <TouchableOpacity
+                            style={[
+                              garageStyles.button,
+                              garageStyles.repairButton,
+                              car.condition >= car.maxCondition &&
+                                garageStyles.repairButtonDisabled,
+                            ]}
+                            onPress={() => {
+                              repairCar(car.id, mechanicMultiplier);
+                              addExperience(mechanicMultiplier);
+                            }}
+                            disabled={car.condition >= car.maxCondition}
+                          >
+                            <Text style={garageStyles.buttonText}>
+                              {car.condition >= car.maxCondition
+                                ? "✓ Макс"
+                                : `🔧 Ремонт (+${(0.1 * mechanicMultiplier).toFixed(1)}%)`}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[garageStyles.button, garageStyles.sellButton]}
+                            onPress={() => handleSellCar(car.id)}
+                          >
+                            <Text style={garageStyles.buttonText}>
+                              💰 Продать
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {canUseMechanic && (
+                          <TouchableOpacity
+                            style={[
+                              garageStyles.button,
+                              {
+                                backgroundColor: "#10B981",
+                                borderColor: "#10B981",
+                              },
+                            ]}
+                            onPress={() =>
+                              handleMechanicRepair(car.id, mechanicAtSlot!.id)
+                            }
+                          >
+                            <Text style={garageStyles.buttonText}>
+                              🔧 Механик ремонтирует (+0.05%/сек)
+                            </Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     )}
                   </View>

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 
 export interface Timer {
   id: string;
-  type: 'sell' | 'repair' | 'auction'; // Типы операций
+  type: 'sell' | 'repair' | 'auction' | 'mechanic-repair'; // Типы операций
   duration: number; // В миллисекундах
   elapsed: number; // Прошедшее время в миллисекундах
   startedAt: number; // Timestamp когда начался
