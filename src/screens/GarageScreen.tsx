@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { garageStyles } from "@styles/styles";
 import { useGarageContext } from "@hooks/GarageContext";
 import { useSkillsContext } from "@hooks/SkillsContext";
-import { useExperienceContext } from "@hooks/ExperienceContext";
 import { useSafeAreaWeb } from "@hooks/useSafeAreaWeb";
 import { useBalanceContext } from "@hooks/BalanceContext";
 import { colors } from "@styles/colors";
@@ -50,7 +49,6 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   } = useGarageContext();
   const { balance, removeBalance } = useBalanceContext();
   const { getSkill } = useSkillsContext();
-  const { addExperience } = useExperienceContext();
   // timerRefresh is used to force re-render for mechanic repair timer display
   const [timerRefresh, setTimerRefresh] = useState(0);
   const nativeInsets = useSafeAreaInsets();
@@ -507,8 +505,6 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                   onPress={() => {
                     if (activeSells[car.id]) return; // Не ремонтируем машину во время продажи
                     repairCar(car.id, mechanicMultiplier);
-                    // XP = (0.1 * mechanicLevel) * 10 = mechanicLevel
-                    addExperience(mechanicMultiplier);
                   }}
                   activeOpacity={activeSells[car.id] ? 1 : 0.7}
                   disabled={!!activeSells[car.id]}
@@ -827,7 +823,6 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
                             ]}
                             onPress={() => {
                               repairCar(car.id, mechanicMultiplier);
-                              addExperience(mechanicMultiplier);
                             }}
                             disabled={car.condition >= car.maxCondition}
                           >

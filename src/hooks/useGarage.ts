@@ -428,7 +428,6 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
       if (currentCar && currentCar.condition >= currentCar.maxCondition) {
         callbacks.removeTimer(repair.timerId);
         changeMechanicSlot(repair.mechanicId, -1);
-        callbacks.addExperience(1);
 
         setMechanicRepairs((prev) => {
           const updated = { ...prev };
@@ -461,7 +460,6 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
         type: 'repair' as const,
         duration: durationMs,
         onComplete: () => {
-          callbacks.addExperience(1);
           changeMechanicSlot(mechanicId, -1);
           setMechanicRepairs((prev) => {
             const updated = { ...prev };
@@ -537,6 +535,10 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
   const startSell = useCallback((carId: string, sellPrice: number, duration: number) => {
     if (!callbacks) return;
 
+    // Capture boughtPrice before the car is removed
+    const car = garage.find((c) => c.id === carId);
+    const boughtPrice = car?.price ?? sellPrice;
+
     const timerId = callbacks.addTimer(
       {
         type: 'sell' as const,
@@ -546,6 +548,12 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
           sellCar(carId, sellPrice);
           callbacks.addBalance(sellPrice);
           callbacks.markAsSold(carId);
+
+          // Add XP equal to profit percentage
+          const profitPercent = Math.round(((sellPrice - boughtPrice) / boughtPrice) * 100);
+          if (profitPercent > 0) {
+            callbacks.addExperience(profitPercent);
+          }
 
           setActiveSells((prev) => {
             const updated = { ...prev };
