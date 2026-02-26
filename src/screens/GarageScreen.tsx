@@ -14,7 +14,6 @@ import { garageStyles } from "@styles/styles";
 import { useGarageContext } from "@hooks/GarageContext";
 import { useSkillsContext } from "@hooks/SkillsContext";
 import { useExperienceContext } from "@hooks/ExperienceContext";
-import { useGlobalTimer } from "@hooks/GlobalTimerContext";
 import { useSafeAreaWeb } from "@hooks/useSafeAreaWeb";
 import { useBalanceContext } from "@hooks/BalanceContext";
 import { colors } from "@styles/colors";
@@ -24,26 +23,15 @@ interface GarageScreenProps {
   onSellCar?: (carId: string, sellPrice: number) => void;
 }
 
-interface ActiveSell {
-  timerId: string;
-  sellPrice: number;
-  duration: number;
-}
-
-interface MechanicRepair {
-  timerId: string;
-  mechanicId: string;
-  startCondition: number;
-  maxCondition: number;
-  startTime: number;
-}
-
 export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const {
     garage,
     garageSlots,
     maxGarageSlots,
     mechanics,
+    mechanicRepairs,
+    mechanicRepairsProgress,
+    mechanicRepairsCondition,
     repairCar,
     sellCar,
     removeCar,
@@ -53,11 +41,18 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     changeMechanicSlot,
     changeCarSlot,
     canUpgradeGarage,
+    startMechanicRepair,
+    cancelMechanicRepair,
+    activeSells,
+    activeSellsProgress,
+    startSell,
+    cancelSell,
   } = useGarageContext();
   const { balance, removeBalance } = useBalanceContext();
   const { getSkill } = useSkillsContext();
   const { addExperience } = useExperienceContext();
-  const { addTimer, getProgress, removeTimer } = useGlobalTimer();
+  // timerRefresh is used to force re-render for mechanic repair timer display
+  const [timerRefresh, setTimerRefresh] = useState(0);
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === "web" ? webInsets : nativeInsets;
@@ -71,18 +66,6 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     profitPercent: number;
   } | null>(null);
   const [priceAdjustment, setPriceAdjustment] = useState(10); // 0-20, где 10 = 0% (центр)
-  const [activeSells, setActiveSells] = useState<Record<string, ActiveSell>>(
-    {},
-  );
-  const [activeSellsProgress, setActiveSellsProgress] = useState<
-    Record<string, number>
-  >({});
-  const [mechanicRepairs, setMechanicRepairs] = useState<
-    Record<string, MechanicRepair>
-  >({});
-  const [mechanicRepairsProgress, setMechanicRepairsProgress] = useState<
-    Record<string, number>
-  >({});
   const [modalOpenCount, setModalOpenCount] = useState(0); // Счетчик для пересоздания Slider
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedMechanicForUpgrade, setSelectedMechanicForUpgrade] = useState<
@@ -91,10 +74,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const [showMechanicsModal, setShowMechanicsModal] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number>(0); // Выбранный слот гаража
-  const [timerRefresh, setTimerRefresh] = useState(0); // Для форсирования ре-рендера таймера
-  const [mechanicRepairsCondition, setMechanicRepairsCondition] = useState<
-    Record<string, number>
-  >({}); // Текущее состояние машины во время ремонта механиком
+
 
   const mechanicSkill = getSkill("mechanic");
   const mechanicMultiplier = mechanicSkill?.level ?? 1;
@@ -135,76 +115,6 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     }
   }, [selectedCarForSale?.id]);
 
-  // Обновляем прогресс активных продаж
-  useEffect(() => {
-    if (Object.keys(activeSells).length === 0) {
-      setActiveSellsProgress({});
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const newProgress: Record<string, number> = {};
-      Object.entries(activeSells).forEach(([carId, sell]) => {
-        newProgress[carId] = getProgress(sell.timerId);
-      });
-      setActiveSellsProgress(newProgress);
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [activeSells, getProgress]);
-
-  // Обновляем прогресс механического ремонта и текущее состояние
-  useEffect(() => {
-    if (Object.keys(mechanicRepairs).length === 0) {
-      setMechanicRepairsProgress({});
-      setMechanicRepairsCondition({});
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const newProgress: Record<string, number> = {};
-      const newCondition: Record<string, number> = {};
-      
-      Object.entries(mechanicRepairs).forEach(([carId, repair]) => {
-        newProgress[carId] = getProgress(repair.timerId);
-        
-        // Вычисляем текущее состояние машины на основе времени
-        // 0.05% в секунду от момента старта ремонта
-        const elapsedSeconds = (Date.now() - repair.startTime) / 1000;
-        const repairAmount = elapsedSeconds * 0.05;
-        const currentCondition = Math.round(
-          (repair.startCondition + repairAmount) * 100
-        ) / 100;
-        newCondition[carId] = Math.min(repair.maxCondition, currentCondition);
-      });
-      
-      setMechanicRepairsProgress(newProgress);
-      setMechanicRepairsCondition(newCondition);
-    }, 50); // Обновляем каждые 50ms для плавного обновления
-
-    return () => clearInterval(interval);
-  }, [mechanicRepairs, getProgress]);
-
-  // Ремонт машины механиком - каждые пол-секунды добавляем 0.025% (итого 0.05% в сек)
-  useEffect(() => {
-    if (Object.keys(mechanicRepairs).length === 0) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      // Вызываем repairCar для каждой машины в ремонте
-      // 0.25 → repairAmount = 0.1 * 0.25 = 0.025% за 500мс = 0.05%/сек
-      Object.keys(mechanicRepairs).forEach((carId) => {
-        repairCar(carId, 0.25);
-      });
-      
-      // Обновляем таймер
-      setTimerRefresh((prev) => prev + 1);
-    }, 500); // Каждые пол-секунды!
-
-    return () => clearInterval(interval);
-  }, [mechanicRepairs, repairCar]);
-
   // Система вычитания денег за нанятых механиков
   const MECHANIC_HOURLY_COST = 5; // $5 в секунду
   useEffect(() => {
@@ -222,47 +132,16 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     return () => clearInterval(interval);
   }, [mechanics, removeBalance]);
 
-  // Обновляем таймер механического ремонта и экран каждую секунду
+  // Refresh timer display for mechanic repairs
   useEffect(() => {
-    if (Object.keys(mechanicRepairs).length === 0) {
-      return;
-    }
+    if (Object.keys(mechanicRepairs).length === 0) return;
 
     const interval = setInterval(() => {
       setTimerRefresh((prev) => prev + 1);
-    }, 1000); // Обновляем каждую секунду вместе с repairCar
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [mechanicRepairs]);
-
-  // Проверяем достигла ли машина максимума и завершаем ремонт
-  useEffect(() => {
-    Object.keys(mechanicRepairs).forEach((carId) => {
-      const repair = mechanicRepairs[carId];
-      if (!repair) return;
-
-      const currentCar = garage.find((c) => c.id === carId);
-      if (currentCar && currentCar.condition >= currentCar.maxCondition) {
-        // Машина достигла максимума - завершаем ремонт
-        removeTimer(repair.timerId);
-
-        // Открепляем механика от слота
-        changeMechanicSlot(repair.mechanicId, -1);
-
-        setMechanicRepairs((prev) => {
-          const updated = { ...prev };
-          delete updated[carId];
-          return updated;
-        });
-        setMechanicRepairsProgress((prev) => {
-          const updated = { ...prev };
-          delete updated[carId];
-          return updated;
-        });
-        addExperience(1);
-      }
-    });
-  }, [garage]);
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -350,147 +229,24 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     const percentAdjustment = sliderValueToPercent(priceAdjustment);
     const duration = calculateSellDuration(percentAdjustment);
 
-    const timerId = addTimer(
-      {
-        type: "sell",
-        duration,
-        onComplete: () => {
-          // Когда таймер завершился - продаем машину
-          sellCar(selectedCarForSale.id, selectedCarForSale.sellPrice);
-          onSellCar?.(selectedCarForSale.id, selectedCarForSale.sellPrice);
-
-          // Удаляем из activeSells
-          setActiveSells((prev) => {
-            const updated = { ...prev };
-            delete updated[selectedCarForSale.id];
-            return updated;
-          });
-          setActiveSellsProgress((prev) => {
-            const updated = { ...prev };
-            delete updated[selectedCarForSale.id];
-            return updated;
-          });
-        },
-        metadata: {
-          carId: selectedCarForSale.id,
-          sellPrice: selectedCarForSale.sellPrice,
-        },
-      },
-      duration,
-    );
-
-    // Добавляем в активные продажи и закрываем модаль
-    setActiveSells((prev) => ({
-      ...prev,
-      [selectedCarForSale.id]: {
-        timerId,
-        sellPrice: selectedCarForSale.sellPrice,
-        duration,
-      },
-    }));
+    startSell(selectedCarForSale.id, selectedCarForSale.sellPrice, duration);
 
     setSelectedCarForSale(null);
     setPriceAdjustment(10);
   };
 
   const handleCancelSell = (carId: string) => {
-    const activeSell = activeSells[carId];
-    if (!activeSell) return;
-
-    // Удаляем таймер
-    removeTimer(activeSell.timerId);
-
-    // Удаляем из activeSells
-    setActiveSells((prev) => {
-      const updated = { ...prev };
-      delete updated[carId];
-      return updated;
-    });
-    setActiveSellsProgress((prev) => {
-      const updated = { ...prev };
-      delete updated[carId];
-      return updated;
-    });
+    cancelSell(carId);
   };
 
-  // Начало механического ремонта
+  // Начало механического ремонта (delegated to context)
   const handleMechanicRepair = (carId: string, mechanicId: string) => {
-    const car = garage.find((c) => c.id === carId);
-    if (!car || car.condition >= car.maxCondition) return;
-
-    // Скорость ремонта: 0.05% в секунду
-    // Нужно улучшить на (maxCondition - condition)%
-    const improvementNeeded = car.maxCondition - car.condition;
-    const repairSpeedPerSecond = 0.05;
-    const durationSeconds = improvementNeeded / repairSpeedPerSecond;
-    const durationMs = durationSeconds * 1000;
-
-    // Создаем таймер просто для отслеживания прогресса паузы
-    const timerId = addTimer(
-      {
-        type: "repair",
-        duration: durationMs,
-        onComplete: () => {
-          addExperience(1); // Добавляем опыт
-
-          // Открепляем механика от слота
-          changeMechanicSlot(mechanicId, -1);
-
-          // Удаляем из mechanicRepairs
-          setMechanicRepairs((prev) => {
-            const updated = { ...prev };
-            delete updated[carId];
-            return updated;
-          });
-          setMechanicRepairsProgress((prev) => {
-            const updated = { ...prev };
-            delete updated[carId];
-            return updated;
-          });
-        },
-        metadata: {
-          carId,
-          mechanicId,
-        },
-      },
-      durationMs,
-    );
-
-    // Добавляем в активные ремонты
-    setMechanicRepairs((prev) => ({
-      ...prev,
-      [carId]: {
-        timerId,
-        mechanicId,
-        startCondition: car.condition,
-        maxCondition: car.maxCondition,
-        startTime: Date.now(),
-      },
-    }));
+    startMechanicRepair(carId, mechanicId);
   };
 
-  // Отмена механического ремонта
+  // Отмена механического ремонта (delegated to context)
   const handleCancelMechanicRepair = (carId: string) => {
-    const repair = mechanicRepairs[carId];
-    if (!repair) return;
-
-    // Удаляем таймер
-    removeTimer(repair.timerId);
-
-    // Открепляем механика от слота (состояние машины уже сохранено)
-    changeMechanicSlot(repair.mechanicId, -1);
-
-    // Удаляем из mechanicRepairs
-    setMechanicRepairs((prev) => {
-      const updated = { ...prev };
-      delete updated[carId];
-      return updated;
-    });
-    setMechanicRepairsProgress((prev) => {
-      const updated = { ...prev };
-      delete updated[carId];
-      return updated;
-    });
+    cancelMechanicRepair(carId);
   };
 
   // Форматирование времени

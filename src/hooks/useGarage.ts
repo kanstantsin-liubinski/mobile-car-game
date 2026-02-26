@@ -3,6 +3,29 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Car, GarageCar, Mechanic } from '@/types';
 import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalculator';
 
+export interface MechanicRepairInfo {
+  timerId: string;
+  mechanicId: string;
+  startCondition: number;
+  maxCondition: number;
+  startTime: number;
+}
+
+export interface ActiveSellInfo {
+  timerId: string;
+  sellPrice: number;
+  duration: number;
+}
+
+export interface GarageCallbacks {
+  addTimer: (timer: any, duration: number) => string;
+  removeTimer: (id: string) => void;
+  getProgress: (id: string) => number;
+  addExperience: (amount: number) => void;
+  addBalance: (amount: number) => void;
+  markAsSold: (carId: string) => void;
+}
+
 const GARAGE_KEY = 'game_garage';
 const GARAGE_CONFIG_KEY = 'game_garage_config';
 const MAX_GARAGE_SLOTS_LEVEL_1 = 3; // Максимум слотов для первого уровня гаража
@@ -20,13 +43,22 @@ const MECHANIC_NAMES = [
   'Валентин',
 ];
 
-export const useGarage = (onSellCar?: (amount: number) => void) => {
+export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: GarageCallbacks) => {
   const [garage, setGarage] = useState<GarageCar[]>([]);
   const [garageSlots, setGarageSlots] = useState(1);
   const [maxGarageSlots, setMaxGarageSlots] = useState(3); // Максимум слотов на текущем уровне гаража
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const isInitialized = useRef(false);
+
+  // ─── Mechanic repair state (persists across screen switches) ────────
+  const [mechanicRepairs, setMechanicRepairs] = useState<Record<string, MechanicRepairInfo>>({});
+  const [mechanicRepairsProgress, setMechanicRepairsProgress] = useState<Record<string, number>>({});
+  const [mechanicRepairsCondition, setMechanicRepairsCondition] = useState<Record<string, number>>({});
+
+  // ─── Active sells state (persists across screen switches) ──────────
+  const [activeSells, setActiveSells] = useState<Record<string, ActiveSellInfo>>({});
+  const [activeSellsProgress, setActiveSellsProgress] = useState<Record<string, number>>({});
 
   // Helper functions for generating mechanic data
   const generateMechanicName = (): string => {
@@ -342,6 +374,222 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     return true;
   }, [garage, garageSlots]);
 
+  // ─── Mechanic repair effects ──────────────────────────────────────────
+
+  // Update progress & visual condition for active repairs
+  useEffect(() => {
+    if (Object.keys(mechanicRepairs).length === 0 || !callbacks) {
+      setMechanicRepairsProgress({});
+      setMechanicRepairsCondition({});
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const newProgress: Record<string, number> = {};
+      const newCondition: Record<string, number> = {};
+
+      Object.entries(mechanicRepairs).forEach(([carId, repair]) => {
+        newProgress[carId] = callbacks.getProgress(repair.timerId);
+        const elapsedSeconds = (Date.now() - repair.startTime) / 1000;
+        const repairAmount = elapsedSeconds * 0.05;
+        const currentCondition = Math.round((repair.startCondition + repairAmount) * 100) / 100;
+        newCondition[carId] = Math.min(repair.maxCondition, currentCondition);
+      });
+
+      setMechanicRepairsProgress(newProgress);
+      setMechanicRepairsCondition(newCondition);
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [mechanicRepairs, callbacks]);
+
+  // Actually apply repair ticks every 500ms
+  useEffect(() => {
+    if (Object.keys(mechanicRepairs).length === 0) return;
+
+    const interval = setInterval(() => {
+      Object.keys(mechanicRepairs).forEach((carId) => {
+        repairCar(carId, 0.25);
+      });
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [mechanicRepairs, repairCar]);
+
+  // Check if car reached max condition => finish repair
+  useEffect(() => {
+    if (!callbacks) return;
+
+    Object.keys(mechanicRepairs).forEach((carId) => {
+      const repair = mechanicRepairs[carId];
+      if (!repair) return;
+
+      const currentCar = garage.find((c) => c.id === carId);
+      if (currentCar && currentCar.condition >= currentCar.maxCondition) {
+        callbacks.removeTimer(repair.timerId);
+        changeMechanicSlot(repair.mechanicId, -1);
+        callbacks.addExperience(1);
+
+        setMechanicRepairs((prev) => {
+          const updated = { ...prev };
+          delete updated[carId];
+          return updated;
+        });
+        setMechanicRepairsProgress((prev) => {
+          const updated = { ...prev };
+          delete updated[carId];
+          return updated;
+        });
+      }
+    });
+  }, [garage, mechanicRepairs, callbacks, changeMechanicSlot]);
+
+  // Start mechanic repair
+  const startMechanicRepair = useCallback((carId: string, mechanicId: string) => {
+    if (!callbacks) return;
+
+    const car = garage.find((c) => c.id === carId);
+    if (!car || car.condition >= car.maxCondition) return;
+
+    const improvementNeeded = car.maxCondition - car.condition;
+    const repairSpeedPerSecond = 0.05;
+    const durationSeconds = improvementNeeded / repairSpeedPerSecond;
+    const durationMs = durationSeconds * 1000;
+
+    const timerId = callbacks.addTimer(
+      {
+        type: 'repair' as const,
+        duration: durationMs,
+        onComplete: () => {
+          callbacks.addExperience(1);
+          changeMechanicSlot(mechanicId, -1);
+          setMechanicRepairs((prev) => {
+            const updated = { ...prev };
+            delete updated[carId];
+            return updated;
+          });
+          setMechanicRepairsProgress((prev) => {
+            const updated = { ...prev };
+            delete updated[carId];
+            return updated;
+          });
+        },
+        metadata: { carId, mechanicId },
+      },
+      durationMs,
+    );
+
+    setMechanicRepairs((prev) => ({
+      ...prev,
+      [carId]: {
+        timerId,
+        mechanicId,
+        startCondition: car.condition,
+        maxCondition: car.maxCondition,
+        startTime: Date.now(),
+      },
+    }));
+  }, [garage, callbacks, changeMechanicSlot]);
+
+  // Cancel mechanic repair
+  const cancelMechanicRepair = useCallback((carId: string) => {
+    if (!callbacks) return;
+
+    const repair = mechanicRepairs[carId];
+    if (!repair) return;
+
+    callbacks.removeTimer(repair.timerId);
+    changeMechanicSlot(repair.mechanicId, -1);
+
+    setMechanicRepairs((prev) => {
+      const updated = { ...prev };
+      delete updated[carId];
+      return updated;
+    });
+    setMechanicRepairsProgress((prev) => {
+      const updated = { ...prev };
+      delete updated[carId];
+      return updated;
+    });
+  }, [mechanicRepairs, callbacks, changeMechanicSlot]);
+
+  // ─── Active sells effects ──────────────────────────────────────────
+
+  // Update sell progress
+  useEffect(() => {
+    if (Object.keys(activeSells).length === 0 || !callbacks) {
+      setActiveSellsProgress({});
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const newProgress: Record<string, number> = {};
+      Object.entries(activeSells).forEach(([carId, sell]) => {
+        newProgress[carId] = callbacks.getProgress(sell.timerId);
+      });
+      setActiveSellsProgress(newProgress);
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [activeSells, callbacks]);
+
+  // Start sell
+  const startSell = useCallback((carId: string, sellPrice: number, duration: number) => {
+    if (!callbacks) return;
+
+    const timerId = callbacks.addTimer(
+      {
+        type: 'sell' as const,
+        duration,
+        onComplete: () => {
+          // Sell the car, add balance, mark as sold
+          sellCar(carId, sellPrice);
+          callbacks.addBalance(sellPrice);
+          callbacks.markAsSold(carId);
+
+          setActiveSells((prev) => {
+            const updated = { ...prev };
+            delete updated[carId];
+            return updated;
+          });
+          setActiveSellsProgress((prev) => {
+            const updated = { ...prev };
+            delete updated[carId];
+            return updated;
+          });
+        },
+        metadata: { carId, sellPrice },
+      },
+      duration,
+    );
+
+    setActiveSells((prev) => ({
+      ...prev,
+      [carId]: { timerId, sellPrice, duration },
+    }));
+  }, [callbacks, sellCar]);
+
+  // Cancel sell
+  const cancelSell = useCallback((carId: string) => {
+    if (!callbacks) return;
+
+    const activeSell = activeSells[carId];
+    if (!activeSell) return;
+
+    callbacks.removeTimer(activeSell.timerId);
+
+    setActiveSells((prev) => {
+      const updated = { ...prev };
+      delete updated[carId];
+      return updated;
+    });
+    setActiveSellsProgress((prev) => {
+      const updated = { ...prev };
+      delete updated[carId];
+      return updated;
+    });
+  }, [activeSells, callbacks]);
+
   // Оборачиваем возвращаемый объект в useMemo с зависимостью на все состояния
   const garageState = useMemo(
     () => ({
@@ -349,6 +597,11 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       garageSlots,
       maxGarageSlots,
       mechanics,
+      mechanicRepairs,
+      mechanicRepairsProgress,
+      mechanicRepairsCondition,
+      activeSells,
+      activeSellsProgress,
       addCar,
       removeCar,
       hasCar,
@@ -361,12 +614,21 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       changeMechanicSlot,
       hireMechanic,
       canUpgradeGarage,
+      startMechanicRepair,
+      cancelMechanicRepair,
+      startSell,
+      cancelSell,
     }),
     [
       garage,
       garageSlots,
       maxGarageSlots,
       mechanics,
+      mechanicRepairs,
+      mechanicRepairsProgress,
+      mechanicRepairsCondition,
+      activeSells,
+      activeSellsProgress,
       addCar,
       removeCar,
       hasCar,
@@ -378,6 +640,10 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
       upgradeMechanicSkill,
       changeMechanicSlot,
       hireMechanic,
+      startMechanicRepair,
+      cancelMechanicRepair,
+      startSell,
+      cancelSell,
     ]
   );
 
