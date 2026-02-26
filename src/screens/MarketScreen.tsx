@@ -9,7 +9,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
 import { calculateMaxCondition } from '../utils/priceCalculator';
-import { TIER_NAMES, TIER_EMOJIS, TOTAL_TIERS } from '../data/carModels';
+import { TIER_NAMES, TIER_EMOJIS, TOTAL_TIERS, TIER_UNLOCK_LEVELS } from '../data/carModels';
+import { useExperienceContext } from '@hooks/ExperienceContext';
 import type { Car } from '@/types';
 
 /** Форматирует оставшееся время: MM:SS */
@@ -26,6 +27,7 @@ export const MarketScreen = () => {
   const { addCar, hasCar, garage, garageSlots } = useGarageContext();
   const { isSold } = useSoldCarsContext();
   const { getListingsForTier, removeListing, getTimeRemaining, currentTime } = useMarketContext();
+  const { isTierUnlocked, getRequiredLevelForTier } = useExperienceContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
@@ -109,22 +111,40 @@ export const MarketScreen = () => {
         >
           {Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).map((tier) => {
             const isActive = selectedTier === tier;
+            const unlocked = isTierUnlocked(tier);
             return (
               <TouchableOpacity
                 key={tier}
-                style={[marketStyles.tierTab, isActive && marketStyles.tierTabActive]}
+                style={[
+                  marketStyles.tierTab,
+                  isActive && marketStyles.tierTabActive,
+                  !unlocked && marketStyles.tierTabLocked,
+                ]}
                 onPress={() => setSelectedTier(tier)}
               >
-                <Text style={marketStyles.tierTabEmoji}>{TIER_EMOJIS[tier]}</Text>
+                {!unlocked && (
+                  <Text style={{ position: 'absolute', top: 4, right: 6, fontSize: 10 }}>🔒</Text>
+                )}
+                <Text style={[marketStyles.tierTabEmoji, !unlocked && { opacity: 0.4 }]}>
+                  {TIER_EMOJIS[tier]}
+                </Text>
                 <Text
-                  style={[marketStyles.tierTabText, isActive && marketStyles.tierTabTextActive]}
+                  style={[
+                    marketStyles.tierTabText,
+                    isActive && marketStyles.tierTabTextActive,
+                    !unlocked && { opacity: 0.4 },
+                  ]}
                 >
                   {TIER_NAMES[tier]}
                 </Text>
                 <Text
-                  style={[marketStyles.tierTabLevel, isActive && marketStyles.tierTabLevelActive]}
+                  style={[
+                    marketStyles.tierTabLevel,
+                    isActive && marketStyles.tierTabLevelActive,
+                    !unlocked && { opacity: 0.4 },
+                  ]}
                 >
-                  Ур. {tier}
+                  {unlocked ? `Ур. ${tier}` : `🔒 Ур. ${TIER_UNLOCK_LEVELS[tier]}`}
                 </Text>
               </TouchableOpacity>
             );
@@ -144,7 +164,19 @@ export const MarketScreen = () => {
 
       {/* ─── Cars List ──────────────────────────────────────────── */}
       <View style={marketStyles.carsList}>
-        {tierListings.length === 0 && (
+        {!isTierUnlocked(selectedTier) && (
+          <View style={marketStyles.emptyContainer}>
+            <Text style={{ fontSize: 36, marginBottom: 12 }}>🔒</Text>
+            <Text style={[marketStyles.emptyText, { fontSize: 15, fontWeight: '600' }]}>
+              Класс «{TIER_NAMES[selectedTier]}» откроется на {TIER_UNLOCK_LEVELS[selectedTier]} уровне
+            </Text>
+            <Text style={[marketStyles.emptyText, { marginTop: 6, fontSize: 13 }]}>
+              Продавайте машины и зарабатывайте опыт, чтобы повысить уровень!
+            </Text>
+          </View>
+        )}
+
+        {isTierUnlocked(selectedTier) && tierListings.length === 0 && (
           <View style={marketStyles.emptyContainer}>
             <Text style={marketStyles.emptyText}>
               Нет доступных автомобилей. Новые появятся скоро!
@@ -152,7 +184,7 @@ export const MarketScreen = () => {
           </View>
         )}
 
-        {tierListings.map((listing) => {
+        {isTierUnlocked(selectedTier) && tierListings.map((listing) => {
           const { car } = listing;
           const owned = hasCar(car.id);
           const sold = isSold(car.id);

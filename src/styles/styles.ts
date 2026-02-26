@@ -56,13 +56,18 @@ export const headerStyles = StyleSheet.create({
   },
   levelCircleContainer: {
     position: 'relative',
-    width: 56,
-    height: 56,
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  levelCenterLabel: {
+    position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
   },
   levelText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     color: colors.primary,
   },
@@ -147,6 +152,10 @@ export const marketStyles = StyleSheet.create({
   tierTabActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+  },
+  tierTabLocked: {
+    backgroundColor: 'rgba(30, 41, 59, 0.6)',
+    borderColor: 'rgba(51, 65, 85, 0.5)',
   },
   tierTabEmoji: {
     fontSize: 18,

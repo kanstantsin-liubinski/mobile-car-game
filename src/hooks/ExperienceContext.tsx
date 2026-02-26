@@ -5,17 +5,38 @@ interface ExperienceContextType {
   totalExperience: number;
   level: number;
   addExperience: (amount: number) => void;
-  getProgress: () => { current: number; required: number };
+  getProgress: () => { current: number; required: number; percentage: number };
   getLevel: () => number;
+  isTierUnlocked: (tier: number) => boolean;
+  getRequiredLevelForTier: (tier: number) => number;
 }
 
 const ExperienceContext = createContext<ExperienceContextType | undefined>(undefined);
 
 const EXPERIENCE_KEY = 'game_experience';
 
-// Formula: to reach level (level + 1), need (level + 1) * 1000 XP
+// Formula: to go from level N to N+1, need N * 1000 XP (level 1→2 = 1000, 2→3 = 2000, etc.)
+// Level 0→1 requires 1000 XP as a baseline
 const getExperienceRequired = (level: number): number => {
-  return (level + 1) * 1000;
+  return Math.max(level, 1) * 1000;
+};
+
+// Tier unlock levels: tier 1 = always, tier 2 = level 5, tier 3 = level 10, etc.
+const TIER_UNLOCK_LEVELS: Record<number, number> = {
+  1: 0,
+  2: 5,
+  3: 10,
+  4: 15,
+  5: 20,
+  6: 25,
+};
+
+const getRequiredLevelForTier = (tier: number): number => {
+  return TIER_UNLOCK_LEVELS[tier] ?? 0;
+};
+
+const isTierUnlockedByLevel = (tier: number, level: number): boolean => {
+  return level >= getRequiredLevelForTier(tier);
 };
 
 // Calculate level and progress based on total experience
@@ -91,10 +112,20 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({ children
     setTotalExperience((prev) => prev + amount);
   };
 
-  const getProgress = () => ({
-    current: levelData.progressInLevel,
-    required: levelData.requiredForNext,
-  });
+  const getProgress = () => {
+    const percentage = levelData.requiredForNext > 0
+      ? (levelData.progressInLevel / levelData.requiredForNext) * 100
+      : 0;
+    return {
+      current: levelData.progressInLevel,
+      required: levelData.requiredForNext,
+      percentage: Math.min(percentage, 100),
+    };
+  };
+
+  const isTierUnlocked = (tier: number): boolean => {
+    return isTierUnlockedByLevel(tier, levelData.level);
+  };
 
   const getLevel = () => levelData.level;
 
@@ -106,6 +137,8 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({ children
         addExperience,
         getProgress,
         getLevel,
+        isTierUnlocked,
+        getRequiredLevelForTier,
       }}
     >
       {children}
