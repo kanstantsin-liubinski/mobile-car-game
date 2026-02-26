@@ -140,7 +140,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     }
   };
 
-  const addCar = useCallback((car: Car) => {
+  const addCar = useCallback((car: Car, slotIndex?: number) => {
     // Вычисляем базовую цену (цену при состоянии 100%)
     const basePrice = calculateBasePrice(car.price, {
       year: car.year,
@@ -156,12 +156,16 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
     const roundedCondition = Math.round(car.condition * 10) / 10;
 
     setGarage((prevGarage) => {
-      // Находим первый свободный слот
-      let firstFreeSlot = -1;
-      for (let i = 0; i < garageSlots; i++) {
-        if (!prevGarage.some((c) => c.slotIndex === i)) {
-          firstFreeSlot = i;
-          break;
+      // Определяем слот для машины
+      let assignedSlot = slotIndex;
+      
+      // Если слот не передан или он занят, ищем первый свободный
+      if (assignedSlot === undefined || prevGarage.some((c) => c.slotIndex === assignedSlot)) {
+        for (let i = 0; i < garageSlots; i++) {
+          if (!prevGarage.some((c) => c.slotIndex === i)) {
+            assignedSlot = i;
+            break;
+          }
         }
       }
 
@@ -170,7 +174,7 @@ export const useGarage = (onSellCar?: (amount: number) => void) => {
         condition: roundedCondition,
         basePrice,
         maxCondition,
-        slotIndex: firstFreeSlot, // Назначаем первый свободный слот
+        slotIndex: assignedSlot!, // Назначаем выбранный или первый свободный слот
       };
       return [...prevGarage, garageCar];
     });

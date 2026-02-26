@@ -7,7 +7,7 @@ interface GarageContextType {
   garageSlots: number;
   maxGarageSlots: number;
   mechanics: Mechanic[];
-  addCar: (car: Car) => void;
+  addCar: (car: Car, slotIndex?: number) => void;
   removeCar: (carId: string) => void;
   hasCar: (carId: string) => boolean;
   repairCar: (carId: string, skillMultiplier?: number) => void;

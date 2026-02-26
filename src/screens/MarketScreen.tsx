@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { marketStyles } from '@styles/styles';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react-native';
+import { marketStyles, garageStyles } from '@styles/styles';
 import { useBalanceContext } from '@hooks/BalanceContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useSoldCarsContext } from '@hooks/SoldCarsContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
 import { calculateMaxCondition } from '../utils/priceCalculator';
 import type { Car } from '@/types';
@@ -101,8 +103,15 @@ const AVAILABLE_CARS: Car[] = [
 
 export const MarketScreen = () => {
   const { balance, removeBalance } = useBalanceContext();
-  const { addCar, hasCar, garage } = useGarageContext();
+  const { addCar, hasCar, garage, garageSlots } = useGarageContext();
   const { isSold } = useSoldCarsContext();
+  const nativeInsets = useSafeAreaInsets();
+  const webInsets = useSafeAreaWeb();
+  const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
+
+  const [showSlotModal, setShowSlotModal] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [carToBuy, setCarToBuy] = useState<Car | null>(null);
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -113,7 +122,18 @@ export const MarketScreen = () => {
 
   const handleBuyCar = (car: Car) => {
     if (removeBalance(car.price)) {
-      addCar(car);
+      setCarToBuy(car);
+      setSelectedSlot(null);
+      setShowSlotModal(true);
+    }
+  };
+
+  const confirmPurchase = () => {
+    if (carToBuy && selectedSlot !== null) {
+      addCar(carToBuy, selectedSlot);
+      setShowSlotModal(false);
+      setCarToBuy(null);
+      setSelectedSlot(null);
     }
   };
 
@@ -212,6 +232,167 @@ export const MarketScreen = () => {
           );
         })}
       </View>
+
+      {/* Slot Selection Modal */}
+      <Modal
+        visible={showSlotModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSlotModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.cardBg,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 14,
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              paddingBottom: insets.bottom + 14,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 24,
+                fontWeight: '700',
+                color: colors.textPrimary,
+                marginBottom: 14,
+                textAlign: 'center',
+              }}
+            >
+              Покупка автомобиля
+            </Text>
+
+            {carToBuy && (
+              <View
+                style={{
+                  marginBottom: 16,
+                  paddingBottom: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: colors.textTertiary,
+                    marginBottom: 4,
+                    fontWeight: '500',
+                  }}
+                >
+                  Покупаете:
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: '700',
+                    color: colors.textPrimary,
+                  }}
+                >
+                  {carToBuy.emoji} {carToBuy.name}
+                </Text>
+              </View>
+            )}
+
+            <View
+              style={{
+                marginBottom: 16,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: colors.textTertiary,
+                  marginBottom: 10,
+                  fontWeight: '500',
+                }}
+              >
+                ВЫБЕРИТЕ СЛОТ
+              </Text>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{
+                  gap: 8,
+                }}
+              >
+                {Array.from({ length: garageSlots }).map((_, slotIndex) => {
+                  const carInSlot = garage.find((c) => c.slotIndex === slotIndex);
+                  const isSelected = selectedSlot === slotIndex;
+
+                  return (
+                    <TouchableOpacity
+                      key={slotIndex}
+                      disabled={!!carInSlot}
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 10,
+                        backgroundColor: isSelected
+                          ? colors.primary
+                          : carInSlot
+                            ? 'rgba(251, 191, 36, 0.15)'
+                            : 'rgba(99, 102, 241, 0.08)',
+                        borderWidth: 2,
+                        borderColor: isSelected
+                          ? colors.primary
+                          : carInSlot
+                            ? '#FBBF24'
+                            : 'rgba(99, 102, 241, 0.2)',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        opacity: carInSlot ? 0.6 : 1,
+                      }}
+                      onPress={() => !carInSlot && setSelectedSlot(slotIndex)}
+                    >
+                      <Text
+                        style={{
+                          color: isSelected ? '#FFF' : colors.textPrimary,
+                          fontSize: 20,
+                          fontWeight: '700',
+                        }}
+                      >
+                        {slotIndex + 1}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View style={garageStyles.modalButtonsContainer}>
+              <TouchableOpacity
+                style={[garageStyles.modalButton, garageStyles.cancelButton]}
+                onPress={() => setShowSlotModal(false)}
+              >
+                <Text style={garageStyles.modalButtonText}>
+                  Отмена
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  garageStyles.modalButton,
+                  garageStyles.confirmButton,
+                  selectedSlot === null && { opacity: 0.5 },
+                ]}
+                onPress={confirmPurchase}
+                disabled={selectedSlot === null}
+              >
+                <Text style={[garageStyles.modalButtonText, { color: '#FFF' }]}>
+                  Купить
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
