@@ -17,6 +17,8 @@ import { useSafeAreaWeb } from "@hooks/useSafeAreaWeb";
 import { useBalanceContext } from "@hooks/BalanceContext";
 import { colors } from "@styles/colors";
 import { calculateCarPrice } from "../utils/priceCalculator";
+import { getGarageById } from "../data/cityBuildings";
+import { LocationHeader } from "@components/LocationHeader";
 
 interface GarageScreenProps {
   onSellCar?: (carId: string, sellPrice: number) => void;
@@ -26,7 +28,7 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   const {
     garage,
     garageSlots,
-    maxGarageSlots,
+    garageId,
     mechanics,
     mechanicRepairs,
     mechanicRepairsProgress,
@@ -34,12 +36,10 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
     repairCar,
     sellCar,
     removeCar,
-    upgradeGarageSlot,
     upgradeMechanicSkill,
     hireMechanic,
     changeMechanicSlot,
     changeCarSlot,
-    canUpgradeGarage,
     startMechanicRepair,
     cancelMechanicRepair,
     activeSells,
@@ -65,14 +65,13 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   } | null>(null);
   const [priceAdjustment, setPriceAdjustment] = useState(10); // 0-20, где 10 = 0% (центр)
   const [modalOpenCount, setModalOpenCount] = useState(0); // Счетчик для пересоздания Slider
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedMechanicForUpgrade, setSelectedMechanicForUpgrade] = useState<
     string | null
   >(null);
   const [showMechanicsModal, setShowMechanicsModal] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number>(0); // Выбранный слот гаража
-
+  const garageInfo = getGarageById(garageId);
 
   const mechanicSkill = getSkill("mechanic");
   const mechanicMultiplier = mechanicSkill?.level ?? 1;
@@ -256,9 +255,9 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
   };
 
   return (
-    <ScrollView style={garageStyles.container}>
-      <Text style={garageStyles.title}>Мой гараж</Text>
-
+    <View style={{ flex: 1 }}>
+    <LocationHeader title={garageInfo?.name ?? "Гараж"} emoji={garageInfo?.emoji ?? "🏠"} />
+    <ScrollView style={[garageStyles.container, { paddingTop: 8 }]}>
       {/* Garage Info Header */}
       <View
         style={{
@@ -371,23 +370,6 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
 
         {/* Buttons Row */}
         <View style={{ flexDirection: "row", gap: 12 }}>
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              backgroundColor: colors.primary,
-              borderRadius: 10,
-              paddingVertical: 12,
-              alignItems: "center",
-              opacity: canUpgradeGarage() ? 1 : 0.6,
-            }}
-            onPress={() => setShowUpgradeModal(true)}
-            disabled={!canUpgradeGarage()}
-          >
-            <Text style={{ color: "#FFF", fontSize: 13, fontWeight: "700" }}>
-              Улучшить гараж
-            </Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={{
               flex: 1,
@@ -1014,83 +996,6 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
         </View>
       </Modal>
 
-      {/* Garage Upgrade Modal */}
-      <Modal
-        visible={showUpgradeModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowUpgradeModal(false)}
-      >
-        <View style={garageStyles.modalOverlay}>
-          <View
-            style={[
-              garageStyles.modalContent,
-              { paddingBottom: insets.bottom + 12 },
-            ]}
-          >
-            <Text style={garageStyles.modalTitle}>Улучшить гараж</Text>
-
-            <View
-              style={{
-                backgroundColor: colors.cardBg,
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 20,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={{
-                    color: colors.textTertiary,
-                    fontSize: 12,
-                    fontWeight: "600",
-                    marginBottom: 8,
-                  }}
-                >
-                  📍 НОВОЕ МЕСТО В ГАРАЖЕ
-                </Text>
-                <Text
-                  style={{
-                    color: colors.textPrimary,
-                    fontSize: 20,
-                    fontWeight: "700",
-                  }}
-                >
-                  $5,000
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={{
-                  backgroundColor: colors.primary,
-                  borderRadius: 10,
-                  paddingVertical: 12,
-                  alignItems: "center",
-                }}
-                onPress={() => {
-                  upgradeGarageSlot();
-                  setShowUpgradeModal(false);
-                }}
-              >
-                <Text
-                  style={{ color: "#FFF", fontSize: 14, fontWeight: "700" }}
-                >
-                  ✓ Купить место
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[garageStyles.modalButton, garageStyles.cancelButton]}
-              onPress={() => setShowUpgradeModal(false)}
-            >
-              <Text style={garageStyles.modalButtonText}>Закрыть</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Hire Mechanic Modal */}
       <Modal
         visible={showMechanicsModal}
@@ -1630,5 +1535,6 @@ export const GarageScreen: React.FC<GarageScreenProps> = ({ onSellCar }) => {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 };

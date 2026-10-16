@@ -11,6 +11,8 @@ import { colors } from '@styles/colors';
 import { calculateMaxCondition } from '../utils/priceCalculator';
 import { TIER_NAMES, TIER_EMOJIS, TOTAL_TIERS, TIER_UNLOCK_LEVELS } from '../data/carModels';
 import { useExperienceContext } from '@hooks/ExperienceContext';
+import { getMarketById } from '../data/cityBuildings';
+import { LocationHeader } from '@components/LocationHeader';
 import type { Car } from '@/types';
 
 /** Форматирует оставшееся время: MM:SS */
@@ -22,7 +24,12 @@ function formatTimeRemaining(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-export const MarketScreen = () => {
+interface MarketScreenProps {
+  marketId: string;
+  onBack: () => void;
+}
+
+export const MarketScreen = ({ marketId, onBack }: MarketScreenProps) => {
   const { balance, removeBalance } = useBalanceContext();
   const { addCar, hasCar, garage, garageSlots } = useGarageContext();
   const { isSold } = useSoldCarsContext();
@@ -86,12 +93,13 @@ export const MarketScreen = () => {
     }
   };
 
-  const tierListings = getListingsForTier(selectedTier);
+  const tierListings = getListingsForTier(marketId, selectedTier);
+  const market = getMarketById(marketId);
 
   return (
-    <ScrollView style={marketStyles.container}>
-      <Text style={marketStyles.title}>Авторынок</Text>
-
+    <View style={{ flex: 1 }}>
+    <LocationHeader title={market?.name ?? 'Авторынок'} emoji={market?.emoji ?? '🏪'} onBack={onBack} />
+    <ScrollView style={[marketStyles.container, { paddingTop: 8 }]}>
       {/* ─── Tier Tabs ──────────────────────────────────────────── */}
       <View style={marketStyles.tierTabsContainer}>
         <ScrollView
@@ -439,5 +447,6 @@ export const MarketScreen = () => {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 };

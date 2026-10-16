@@ -76,6 +76,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Очищаем все игровые данные
       await AsyncStorage.removeItem('game_balance');
       await AsyncStorage.removeItem('game_garage');
+      await AsyncStorage.removeItem('game_garage_config');
       await AsyncStorage.removeItem('game_experience');
       await AsyncStorage.removeItem('game_skills');
       await AsyncStorage.removeItem('game_sold_cars');

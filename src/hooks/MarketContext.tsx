@@ -7,12 +7,15 @@ import {
 } from '../utils/marketGenerator';
 import type { MarketListing } from '../utils/marketGenerator';
 import { TOTAL_TIERS } from '../data/carModels';
+import { MARKETS } from '../data/cityBuildings';
+
+type TierListings = Record<number, MarketListing[]>;
 
 interface MarketContextType {
-  /** Все текущие объявления по тирам */
-  listings: Record<number, MarketListing[]>;
-  /** Получить объявления для конкретного тира */
-  getListingsForTier: (tier: number) => MarketListing[];
+  /** Все текущие объявления: авторынок → тир → объявления */
+  listings: Record<string, TierListings>;
+  /** Получить объявления конкретного авторынка для тира */
+  getListingsForTier: (marketId: string, tier: number) => MarketListing[];
   /** Удалить объявление (при покупке) */
   removeListing: (listingId: string) => void;
   /** Оставшееся время до исчезновения (мс), -1 если не найдено */
@@ -25,9 +28,45 @@ const MarketContext = createContext<MarketContextType | undefined>(undefined);
 
 const MARKET_TICK_INTERVAL = 1000; // Обновляем каждую секунду
 
+/** Один тик авторынка: убираем истёкшие объявления, добавляем новые, если не хватает */
+const tickMarket = (prev: TierListings, now: number): { listings: TierListings; changed: boolean } => {
+  let changed = false;
+  const updated: TierListings = {};
+
+  for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
+    const tierListings = prev[tier] || [];
+
+    // Убираем истёкшие
+    const active = tierListings.filter((l) => l.expiresAt > now);
+
+    if (active.length !== tierListings.length) {
+      changed = true;
+    }
+
+    // Если не хватает объявлений — добавляем
+    if (active.length < MIN_LISTINGS_PER_TIER) {
+      changed = true;
+      const existingModelIds = active.map((l) => l.modelId);
+      const needed = MIN_LISTINGS_PER_TIER + Math.floor(Math.random() * (MAX_LISTINGS_PER_TIER - MIN_LISTINGS_PER_TIER + 1)) - active.length;
+
+      for (let i = 0; i < Math.max(1, needed); i++) {
+        const allModels = [...existingModelIds, ...active.map((l) => l.modelId)];
+        const newListing = generateRandomListing(tier, allModels);
+        active.push(newListing);
+        existingModelIds.push(newListing.modelId);
+      }
+    }
+
+    updated[tier] = active;
+  }
+
+  return { listings: updated, changed };
+};
+
 export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [listings, setListings] = useState<Record<number, MarketListing[]>>(() =>
-    generateAllInitialListings()
+  // У каждого авторынка свой независимый набор объявлений
+  const [listings, setListings] = useState<Record<string, TierListings>>(() =>
+    Object.fromEntries(MARKETS.map((m) => [m.id, generateAllInitialListings()]))
   );
   const [currentTime, setCurrentTime] = useState(Date.now());
   const listingsRef = useRef(listings);
@@ -41,33 +80,12 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setListings((prev) => {
         let changed = false;
-        const updated: Record<number, MarketListing[]> = {};
+        const updated: Record<string, TierListings> = {};
 
-        for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
-          const tierListings = prev[tier] || [];
-
-          // Убираем истёкшие
-          const active = tierListings.filter((l) => l.expiresAt > now);
-
-          if (active.length !== tierListings.length) {
-            changed = true;
-          }
-
-          // Если не хватает объявлений — добавляем
-          if (active.length < MIN_LISTINGS_PER_TIER) {
-            changed = true;
-            const existingModelIds = active.map((l) => l.modelId);
-            const needed = MIN_LISTINGS_PER_TIER + Math.floor(Math.random() * (MAX_LISTINGS_PER_TIER - MIN_LISTINGS_PER_TIER + 1)) - active.length;
-
-            for (let i = 0; i < Math.max(1, needed); i++) {
-              const allModels = [...existingModelIds, ...active.map((l) => l.modelId)];
-              const newListing = generateRandomListing(tier, allModels);
-              active.push(newListing);
-              existingModelIds.push(newListing.modelId);
-            }
-          }
-
-          updated[tier] = active;
+        for (const market of MARKETS) {
+          const { listings: marketListings, changed: marketChanged } = tickMarket(prev[market.id] || {}, now);
+          updated[market.id] = marketListings;
+          if (marketChanged) changed = true;
         }
 
         return changed ? updated : prev;
@@ -78,26 +96,30 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const getListingsForTier = useCallback(
-    (tier: number): MarketListing[] => {
-      return listings[tier] || [];
+    (marketId: string, tier: number): MarketListing[] => {
+      return listings[marketId]?.[tier] || [];
     },
     [listings]
   );
 
   const removeListing = useCallback((listingId: string) => {
     setListings((prev) => {
-      const updated: Record<number, MarketListing[]> = {};
+      const updated: Record<string, TierListings> = {};
       let found = false;
 
-      for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
-        const tierListings = prev[tier] || [];
-        const filtered = tierListings.filter((l) => l.car.id !== listingId);
+      for (const [marketId, marketListings] of Object.entries(prev)) {
+        const updatedMarket: TierListings = {};
+        for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
+          const tierListings = marketListings[tier] || [];
+          const filtered = tierListings.filter((l) => l.car.id !== listingId);
 
-        if (filtered.length !== tierListings.length) {
-          found = true;
+          if (filtered.length !== tierListings.length) {
+            found = true;
+          }
+
+          updatedMarket[tier] = filtered;
         }
-
-        updated[tier] = filtered;
+        updated[marketId] = updatedMarket;
       }
 
       return found ? updated : prev;
@@ -106,10 +128,12 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const getTimeRemaining = useCallback(
     (listingId: string): number => {
-      for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
-        const listing = (listings[tier] || []).find((l) => l.car.id === listingId);
-        if (listing) {
-          return Math.max(0, listing.expiresAt - currentTime);
+      for (const marketListings of Object.values(listings)) {
+        for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
+          const listing = (marketListings[tier] || []).find((l) => l.car.id === listingId);
+          if (listing) {
+            return Math.max(0, listing.expiresAt - currentTime);
+          }
         }
       }
       return -1;

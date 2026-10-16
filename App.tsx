@@ -3,7 +3,7 @@ import { View, Platform } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
 
-import { GarageScreen, MarketScreen, SkillsScreen } from '@screens';
+import { GarageScreen, MarketScreen, SkillsScreen, CityScreen } from '@screens';
 import { BottomMenu, TopMenu, MainMenu } from '@components';
 import { useNavigation } from '@hooks/useNavigation';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
@@ -19,7 +19,7 @@ import { commonStyles } from '@styles/styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 function GameContent() {
-  const { currentScreen, goToScreen } = useNavigation();
+  const { currentScreen, goToScreen, activeMarketId, openMarket } = useNavigation();
   const { balance, addBalance } = useBalanceContext();
   const { markAsSold } = useSoldCarsContext();
   
@@ -40,8 +40,11 @@ function GameContent() {
           <TopMenu balance={balance} insets={insets} />
           
           <View style={commonStyles.content}>
-            {currentScreen === 'garage' && <GarageScreen onSellCar={handleSellCar} />}
-            {currentScreen === 'market' && <MarketScreen />}
+            {currentScreen === 'garage' && (
+              <GarageScreen onSellCar={handleSellCar} />
+            )}
+            {currentScreen === 'city' && <CityScreen onOpenMarket={openMarket} onOpenGarage={() => goToScreen('garage')} />}
+            {currentScreen === 'market' && <MarketScreen marketId={activeMarketId} onBack={() => goToScreen('city')} />}
             {currentScreen === 'skills' && <SkillsScreen />}
           </View>
 

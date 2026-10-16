@@ -1,4 +1,5 @@
-export type Screen = 'garage' | 'market' | 'skills';
+// 'market' — подэкран города (открывается из CityScreen)
+export type Screen = 'garage' | 'city' | 'market' | 'skills';
 
 export interface Car {
   id: string;

@@ -2,13 +2,15 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { skillsStyles } from '@styles/styles';
 import { useSkillsContext } from '@hooks/SkillsContext';
+import { LocationHeader } from '@components/LocationHeader';
 
 export const SkillsScreen = () => {
   const { skills, upgradeSkill } = useSkillsContext();
 
   return (
-    <ScrollView style={skillsStyles.container}>
-      <Text style={skillsStyles.title}>Мои навыки</Text>
+    <View style={{ flex: 1 }}>
+    <LocationHeader title="Навыки" emoji="🏆" />
+    <ScrollView style={[skillsStyles.container, { paddingTop: 8 }]}>
 
       <View>
         {skills.map((skill) => {
@@ -48,5 +50,6 @@ export const SkillsScreen = () => {
         })}
       </View>
     </ScrollView>
+    </View>
   );
 };

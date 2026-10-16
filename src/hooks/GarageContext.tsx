@@ -8,8 +8,10 @@ import { useSoldCarsContext } from '@hooks/SoldCarsContext';
 
 interface GarageContextType {
   garage: GarageCar[];
+  /** Количество мест в активном гараже */
   garageSlots: number;
-  maxGarageSlots: number;
+  /** Активный гараж игрока */
+  garageId: string;
   mechanics: Mechanic[];
   mechanicRepairs: Record<string, MechanicRepairInfo>;
   mechanicRepairsProgress: Record<string, number>;
@@ -23,11 +25,10 @@ interface GarageContextType {
   getCar: (carId: string) => GarageCar | undefined;
   sellCar: (carId: string, sellPrice: number) => void;
   changeCarSlot: (carId: string, slotIndex: number) => boolean;
-  upgradeGarageSlot: () => void;
+  buyGarage: (garageId: string) => void;
   upgradeMechanicSkill: (mechanicId: string) => boolean;
   changeMechanicSlot: (mechanicId: string, newSlotIndex: number) => boolean;
   hireMechanic: (mechanicId: string) => boolean;
-  canUpgradeGarage: () => boolean;
   startMechanicRepair: (carId: string, mechanicId: string) => void;
   cancelMechanicRepair: (carId: string) => void;
   startSell: (carId: string, sellPrice: number, duration: number) => void;

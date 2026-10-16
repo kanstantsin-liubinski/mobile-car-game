@@ -3,7 +3,7 @@ import { View, TouchableOpacity, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { menuStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
-import { GarageIcon, MarketIcon, SkillsIcon } from '@img/index';
+import { GarageIcon, CityIcon, SkillsIcon } from '@img/index';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import type { Screen } from '@/types/index';
 
@@ -16,6 +16,8 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
+  // Авторынок открывается из города, поэтому вкладка «Город» активна и на нём
+  const isCityActive = currentScreen === 'city' || currentScreen === 'market';
 
   return (
     <View style={[menuStyles.bottomMenu, { paddingBottom: insets.bottom }]}>
@@ -30,12 +32,12 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[menuStyles.menuButton, currentScreen === 'market' && menuStyles.menuButtonActive]}
-        onPress={() => onScreenChange('market')}
+        style={[menuStyles.menuButton, isCityActive && menuStyles.menuButtonActive]}
+        onPress={() => onScreenChange('city')}
       >
-        <MarketIcon
+        <CityIcon
           size={24}
-          color={currentScreen === 'market' ? colors.textPrimary : colors.menuInactive}
+          color={isCityActive ? colors.textPrimary : colors.menuInactive}
         />
       </TouchableOpacity>
 

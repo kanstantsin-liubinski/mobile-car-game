@@ -1,7 +1,8 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Car, GarageCar, Mechanic } from '@/types';
 import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalculator';
+import { DEFAULT_GARAGE_ID, getGarageById, getGarageRank } from '../data/cityBuildings';
 
 export interface MechanicRepairInfo {
   timerId: string;
@@ -28,7 +29,6 @@ export interface GarageCallbacks {
 
 const GARAGE_KEY = 'game_garage';
 const GARAGE_CONFIG_KEY = 'game_garage_config';
-const MAX_GARAGE_SLOTS_LEVEL_1 = 3; // Максимум слотов для первого уровня гаража
 
 const MECHANIC_NAMES = [
   'Иван',
@@ -45,11 +45,12 @@ const MECHANIC_NAMES = [
 
 export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: GarageCallbacks) => {
   const [garage, setGarage] = useState<GarageCar[]>([]);
-  const [garageSlots, setGarageSlots] = useState(1);
-  const [maxGarageSlots, setMaxGarageSlots] = useState(3); // Максимум слотов на текущем уровне гаража
+  // Активный гараж игрока. Гаражи с меньшим рангом считаются неактивными (см. cityBuildings.ts)
+  const [garageId, setGarageId] = useState(DEFAULT_GARAGE_ID);
+  const garageSlots = getGarageById(garageId)?.slots ?? 1;
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
-  const isInitialized = useRef(false);
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
 
   // ─── Mechanic repair state (persists across screen switches) ────────
   const [mechanicRepairs, setMechanicRepairs] = useState<Record<string, MechanicRepairInfo>>({});
@@ -72,7 +73,6 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
 
   // Загружаем гараж при монтировании
   useEffect(() => {
-    isInitialized.current = false;
     loadGarage();
     loadGarageConfig();
   }, []);
@@ -86,10 +86,28 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
 
   // Сохраняем конфиг гаража при изменении
   useEffect(() => {
-    if (isLoaded) {
+    if (isConfigLoaded) {
       saveGarageConfig();
     }
-  }, [garageSlots, maxGarageSlots, mechanics, isLoaded]);
+  }, [garageId, mechanics, isConfigLoaded]);
+
+  // Машины вне диапазона слотов активного гаража (старые сохранения) переставляем в свободные слоты
+  useEffect(() => {
+    if (!isLoaded || !isConfigLoaded) return;
+    setGarage((prev) => {
+      if (!prev.some((c) => c.slotIndex >= garageSlots)) return prev;
+      const used = new Set(prev.filter((c) => c.slotIndex >= 0 && c.slotIndex < garageSlots).map((c) => c.slotIndex));
+      return prev.map((car) => {
+        if (car.slotIndex < garageSlots) return car;
+        let free = -1;
+        for (let i = 0; i < garageSlots; i++) {
+          if (!used.has(i)) { free = i; break; }
+        }
+        if (free !== -1) used.add(free);
+        return { ...car, slotIndex: free };
+      });
+    });
+  }, [isLoaded, isConfigLoaded, garageSlots]);
 
   const loadGarage = async () => {
     try {
@@ -123,19 +141,32 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
       const saved = await AsyncStorage.getItem(GARAGE_CONFIG_KEY);
       if (saved !== null) {
         const config = JSON.parse(saved);
-        const garageSlots = config.garageSlots || 1;
-        const maxGarageSlots = config.maxGarageSlots || 3;
-        
-        setGarageSlots(garageSlots);
-        setMaxGarageSlots(maxGarageSlots);
-        
+
+        let loadedGarageId: string;
+        if (typeof config.garageId === 'string' && getGarageById(config.garageId)) {
+          loadedGarageId = config.garageId;
+        } else if (Array.isArray(config.ownedGarageIds) && config.ownedGarageIds.length > 0) {
+          // Формат с несколькими гаражами: активным становится самый крутой из купленных
+          loadedGarageId = config.ownedGarageIds.reduce(
+            (best: string, id: string) => (getGarageRank(id) > getGarageRank(best) ? id : best),
+            DEFAULT_GARAGE_ID,
+          );
+        } else if ((config.garageSlots || 1) > 1) {
+          // Старый формат (апгрейд слотов до 3): выдаём Гараж 2, чтобы машины во 2-м слоте не потерялись
+          loadedGarageId = 'garage_2';
+        } else {
+          loadedGarageId = DEFAULT_GARAGE_ID;
+        }
+        setGarageId(loadedGarageId);
+        const slotsCount = getGarageById(loadedGarageId)?.slots ?? 1;
+
         // Обработка старого формата данных (mechanics как число)
         if (typeof config.mechanics === 'number') {
           // Конвертируем старый формат (число) в новый (массив)
           // Создаем массив механиков на основе количества слотов
           const newMechanics: Mechanic[] = [];
           
-          for (let i = 0; i < garageSlots; i++) {
+          for (let i = 0; i < slotsCount; i++) {
             newMechanics.push({
               id: generateMechanicId(),
               name: generateMechanicName(),
@@ -157,16 +188,16 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
           setMechanics([]);
         }
       }
-      isInitialized.current = true;
     } catch (error) {
       console.error('Error loading garage config:', error);
-      isInitialized.current = true;
+    } finally {
+      setIsConfigLoaded(true);
     }
   };
 
   const saveGarageConfig = async () => {
     try {
-      await AsyncStorage.setItem(GARAGE_CONFIG_KEY, JSON.stringify({ garageSlots, maxGarageSlots, mechanics }));
+      await AsyncStorage.setItem(GARAGE_CONFIG_KEY, JSON.stringify({ garageId, mechanics }));
     } catch (error) {
       console.error('Error saving garage config:', error);
     }
@@ -253,25 +284,14 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
     onSellCar?.(sellPrice);
   }, [removeCar, onSellCar]);
 
-  const upgradeGarageSlot = useCallback(() => {
-    // Позволяем улучшать только если текущее количество слотов меньше максимума
-    if (garageSlots < MAX_GARAGE_SLOTS_LEVEL_1) {
-      setMaxGarageSlots((prev) => prev + 1);
-    }
-  }, [garageSlots]);
-
-  // Синхронизируем количество слотов с максимумом и механиков с количеством слотов
-  useEffect(() => {
-    // Пропускаем первую инициализацию, включаем только при реальном улучшении
-    if (!isInitialized.current) {
-      isInitialized.current = true;
-      return;
-    }
-    // Если достигли максимума, добавляем слот
-    if (garageSlots < maxGarageSlots) {
-      setGarageSlots((prev) => prev + 1);
-    }
-  }, [maxGarageSlots]);
+  /**
+   * Покупка более крутого гаража: он становится активным, машины и механики
+   * переезжают в него (индексы слотов сохраняются — в новом гараже мест не меньше).
+   * Списание денег и проверка уровня — на вызывающей стороне.
+   */
+  const buyGarage = useCallback((newGarageId: string) => {
+    setGarageId((prev) => (getGarageRank(newGarageId) > getGarageRank(prev) ? newGarageId : prev));
+  }, []);
 
   // Синхронизируем количество механиков с количеством слотов
   useEffect(() => {
@@ -348,10 +368,6 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
     );
     return true;
   }, [mechanics]);
-
-  const canUpgradeGarage = (): boolean => {
-    return garageSlots < MAX_GARAGE_SLOTS_LEVEL_1;
-  };
 
   const changeCarSlot = useCallback((carId: string, newSlotIndex: number): boolean => {
     // Проверяем, что слот в допустимом диапазоне
@@ -603,7 +619,7 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
     () => ({
       garage,
       garageSlots,
-      maxGarageSlots,
+      garageId,
       mechanics,
       mechanicRepairs,
       mechanicRepairsProgress,
@@ -617,11 +633,10 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
       getCar,
       sellCar,
       changeCarSlot,
-      upgradeGarageSlot,
+      buyGarage,
       upgradeMechanicSkill,
       changeMechanicSlot,
       hireMechanic,
-      canUpgradeGarage,
       startMechanicRepair,
       cancelMechanicRepair,
       startSell,
@@ -630,7 +645,7 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
     [
       garage,
       garageSlots,
-      maxGarageSlots,
+      garageId,
       mechanics,
       mechanicRepairs,
       mechanicRepairsProgress,
@@ -644,7 +659,7 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
       getCar,
       sellCar,
       changeCarSlot,
-      upgradeGarageSlot,
+      buyGarage,
       upgradeMechanicSkill,
       changeMechanicSlot,
       hireMechanic,
