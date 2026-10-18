@@ -1,18 +1,22 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Platform, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
-import { marketStyles, garageStyles } from '@styles/styles';
-import { useBalanceContext } from '@hooks/BalanceContext';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { marketStyles } from '@styles/styles';
+import { useEconomy } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useSoldCarsContext } from '@hooks/SoldCarsContext';
 import { useMarketContext } from '@hooks/MarketContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
 import { calculateMaxCondition } from '../utils/priceCalculator';
-import { TIER_NAMES, TIER_EMOJIS, TOTAL_TIERS, TIER_UNLOCK_LEVELS } from '../data/carModels';
+import { TIER_NAMES, TIER_UNLOCK_LEVELS } from '../data/carModels';
 import { useExperienceContext } from '@hooks/ExperienceContext';
 import { getMarketById } from '../data/cityBuildings';
 import { LocationHeader } from '@components/LocationHeader';
+import { SlotPickerModal } from '@components/SlotPickerModal';
+import { GameIcon } from '@components/GameIcon';
+import { CarImage } from '@components/CarImage';
+import { CarSpecs } from '@components/CarSpecs';
+import { ICONS, BUILDING_ICONS } from '@img/gameIcons';
+import { TierTabs } from '@components/TierTabs';
 import type { Car } from '@/types';
 
 /** Форматирует оставшееся время: MM:SS */
@@ -30,43 +34,14 @@ interface MarketScreenProps {
 }
 
 export const MarketScreen = ({ marketId, onBack }: MarketScreenProps) => {
-  const { balance, removeBalance } = useBalanceContext();
-  const { addCar, hasCar, garage, garageSlots } = useGarageContext();
+  const { balance, buyCar } = useEconomy();
+  const { addCar, hasCar } = useGarageContext();
   const { isSold } = useSoldCarsContext();
   const { getListingsForTier, removeListing, getTimeRemaining, currentTime } = useMarketContext();
   const { isTierUnlocked, getRequiredLevelForTier } = useExperienceContext();
-  const nativeInsets = useSafeAreaInsets();
-  const webInsets = useSafeAreaWeb();
-  const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
   const [selectedTier, setSelectedTier] = useState(1);
-  const [showSlotModal, setShowSlotModal] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [carToBuy, setCarToBuy] = useState<Car | null>(null);
-
-  // Custom scrollbar state for tier tabs
-  const [scrollIndicator, setScrollIndicator] = useState({ thumbWidth: 0, thumbLeft: 0, visible: false });
-  const tierScrollContentWidth = useRef(0);
-  const tierScrollViewWidth = useRef(0);
-
-  const updateScrollIndicator = (scrollX: number) => {
-    const contentW = tierScrollContentWidth.current;
-    const viewW = tierScrollViewWidth.current;
-    if (contentW <= viewW || viewW === 0) {
-      setScrollIndicator({ thumbWidth: 0, thumbLeft: 0, visible: false });
-      return;
-    }
-    const trackWidth = viewW;
-    const thumbW = Math.max((viewW / contentW) * trackWidth, 30);
-    const maxScroll = contentW - viewW;
-    const scrollFraction = scrollX / maxScroll;
-    const thumbLeft = scrollFraction * (trackWidth - thumbW);
-    setScrollIndicator({ thumbWidth: thumbW, thumbLeft, visible: true });
-  };
-
-  const onTierScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    updateScrollIndicator(e.nativeEvent.contentOffset.x);
-  };
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -76,21 +51,18 @@ export const MarketScreen = ({ marketId, onBack }: MarketScreenProps) => {
   };
 
   const handleBuyCar = (car: Car) => {
-    if (removeBalance(car.price)) {
+    if (balance >= car.price) {
       setCarToBuy(car);
-      setSelectedSlot(null);
-      setShowSlotModal(true);
     }
   };
 
-  const confirmPurchase = () => {
-    if (carToBuy && selectedSlot !== null) {
-      addCar(carToBuy, selectedSlot);
-      removeListing(carToBuy.id);
-      setShowSlotModal(false);
-      setCarToBuy(null);
-      setSelectedSlot(null);
-    }
+  // Деньги списываем только после выбора слота, чтобы «Отмена» ничего не стоила
+  const confirmPurchase = (car: Car, slotIndex: number) => {
+    // Деньги уходят, машина становится активом бизнеса
+    if (!buyCar(car)) return;
+    addCar(car, slotIndex);
+    removeListing(car.id);
+    setCarToBuy(null);
   };
 
   const tierListings = getListingsForTier(marketId, selectedTier);
@@ -98,77 +70,10 @@ export const MarketScreen = ({ marketId, onBack }: MarketScreenProps) => {
 
   return (
     <View style={{ flex: 1 }}>
-    <LocationHeader title={market?.name ?? 'Авторынок'} emoji={market?.emoji ?? '🏪'} onBack={onBack} />
+    <LocationHeader title={market?.name ?? 'Авторынок'} icon={BUILDING_ICONS[marketId]} emoji={market?.emoji ?? '🏪'} onBack={onBack} />
     <ScrollView style={[marketStyles.container, { paddingTop: 8 }]}>
       {/* ─── Tier Tabs ──────────────────────────────────────────── */}
-      <View style={marketStyles.tierTabsContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={marketStyles.tierTabsContent}
-          onScroll={onTierScroll}
-          scrollEventThrottle={16}
-          onContentSizeChange={(w) => {
-            tierScrollContentWidth.current = w;
-            updateScrollIndicator(0);
-          }}
-          onLayout={(e) => {
-            tierScrollViewWidth.current = e.nativeEvent.layout.width;
-            updateScrollIndicator(0);
-          }}
-        >
-          {Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).map((tier) => {
-            const isActive = selectedTier === tier;
-            const unlocked = isTierUnlocked(tier);
-            return (
-              <TouchableOpacity
-                key={tier}
-                style={[
-                  marketStyles.tierTab,
-                  isActive && marketStyles.tierTabActive,
-                  !unlocked && marketStyles.tierTabLocked,
-                ]}
-                onPress={() => setSelectedTier(tier)}
-              >
-                {!unlocked && (
-                  <Text style={{ position: 'absolute', top: 4, right: 6, fontSize: 10 }}>🔒</Text>
-                )}
-                <Text style={[marketStyles.tierTabEmoji, !unlocked && { opacity: 0.4 }]}>
-                  {TIER_EMOJIS[tier]}
-                </Text>
-                <Text
-                  style={[
-                    marketStyles.tierTabText,
-                    isActive && marketStyles.tierTabTextActive,
-                    !unlocked && { opacity: 0.4 },
-                  ]}
-                >
-                  {TIER_NAMES[tier]}
-                </Text>
-                <Text
-                  style={[
-                    marketStyles.tierTabLevel,
-                    isActive && marketStyles.tierTabLevelActive,
-                    !unlocked && { opacity: 0.4 },
-                  ]}
-                >
-                  {unlocked ? `Ур. ${tier}` : `🔒 Ур. ${TIER_UNLOCK_LEVELS[tier]}`}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-        {scrollIndicator.visible && (
-          <View style={marketStyles.scrollTrack}>
-            <View
-              style={[
-                marketStyles.scrollThumb,
-                { width: scrollIndicator.thumbWidth, left: scrollIndicator.thumbLeft },
-              ]}
-            />
-          </View>
-        )}
-      </View>
+      <TierTabs selectedTier={selectedTier} onSelect={setSelectedTier} />
 
       {/* ─── Cars List ──────────────────────────────────────────── */}
       <View style={marketStyles.carsList}>
@@ -208,17 +113,23 @@ export const MarketScreen = ({ marketId, onBack }: MarketScreenProps) => {
             <View key={car.id} style={marketStyles.carCard}>
               {/* Таймер */}
               <View style={marketStyles.timerContainer}>
+                <GameIcon source={ICONS.timer} size={16} />
                 <Text style={[marketStyles.timerText, isUrgent && marketStyles.timerTextUrgent]}>
-                  ⏱ {formatTimeRemaining(timeRemaining)}
+                  {formatTimeRemaining(timeRemaining)}
                 </Text>
               </View>
 
               <View style={marketStyles.carHeader}>
-                <Text style={marketStyles.carEmoji}>{car.emoji}</Text>
+                <CarImage car={car} size={64} />
                 <View style={marketStyles.carInfo}>
                   <Text style={marketStyles.carName}>{car.name}</Text>
-                  <Text style={marketStyles.carSpeed}>⚡ {car.speed} км/ч</Text>
-                  <Text style={marketStyles.carMeta}>📅 {car.year} • 📏 {car.mileage.toLocaleString()} км</Text>
+                  <CarSpecs
+                    speed={car.speed}
+                    year={car.year}
+                    mileage={car.mileage}
+                    speedStyle={marketStyles.carSpeed}
+                    metaStyle={marketStyles.carMeta}
+                  />
                 </View>
                 <Text style={marketStyles.carPrice}>${car.price.toLocaleString()}</Text>
               </View>
@@ -286,166 +197,7 @@ export const MarketScreen = ({ marketId, onBack }: MarketScreenProps) => {
         })}
       </View>
 
-      {/* Slot Selection Modal */}
-      <Modal
-        visible={showSlotModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowSlotModal(false)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            justifyContent: 'flex-end',
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: colors.cardBg,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              padding: 14,
-              borderTopWidth: 1,
-              borderTopColor: colors.border,
-              paddingBottom: insets.bottom + 14,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 24,
-                fontWeight: '700',
-                color: colors.textPrimary,
-                marginBottom: 14,
-                textAlign: 'center',
-              }}
-            >
-              Покупка автомобиля
-            </Text>
-
-            {carToBuy && (
-              <View
-                style={{
-                  marginBottom: 16,
-                  paddingBottom: 8,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 14,
-                    color: colors.textTertiary,
-                    marginBottom: 4,
-                    fontWeight: '500',
-                  }}
-                >
-                  Покупаете:
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 18,
-                    fontWeight: '700',
-                    color: colors.textPrimary,
-                  }}
-                >
-                  {carToBuy.emoji} {carToBuy.name}
-                </Text>
-              </View>
-            )}
-
-            <View
-              style={{
-                marginBottom: 16,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 14,
-                  color: colors.textTertiary,
-                  marginBottom: 10,
-                  fontWeight: '500',
-                }}
-              >
-                ВЫБЕРИТЕ СЛОТ
-              </Text>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{
-                  gap: 8,
-                }}
-              >
-                {Array.from({ length: garageSlots }).map((_, slotIndex) => {
-                  const carInSlot = garage.find((c) => c.slotIndex === slotIndex);
-                  const isSelected = selectedSlot === slotIndex;
-
-                  return (
-                    <TouchableOpacity
-                      key={slotIndex}
-                      disabled={!!carInSlot}
-                      style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 10,
-                        backgroundColor: isSelected
-                          ? colors.primary
-                          : carInSlot
-                            ? 'rgba(251, 191, 36, 0.15)'
-                            : 'rgba(99, 102, 241, 0.08)',
-                        borderWidth: 2,
-                        borderColor: isSelected
-                          ? colors.primary
-                          : carInSlot
-                            ? '#FBBF24'
-                            : 'rgba(99, 102, 241, 0.2)',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        opacity: carInSlot ? 0.6 : 1,
-                      }}
-                      onPress={() => !carInSlot && setSelectedSlot(slotIndex)}
-                    >
-                      <Text
-                        style={{
-                          color: isSelected ? '#FFF' : colors.textPrimary,
-                          fontSize: 20,
-                          fontWeight: '700',
-                        }}
-                      >
-                        {slotIndex + 1}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            <View style={garageStyles.modalButtonsContainer}>
-              <TouchableOpacity
-                style={[garageStyles.modalButton, garageStyles.cancelButton]}
-                onPress={() => setShowSlotModal(false)}
-              >
-                <Text style={garageStyles.modalButtonText}>
-                  Отмена
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  garageStyles.modalButton,
-                  garageStyles.confirmButton,
-                  selectedSlot === null && { opacity: 0.5 },
-                ]}
-                onPress={confirmPurchase}
-                disabled={selectedSlot === null}
-              >
-                <Text style={[garageStyles.modalButtonText, { color: '#FFF' }]}>
-                  Купить
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <SlotPickerModal car={carToBuy} onCancel={() => setCarToBuy(null)} onConfirm={confirmPurchase} />
     </ScrollView>
     </View>
   );

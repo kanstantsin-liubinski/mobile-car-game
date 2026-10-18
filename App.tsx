@@ -1,59 +1,70 @@
 import { StatusBar } from 'expo-status-bar';
 import { View, Platform } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
-import { GarageScreen, MarketScreen, SkillsScreen, CityScreen } from '@screens';
+import { GarageScreen, MarketScreen, SkillsScreen, CityScreen, DealershipScreen } from '@screens';
 import { BottomMenu, TopMenu, MainMenu } from '@components';
 import { useNavigation } from '@hooks/useNavigation';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { GarageProvider } from '@hooks/GarageContext';
-import { BalanceProvider, useBalanceContext } from '@hooks/BalanceContext';
-import { SoldCarsProvider, useSoldCarsContext } from '@hooks/SoldCarsContext';
-import { SkillsProvider } from '@hooks/SkillsContext';
-import { ExperienceProvider } from '@hooks/ExperienceContext';
+import { EconomyProvider } from '@hooks/EconomyContext';
+import { SoldCarsProvider } from '@hooks/SoldCarsContext';
 import { GameStateProvider, useGameState } from '@hooks/GameStateContext';
-import { GlobalTimerProvider } from '@hooks/GlobalTimerContext';
 import { MarketProvider } from '@hooks/MarketContext';
+import { PaydayModal } from '@components/finance/PaydayModal';
+import { FinancePanel } from '@components/finance/FinancePanel';
+import { BankruptcyScreen } from '@components/finance/BankruptcyScreen';
+import { ToastProvider } from '@components/toast/ToastContext';
+import { ProgressionToasts } from '@components/toast/ProgressionToasts';
 import { commonStyles } from '@styles/styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 function GameContent() {
   const { currentScreen, goToScreen, activeMarketId, openMarket } = useNavigation();
-  const { balance, addBalance } = useBalanceContext();
-  const { markAsSold } = useSoldCarsContext();
-  
+  const [financeOpen, setFinanceOpen] = useState(false);
+
   // Используем нативные insets на мобильных, веб-версию на браузере
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
-  const handleSellCar = (carId: string, sellPrice: number) => {
-    addBalance(sellPrice);
-    markAsSold(carId);
-  };
-
   return (
+    <ToastProvider>
     <MarketProvider>
-      <GarageProvider onSellCar={(sellPrice) => {}}>
+      <GarageProvider>
         <View style={commonStyles.container}>
-          <TopMenu balance={balance} insets={insets} />
+          <TopMenu insets={insets} onPressBalance={() => setFinanceOpen(true)} />
           
           <View style={commonStyles.content}>
             {currentScreen === 'garage' && (
-              <GarageScreen onSellCar={handleSellCar} />
+              <GarageScreen />
             )}
-            {currentScreen === 'city' && <CityScreen onOpenMarket={openMarket} onOpenGarage={() => goToScreen('garage')} />}
+            {currentScreen === 'city' && (
+              <CityScreen
+                onOpenMarket={openMarket}
+                onOpenDealership={() => goToScreen('dealership')}
+                onOpenGarage={() => goToScreen('garage')}
+              />
+            )}
             {currentScreen === 'market' && <MarketScreen marketId={activeMarketId} onBack={() => goToScreen('city')} />}
+            {currentScreen === 'dealership' && <DealershipScreen onBack={() => goToScreen('city')} />}
             {currentScreen === 'skills' && <SkillsScreen />}
           </View>
 
           <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
 
+          {/* Финансы: панель по нажатию на баланс, обязательный отчёт в зарплатный день, банкротство */}
+          <FinancePanel visible={financeOpen} onClose={() => setFinanceOpen(false)} />
+          <PaydayModal />
+          <BankruptcyScreen />
+          <ProgressionToasts />
+
           <StatusBar style="auto" />
         </View>
       </GarageProvider>
     </MarketProvider>
+    </ToastProvider>
   );
 }
 
@@ -112,34 +123,20 @@ function AppWrapper() {
   }
 
   return (
-    <BalanceProvider key={`balance-${gameResetTrigger}`}>
+    <EconomyProvider key={`economy-${gameResetTrigger}`}>
       <SoldCarsProvider key={`sold-cars-${gameResetTrigger}`}>
-        <SkillsProvider key={`skills-${gameResetTrigger}`}>
-          <ExperienceProvider key={`experience-${gameResetTrigger}`}>
-            <GameContent />
-          </ExperienceProvider>
-        </SkillsProvider>
+        <GameContent />
       </SoldCarsProvider>
-    </BalanceProvider>
+    </EconomyProvider>
   );
 }
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <GlobalTimerProvider>
-        <GameStateProvider>
-          <BalanceProvider>
-            <SoldCarsProvider>
-              <SkillsProvider>
-                <ExperienceProvider>
-                  <AppWrapper />
-                </ExperienceProvider>
-              </SkillsProvider>
-            </SoldCarsProvider>
-          </BalanceProvider>
-        </GameStateProvider>
-      </GlobalTimerProvider>
+      <GameStateProvider>
+        <AppWrapper />
+      </GameStateProvider>
     </SafeAreaProvider>
   );
 }

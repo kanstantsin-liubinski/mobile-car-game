@@ -18,9 +18,11 @@ import { garageStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { useGarageContext } from '@hooks/GarageContext';
-import { useBalanceContext } from '@hooks/BalanceContext';
+import { useEconomy } from '@hooks/EconomyContext';
 import { useExperienceContext } from '@hooks/ExperienceContext';
 import { LocationHeader } from '@components/LocationHeader';
+import { GameIcon } from '@components/GameIcon';
+import { ICONS, BUILDING_ICONS } from '@img/gameIcons';
 import {
   CITY_BACKGROUND,
   CITY_BG_REF_SIZE,
@@ -33,15 +35,20 @@ import {
 
 // ─── Размеры карты ───────────────────────────────────────────────────
 // Карта больше экрана, её можно свободно перетаскивать в любом направлении.
-// Высота следует пропорциям фона, чтобы картинка не искажалась.
-const CITY_MAP_WIDTH = 900;
-const CITY_MAP_HEIGHT = Math.round((CITY_MAP_WIDTH * CITY_BG_REF_SIZE.height) / CITY_BG_REF_SIZE.width);
+// Ширина следует пропорциям фона, чтобы картинка не искажалась.
+const CITY_MAP_HEIGHT = 900;
+const CITY_MAP_WIDTH = Math.round((CITY_MAP_HEIGHT * CITY_BG_REF_SIZE.width) / CITY_BG_REF_SIZE.height);
 const CITY_BG_COLOR = '#1F2937';
 
 // ─── Перетаскивание карты ────────────────────────────────────────────
 const DRAG_THRESHOLD = 5; // px, после которых касание считается перетаскиванием, а не тапом
 const INERTIA_FACTOR = 250; // насколько далеко карта «докатывается» после броска
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
+// ─── Фонтан ──────────────────────────────────────────────────────────
+const FOUNTAIN_COIN_CHANCE = 0.1; // шанс выловить монетку за тап
+const FOUNTAIN_COIN_AMOUNT = 0.1; // $0.10
+const FLOATING_TEXT_DURATION = 900;
 
 type Point = { x: number; y: number };
 
@@ -64,20 +71,72 @@ const getPanBounds = (viewWidth: number, viewHeight: number) => {
  */
 type GarageState = 'active' | 'inactive' | 'available' | 'locked';
 
+const pluralizePlaces = (n: number): string => {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'место';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'места';
+  return 'мест';
+};
+
+interface FloatingPopup {
+  id: number;
+  text: string;
+  success: boolean;
+  /** Смещение по горизонтали, чтобы частые тапы не накладывались */
+  offsetX: number;
+}
+
+/** Всплывающий текст над фонтаном: поднимается и исчезает */
+const FloatingText = ({ popup, onDone }: { popup: FloatingPopup; onDone: (id: number) => void }) => {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: FLOATING_TEXT_DURATION,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: USE_NATIVE_DRIVER,
+    }).start(() => onDone(popup.id));
+  }, []);
+
+  return (
+    <Animated.Text
+      pointerEvents="none"
+      style={[
+        styles.floatingText,
+        popup.success ? styles.floatingTextSuccess : styles.floatingTextMiss,
+        {
+          opacity: progress.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] }),
+          transform: [
+            { translateX: popup.offsetX },
+            { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, -50] }) },
+          ],
+        },
+      ]}
+    >
+      {popup.text}
+    </Animated.Text>
+  );
+};
+
 interface CityScreenProps {
   onOpenMarket: (marketId: string) => void;
+  onOpenDealership: () => void;
   onOpenGarage: (garageId: string) => void;
 }
 
-export const CityScreen = ({ onOpenMarket, onOpenGarage }: CityScreenProps) => {
+export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: CityScreenProps) => {
   const { garageId, buyGarage } = useGarageContext();
-  const { balance, removeBalance } = useBalanceContext();
+  const { balance, addOtherIncome, buyGarage: payForGarage } = useEconomy();
   const { level } = useExperienceContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
   const [garageToBuy, setGarageToBuy] = useState<GarageBuilding | null>(null);
+  const [fountainPopups, setFountainPopups] = useState<FloatingPopup[]>([]);
+  const popupId = useRef(0);
 
   // ─── Свободное перетаскивание карты ───────────────────────────────
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
@@ -174,10 +233,34 @@ export const CityScreen = ({ onOpenMarket, onOpenGarage }: CityScreenProps) => {
     return level >= building.requiredLevel ? 'available' : 'locked';
   };
 
+  // Каждый тап по фонтану с шансом 10% приносит 10 центов
+  const handleFountainTap = () => {
+    const success = Math.random() < FOUNTAIN_COIN_CHANCE;
+    if (success) addOtherIncome(FOUNTAIN_COIN_AMOUNT);
+    popupId.current += 1;
+    const popup: FloatingPopup = {
+      id: popupId.current,
+      text: success ? '+$0.10' : '💧',
+      success,
+      offsetX: Math.round((Math.random() - 0.5) * 40),
+    };
+    setFountainPopups((prev) => [...prev, popup]);
+  };
+
+  const removeFountainPopup = (id: number) =>
+    setFountainPopups((prev) => prev.filter((p) => p.id !== id));
+
   const handleBuildingPress = (building: CityBuilding) => {
-    if (building.type === 'market') {
-      onOpenMarket(building.id);
-      return;
+    switch (building.type) {
+      case 'market':
+        onOpenMarket(building.id);
+        return;
+      case 'dealership':
+        onOpenDealership();
+        return;
+      case 'fountain':
+        handleFountainTap();
+        return;
     }
     const state = getGarageState(building);
     if (state === 'active') {
@@ -190,16 +273,18 @@ export const CityScreen = ({ onOpenMarket, onOpenGarage }: CityScreenProps) => {
   const handleBuyGarage = () => {
     if (!garageToBuy) return;
     if (level < garageToBuy.requiredLevel) return;
-    if (!removeBalance(garageToBuy.price)) return;
+    if (!payForGarage(garageToBuy.price)) return;
     buyGarage(garageToBuy.id);
     setGarageToBuy(null);
   };
 
   const getStatusText = (building: CityBuilding): string => {
-    if (building.type === 'market') return 'Открыть';
+    if (building.type === 'market') return 'Подержанные авто';
+    if (building.type === 'dealership') return 'Новые авто';
+    if (building.type === 'fountain') return '';
     switch (getGarageState(building)) {
       case 'active':
-        return `Ваш гараж · ${building.slots} ${building.slots === 1 ? 'место' : 'места'}`;
+        return `Ваш гараж · ${building.slots} ${pluralizePlaces(building.slots)}`;
       case 'inactive':
         return 'Неактивен';
       case 'locked':
@@ -241,25 +326,38 @@ export const CityScreen = ({ onOpenMarket, onOpenGarage }: CityScreenProps) => {
                     width: area.w * CITY_MAP_WIDTH,
                     height: area.h * CITY_MAP_HEIGHT,
                   },
+                  building.type === 'fountain' && styles.fountain,
                   pressed && styles.buildingPressed,
                 ]}
               >
-                {/* Ярлык висит над центром здания */}
-                <View style={[styles.label, dimmed && styles.labelDimmed]}>
-                  <Text style={styles.labelName}>
-                    {building.emoji} {building.name}
-                  </Text>
-                  <Text style={[styles.labelStatus, dimmed && styles.labelStatusDimmed]}>
-                    {getStatusText(building)}
-                  </Text>
-                </View>
+                {building.type === 'fountain' ? (
+                  // У фонтана нет ярлыка — только всплывающие монетки и брызги
+                  fountainPopups.map((popup) => (
+                    <FloatingText key={popup.id} popup={popup} onDone={removeFountainPopup} />
+                  ))
+                ) : (
+                  // Ярлык висит над центром здания
+                  <View style={[styles.label, dimmed && styles.labelDimmed]}>
+                    <View style={styles.labelTitle}>
+                      {BUILDING_ICONS[building.id] ? (
+                        <GameIcon source={BUILDING_ICONS[building.id]} size={26} />
+                      ) : (
+                        <Text style={styles.labelName}>{building.emoji}</Text>
+                      )}
+                      <Text style={styles.labelName}>{building.name}</Text>
+                    </View>
+                    <Text style={[styles.labelStatus, dimmed && styles.labelStatusDimmed]}>
+                      {getStatusText(building)}
+                    </Text>
+                  </View>
+                )}
               </Pressable>
             );
           })}
         </Animated.View>
       </View>
 
-      <LocationHeader title="Город" emoji="🏙️" overlay />
+      <LocationHeader title="Город" icon={ICONS.navCity} overlay />
 
       {/* Garage Purchase Modal */}
       <Modal
@@ -272,9 +370,10 @@ export const CityScreen = ({ onOpenMarket, onOpenGarage }: CityScreenProps) => {
           <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 14 }]}>
             {garageToBuy && (
               <>
-                <Text style={garageStyles.modalTitle}>
-                  {garageToBuy.emoji} {garageToBuy.name}
-                </Text>
+                {BUILDING_ICONS[garageToBuy.id] && (
+                  <GameIcon source={BUILDING_ICONS[garageToBuy.id]} size={140} style={styles.modalImage} />
+                )}
+                <Text style={garageStyles.modalTitle}>{garageToBuy.name}</Text>
 
                 <View style={styles.infoRow}>
                   <View style={styles.infoCell}>
@@ -370,6 +469,23 @@ const styles = StyleSheet.create({
   buildingPressed: {
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
+  fountain: {
+    borderRadius: 999,
+  },
+  floatingText: {
+    position: 'absolute',
+    fontSize: 18,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  floatingTextSuccess: {
+    color: '#FACC15',
+  },
+  floatingTextMiss: {
+    fontSize: 16,
+  },
   label: {
     paddingHorizontal: 12,
     paddingVertical: 5,
@@ -382,6 +498,15 @@ const styles = StyleSheet.create({
   labelDimmed: {
     borderColor: colors.border,
     opacity: 0.85,
+  },
+  labelTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modalImage: {
+    alignSelf: 'center',
+    marginBottom: 4,
   },
   labelName: {
     fontSize: 13,

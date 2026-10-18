@@ -12,8 +12,8 @@ export interface MarketListing {
   car: Car;
   modelId: string;
   tier: number;
-  expiresAt: number;   // timestamp когда объявление исчезнет
-  createdAt: number;    // timestamp когда появилось
+  expiresAt: number;   // игровое время (мс активной игры), когда объявление исчезнет
+  createdAt: number;    // игровое время, когда появилось
 }
 
 /** Диапазоны годов выпуска по тирам */
@@ -87,7 +87,7 @@ function generateCondition(year: number, mileage: number): number {
 /**
  * Генерирует одно объявление на основе модели.
  */
-export function generateListing(model: CarModel): MarketListing {
+export function generateListing(model: CarModel, now: number): MarketListing {
   const [minYear, maxYear] = YEAR_RANGES[model.tier];
   const year = randInt(minYear, maxYear);
   const mileage = generateMileage(year);
@@ -95,7 +95,6 @@ export function generateListing(model: CarModel): MarketListing {
   
   const price = calculateCarPrice(model.basePrice, { year, mileage, condition });
   
-  const now = Date.now();
   const duration = randInt(MIN_LISTING_DURATION, MAX_LISTING_DURATION);
   
   const car: Car = {
@@ -108,6 +107,7 @@ export function generateListing(model: CarModel): MarketListing {
     year,
     mileage,
     condition,
+    tier: model.tier,
   };
   
   return {
@@ -125,6 +125,7 @@ export function generateListing(model: CarModel): MarketListing {
  */
 export function generateRandomListing(
   tier: number,
+  now: number,
   existingModelIds: string[] = []
 ): MarketListing {
   const models = CAR_MODELS_BY_TIER[tier];
@@ -134,19 +135,19 @@ export function generateRandomListing(
   const pool = available.length > 0 ? available : models;
   
   const model = pool[randInt(0, pool.length - 1)];
-  return generateListing(model);
+  return generateListing(model, now);
 }
 
 /**
  * Генерирует начальный набор объявлений для одного тира.
  */
-export function generateInitialListings(tier: number): MarketListing[] {
+export function generateInitialListings(tier: number, now: number): MarketListing[] {
   const count = randInt(MIN_LISTINGS_PER_TIER, MAX_LISTINGS_PER_TIER);
   const listings: MarketListing[] = [];
   const usedModelIds: string[] = [];
   
   for (let i = 0; i < count; i++) {
-    const listing = generateRandomListing(tier, usedModelIds);
+    const listing = generateRandomListing(tier, now, usedModelIds);
     listings.push(listing);
     usedModelIds.push(listing.modelId);
   }
@@ -157,11 +158,11 @@ export function generateInitialListings(tier: number): MarketListing[] {
 /**
  * Генерирует начальные объявления для всех тиров.
  */
-export function generateAllInitialListings(): Record<number, MarketListing[]> {
+export function generateAllInitialListings(now: number): Record<number, MarketListing[]> {
   const result: Record<number, MarketListing[]> = {};
   
   for (let tier = 1; tier <= 6; tier++) {
-    result[tier] = generateInitialListings(tier);
+    result[tier] = generateInitialListings(tier, now);
   }
   
   return result;

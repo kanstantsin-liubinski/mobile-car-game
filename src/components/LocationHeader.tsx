@@ -1,11 +1,14 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, type ImageSourcePropType } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@styles/colors';
+import { GameIcon } from '@components/GameIcon';
 
 interface LocationHeaderProps {
   title: string;
-  emoji: string;
+  /** Картинка локации из assets/icons; если нет — показывается emoji */
+  icon?: ImageSourcePropType;
+  emoji?: string;
   /** Кнопка «назад» слева от названия */
   onBack?: () => void;
   /** Поверх контента (для карты города), иначе — обычный блок над контентом */
@@ -13,7 +16,7 @@ interface LocationHeaderProps {
 }
 
 /** Табличка с названием текущей локации в верхнем левом углу экрана */
-export const LocationHeader = ({ title, emoji, onBack, overlay }: LocationHeaderProps) => {
+export const LocationHeader = ({ title, icon, emoji, onBack, overlay }: LocationHeaderProps) => {
   return (
     <View style={[styles.wrapper, overlay && styles.wrapperOverlay]} pointerEvents="box-none">
       {onBack && (
@@ -26,7 +29,7 @@ export const LocationHeader = ({ title, emoji, onBack, overlay }: LocationHeader
         </TouchableOpacity>
       )}
       <View style={[styles.pill, styles.titlePill]} pointerEvents="none">
-        <Text style={styles.emoji}>{emoji}</Text>
+        {icon ? <GameIcon source={icon} size={30} /> : <Text style={styles.emoji}>{emoji}</Text>}
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>

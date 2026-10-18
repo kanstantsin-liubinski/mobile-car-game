@@ -1,4 +1,1 @@
-export { GarageIcon } from './GarageIcon';
-export { MarketIcon } from './MarketIcon';
-export { SkillsIcon } from './SkillsIcon';
-export { CityIcon } from './CityIcon';
+export { ICONS, BUILDING_ICONS, TIER_ICONS, MECHANIC_AVATARS, getMechanicAvatar } from './gameIcons';

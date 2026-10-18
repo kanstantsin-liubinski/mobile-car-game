@@ -10,7 +10,7 @@
 export const CITY_BACKGROUND = require('../../assets/city/city_bg.webp');
 
 /** Размер фона в пикселях, по которому сняты координаты зданий */
-export const CITY_BG_REF_SIZE = { width: 2700, height: 3900 };
+export const CITY_BG_REF_SIZE = { width: 1300, height: 900 };
 
 /** Область на фоне в долях (0..1): левый верхний угол, ширина, высота */
 export interface CityArea {
@@ -28,7 +28,7 @@ const bgArea = (x: number, y: number, w: number, h: number): CityArea => ({
   h: h / CITY_BG_REF_SIZE.height,
 });
 
-export type CityBuildingType = 'market' | 'garage';
+export type CityBuildingType = 'market' | 'dealership' | 'garage' | 'fountain';
 
 interface CityBuildingBase {
   id: string;
@@ -39,8 +39,19 @@ interface CityBuildingBase {
   area: CityArea;
 }
 
+/** Авторынок: подержанные машины из объявлений */
 export interface MarketBuilding extends CityBuildingBase {
   type: 'market';
+}
+
+/** Автосалон: новые машины всех классов */
+export interface DealershipBuilding extends CityBuildingBase {
+  type: 'dealership';
+}
+
+/** Фонтан: в игре не участвует, но по нему можно тапать ради мелочи */
+export interface FountainBuilding extends CityBuildingBase {
+  type: 'fountain';
 }
 
 /**
@@ -59,24 +70,33 @@ export interface GarageBuilding extends CityBuildingBase {
   requiredLevel: number;
 }
 
-export type CityBuilding = MarketBuilding | GarageBuilding;
+export type CityBuilding = MarketBuilding | DealershipBuilding | GarageBuilding | FountainBuilding;
 
 export const MARKETS: MarketBuilding[] = [
   {
-    id: 'market_south',
+    id: 'market',
     type: 'market',
-    name: 'Авторынок Южный',
+    name: 'Авторынок',
     emoji: '🏪',
-    area: bgArea(310, 2588, 1060, 543), // большой салон внизу у набережной
-  },
-  {
-    id: 'market_north',
-    type: 'market',
-    name: 'Авторынок Северный',
-    emoji: '🏬',
-    area: bgArea(1461, 129, 1022, 492), // салон вверху справа
+    area: bgArea(678, 16, 553, 215), // открытая площадка с навесами вверху справа
   },
 ];
+
+export const DEALERSHIP: DealershipBuilding = {
+  id: 'dealership',
+  type: 'dealership',
+  name: 'Автосалон',
+  emoji: '✨',
+  area: bgArea(780, 223, 305, 187), // стеклянный салон под авторынком
+};
+
+export const FOUNTAIN: FountainBuilding = {
+  id: 'fountain',
+  type: 'fountain',
+  name: 'Фонтан',
+  emoji: '⛲',
+  area: bgArea(646, 418, 163, 106), // фонтан на круговом перекрёстке
+};
 
 export const GARAGES: GarageBuilding[] = [
   {
@@ -84,7 +104,7 @@ export const GARAGES: GarageBuilding[] = [
     type: 'garage',
     name: 'Гараж 1',
     emoji: '🏠',
-    area: bgArea(220, 996, 595, 414), // маленькая мастерская слева
+    area: bgArea(187, 410, 106, 89), // маленький гараж на одну машину слева
     slots: 1,
     price: 0,
     requiredLevel: 0,
@@ -93,15 +113,35 @@ export const GARAGES: GarageBuilding[] = [
     id: 'garage_2',
     type: 'garage',
     name: 'Гараж 2',
-    emoji: '🏭',
-    area: bgArea(1707, 1475, 944, 621), // автосервис с боксами справа
+    emoji: '🔧',
+    area: bgArea(508, 565, 215, 142), // мастерская под фонтаном
     slots: 2,
     price: 25000,
     requiredLevel: 2,
   },
+  {
+    id: 'garage_3',
+    type: 'garage',
+    name: 'Гараж 3',
+    emoji: '🏭',
+    area: bgArea(345, 284, 228, 150), // автосервис слева от фонтана
+    slots: 3,
+    price: 75000, // TODO: баланс
+    requiredLevel: 5,
+  },
+  {
+    id: 'garage_4',
+    type: 'garage',
+    name: 'Гараж 4',
+    emoji: '🏢',
+    area: bgArea(837, 504, 353, 240), // большой сервисный центр справа внизу
+    slots: 4,
+    price: 200000, // TODO: баланс
+    requiredLevel: 10,
+  },
 ];
 
-export const CITY_BUILDINGS: CityBuilding[] = [...MARKETS, ...GARAGES];
+export const CITY_BUILDINGS: CityBuilding[] = [...MARKETS, DEALERSHIP, FOUNTAIN, ...GARAGES];
 
 export const DEFAULT_MARKET_ID = MARKETS[0].id;
 /** Стартовый гараж игрока */

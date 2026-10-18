@@ -42,12 +42,50 @@ export const headerStyles = StyleSheet.create({
   balanceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   balanceValue: {
     fontSize: 20,
     fontWeight: '700',
     color: colors.primary,
+  },
+  loanBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#EF4444',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
+  calendar: {
+    flexShrink: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+  },
+  calendarText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  calendarTrack: {
+    width: 90,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+  },
+  calendarFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+  },
+  calendarMonth: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: colors.textTertiary,
   },
   levelIndicatorContainer: {
     flexDirection: 'row',
@@ -104,6 +142,9 @@ export const menuStyles = StyleSheet.create({
     backgroundColor: colors.buttonActive,
     borderColor: colors.primary,
   },
+  menuIconInactive: {
+    opacity: 0.5,
+  },
 });
 
 export const marketStyles = StyleSheet.create({
@@ -157,10 +198,6 @@ export const marketStyles = StyleSheet.create({
     backgroundColor: 'rgba(30, 41, 59, 0.6)',
     borderColor: 'rgba(51, 65, 85, 0.5)',
   },
-  tierTabEmoji: {
-    fontSize: 18,
-    marginBottom: 2,
-  },
   tierTabText: {
     fontSize: 12,
     fontWeight: '600',
@@ -213,9 +250,6 @@ export const marketStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
-  },
-  carEmoji: {
-    fontSize: 48,
   },
   carInfo: {
     flex: 1,
@@ -352,10 +386,6 @@ export const garageStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
-  },
-  carEmoji: {
-    fontSize: 40,
-    marginRight: 12,
   },
   carInfo: {
     flex: 1,

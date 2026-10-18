@@ -1,5 +1,5 @@
-// 'market' — подэкран города (открывается из CityScreen)
-export type Screen = 'garage' | 'city' | 'market' | 'skills';
+// 'market' и 'dealership' — подэкраны города (открываются из CityScreen)
+export type Screen = 'garage' | 'city' | 'market' | 'dealership' | 'skills';
 
 export interface Car {
   id: string;
@@ -11,6 +11,10 @@ export interface Car {
   year: number;
   mileage: number;
   condition: number; // 0-100 процентов состояния на момент продажи
+  /** Рыночная стоимость, если она отличается от цены покупки (например, наценка автосалона) */
+  marketPrice?: number;
+  /** Класс авто (тир из carModels.ts); у старых сохранений может отсутствовать */
+  tier?: number;
 }
 
 export interface GarageCar extends Car {

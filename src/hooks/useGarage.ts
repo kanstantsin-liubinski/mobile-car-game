@@ -1,34 +1,44 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Car, GarageCar, Mechanic } from '@/types';
 import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalculator';
 import { DEFAULT_GARAGE_ID, getGarageById, getGarageRank } from '../data/cityBuildings';
+import { useEconomy, useGameClock } from '@hooks/EconomyContext';
+import { useSoldCarsContext } from '@hooks/SoldCarsContext';
+import { useToast } from '@components/toast/ToastContext';
+import { getCarTier } from '@components/CarImage';
+import { TIER_ICONS, getMechanicAvatar } from '@img/gameIcons';
+import { assetCostCents, toCents, workerSpeedMultiplier } from '../economy/economy';
+import { saleXp } from '../economy/progression';
+import { formatMoney } from '../economy/format';
 
+/** Ремонт механиком. Время — игровое (мс активной игры), поэтому в фоне и на паузе ремонт стоит. */
 export interface MechanicRepairInfo {
-  timerId: string;
   mechanicId: string;
   startCondition: number;
   maxCondition: number;
-  startTime: number;
+  startedAtMs: number;
+  durationMs: number;
+  /** Скорость ремонта (% в секунду) с учётом навыка механика на момент старта/повышения */
+  speedPerSec?: number;
+  /** Уровень навыка механика, с которым считается текущая скорость */
+  skillLevel?: number;
 }
 
+/** Выставленная на продажу машина. Время — игровое. */
 export interface ActiveSellInfo {
-  timerId: string;
   sellPrice: number;
-  duration: number;
-}
-
-export interface GarageCallbacks {
-  addTimer: (timer: any, duration: number) => string;
-  removeTimer: (id: string) => void;
-  getProgress: (id: string) => number;
-  addExperience: (amount: number) => void;
-  addBalance: (amount: number) => void;
-  markAsSold: (carId: string) => void;
+  boughtPrice: number;
+  startedAtMs: number;
+  durationMs: number;
 }
 
 const GARAGE_KEY = 'game_garage';
 const GARAGE_CONFIG_KEY = 'game_garage_config';
+/** Базовая скорость ремонта механиком: % состояния в секунду игрового времени (×1 на 1-м уровне навыка) */
+const MECHANIC_REPAIR_SPEED = 0.05;
+/** Базовая эффективность ручного тапа, % состояния (умножается на навык игрока) */
+const PLAYER_TAP_REPAIR = 0.1;
 
 const MECHANIC_NAMES = [
   'Иван',
@@ -43,25 +53,41 @@ const MECHANIC_NAMES = [
   'Валентин',
 ];
 
-export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: GarageCallbacks) => {
-  const [garage, setGarage] = useState<GarageCar[]>([]);
+const repairConditionAt = (repair: MechanicRepairInfo, now: number): number => {
+  const elapsedSec = Math.max(0, now - repair.startedAtMs) / 1000;
+  const speed = repair.speedPerSec ?? MECHANIC_REPAIR_SPEED;
+  const condition = Math.round((repair.startCondition + elapsedSec * speed) * 100) / 100;
+  return Math.min(repair.maxCondition, condition);
+};
+
+const progressAt = (startedAtMs: number, durationMs: number, now: number): number =>
+  durationMs <= 0 ? 100 : Math.min(100, Math.max(0, ((now - startedAtMs) / durationMs) * 100));
+
+const without = <T,>(record: Record<string, T>, key: string): Record<string, T> => {
+  const { [key]: _removed, ...rest } = record;
+  return rest;
+};
+
+export const useGarage = () => {
+  const economy = useEconomy();
+  const { gameTimeMs } = useGameClock();
+  const { markAsSold } = useSoldCarsContext();
+  const { showToast } = useToast();
+
+  // Машины как они сохранены; во время ремонта состояние машины вычисляется из времени
+  const [storedGarage, setGarage] = useState<GarageCar[]>([]);
   // Активный гараж игрока. Гаражи с меньшим рангом считаются неактивными (см. cityBuildings.ts)
   const [garageId, setGarageId] = useState(DEFAULT_GARAGE_ID);
   const garageSlots = getGarageById(garageId)?.slots ?? 1;
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+  const reconciledRef = useRef(false);
 
-  // ─── Mechanic repair state (persists across screen switches) ────────
+  // Ремонты и продажи хранятся вместе с гаражом и продолжаются после перезапуска
   const [mechanicRepairs, setMechanicRepairs] = useState<Record<string, MechanicRepairInfo>>({});
-  const [mechanicRepairsProgress, setMechanicRepairsProgress] = useState<Record<string, number>>({});
-  const [mechanicRepairsCondition, setMechanicRepairsCondition] = useState<Record<string, number>>({});
-
-  // ─── Active sells state (persists across screen switches) ──────────
   const [activeSells, setActiveSells] = useState<Record<string, ActiveSellInfo>>({});
-  const [activeSellsProgress, setActiveSellsProgress] = useState<Record<string, number>>({});
 
-  // Helper functions for generating mechanic data
   const generateMechanicName = (): string => {
     const randomIndex = Math.floor(Math.random() * MECHANIC_NAMES.length);
     return MECHANIC_NAMES[randomIndex];
@@ -80,16 +106,16 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
   // Сохраняем гараж при изменении
   useEffect(() => {
     if (isLoaded) {
-      saveGarage(garage);
+      saveGarage(storedGarage);
     }
-  }, [garage, isLoaded]);
+  }, [storedGarage, isLoaded]);
 
   // Сохраняем конфиг гаража при изменении
   useEffect(() => {
     if (isConfigLoaded) {
       saveGarageConfig();
     }
-  }, [garageId, mechanics, isConfigLoaded]);
+  }, [garageId, mechanics, mechanicRepairs, activeSells, isConfigLoaded]);
 
   // Машины вне диапазона слотов активного гаража (старые сохранения) переставляем в свободные слоты
   useEffect(() => {
@@ -165,7 +191,7 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
           // Конвертируем старый формат (число) в новый (массив)
           // Создаем массив механиков на основе количества слотов
           const newMechanics: Mechanic[] = [];
-          
+
           for (let i = 0; i < slotsCount; i++) {
             newMechanics.push({
               id: generateMechanicId(),
@@ -176,7 +202,7 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
               hired: false,
             });
           }
-          
+
           setMechanics(newMechanics);
         } else if (Array.isArray(config.mechanics)) {
           const updatedMechanics = config.mechanics.map((m: any) => ({
@@ -186,6 +212,25 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
           setMechanics(updatedMechanics);
         } else {
           setMechanics([]);
+        }
+
+        // Ремонты и продажи старого формата (на реальных часах) не переносим — они не сохранялись
+        const isGameTimeRecord = (r: any) => r && typeof r.startedAtMs === 'number' && typeof r.durationMs === 'number';
+        if (config.mechanicRepairs && typeof config.mechanicRepairs === 'object') {
+          setMechanicRepairs(
+            Object.fromEntries(Object.entries(config.mechanicRepairs).filter(([, r]) => isGameTimeRecord(r))) as Record<
+              string,
+              MechanicRepairInfo
+            >,
+          );
+        }
+        if (config.activeSells && typeof config.activeSells === 'object') {
+          setActiveSells(
+            Object.fromEntries(Object.entries(config.activeSells).filter(([, r]) => isGameTimeRecord(r))) as Record<
+              string,
+              ActiveSellInfo
+            >,
+          );
         }
       }
     } catch (error) {
@@ -197,15 +242,51 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
 
   const saveGarageConfig = async () => {
     try {
-      await AsyncStorage.setItem(GARAGE_CONFIG_KEY, JSON.stringify({ garageId, mechanics }));
+      await AsyncStorage.setItem(
+        GARAGE_CONFIG_KEY,
+        JSON.stringify({ garageId, mechanics, mechanicRepairs, activeSells }),
+      );
     } catch (error) {
       console.error('Error saving garage config:', error);
     }
   };
 
+  // ─── Живое состояние машин и прогресс по игровому времени ──────────
+  const garage = useMemo(
+    () =>
+      storedGarage.map((car) => {
+        const repair = mechanicRepairs[car.id];
+        return repair ? { ...car, condition: repairConditionAt(repair, gameTimeMs) } : car;
+      }),
+    [storedGarage, mechanicRepairs, gameTimeMs],
+  );
+
+  const { mechanicRepairsProgress, mechanicRepairsCondition, mechanicRepairsRemaining } = useMemo(() => {
+    const progress: Record<string, number> = {};
+    const condition: Record<string, number> = {};
+    const remaining: Record<string, number> = {};
+    for (const [carId, r] of Object.entries(mechanicRepairs)) {
+      progress[carId] = progressAt(r.startedAtMs, r.durationMs, gameTimeMs);
+      condition[carId] = repairConditionAt(r, gameTimeMs);
+      remaining[carId] = Math.max(0, r.startedAtMs + r.durationMs - gameTimeMs);
+    }
+    return { mechanicRepairsProgress: progress, mechanicRepairsCondition: condition, mechanicRepairsRemaining: remaining };
+  }, [mechanicRepairs, gameTimeMs]);
+
+  const { activeSellsProgress, activeSellsRemaining } = useMemo(() => {
+    const progress: Record<string, number> = {};
+    const remaining: Record<string, number> = {};
+    for (const [carId, sell] of Object.entries(activeSells)) {
+      progress[carId] = progressAt(sell.startedAtMs, sell.durationMs, gameTimeMs);
+      remaining[carId] = Math.max(0, sell.startedAtMs + sell.durationMs - gameTimeMs);
+    }
+    return { activeSellsProgress: progress, activeSellsRemaining: remaining };
+  }, [activeSells, gameTimeMs]);
+
+  // ─── Машины ───────────────────────────────────────────────────────
   const addCar = useCallback((car: Car, slotIndex?: number) => {
-    // Вычисляем базовую цену (цену при состоянии 100%)
-    const basePrice = calculateBasePrice(car.price, {
+    // Вычисляем базовую цену (цену при состоянии 100%) от рыночной стоимости, а не от цены покупки
+    const basePrice = calculateBasePrice(car.marketPrice ?? car.price, {
       year: car.year,
       mileage: car.mileage,
       condition: car.condition,
@@ -221,7 +302,7 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
     setGarage((prevGarage) => {
       // Определяем слот для машины
       let assignedSlot = slotIndex;
-      
+
       // Если слот не передан или он занят, ищем первый свободный
       if (assignedSlot === undefined || prevGarage.some((c) => c.slotIndex === assignedSlot)) {
         for (let i = 0; i < garageSlots; i++) {
@@ -241,48 +322,43 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
       };
       return [...prevGarage, garageCar];
     });
-  }, [garageSlots]);
+
+    // Покупка проходит через гараж и с авторынка, и из автосалона — уведомление на любом экране
+    const tier = getCarTier(car);
+    showToast({
+      title: `${car.name} куплен`,
+      message: `Заплачено ${formatMoney(toCents(car.price))} · состояние ${roundedCondition}% из ${maxCondition}%`,
+      icon: tier ? TIER_ICONS[tier] : undefined,
+    });
+  }, [garageSlots, showToast]);
 
   const removeCar = useCallback((carId: string) => {
-    setGarage((prev) => {
-      const filtered = prev.filter((car) => car.id !== carId);
-      return filtered;
-    });
+    setGarage((prev) => prev.filter((car) => car.id !== carId));
   }, []);
 
-  const hasCar = useCallback((carId: string) => {
-    const has = garage.some((car) => car.id === carId);
-    return has;
-  }, [garage]);
+  const hasCar = useCallback((carId: string) => garage.some((car) => car.id === carId), [garage]);
 
-  const repairCar = useCallback((carId: string, skillMultiplier: number = 1) => {
-    setGarage((prev) =>
-      prev.map((car) => {
-        if (car.id === carId) {
-          // Базовый ремонт 0.1%, умноженный на множитель скилла (уровень механика)
-          const repairAmount = 0.1 * skillMultiplier;
-          // Добавляем и округляем до трёх знаков после запятой (чтобы малые приращения не терялись)
-          const newCondition = Math.round((car.condition + repairAmount) * 1000) / 1000;
-          // Ограничиваем максимумом, тоже с округлением
-          const cappedCondition = Math.min(
-            Math.round(car.maxCondition * 1000) / 1000,
-            newCondition
-          );
-          return { ...car, condition: cappedCondition };
-        }
-        return car;
-      })
+  /**
+   * Ручной тап «Ремонт». Успешный тап (машина есть, не на максимуме, не у механика и не продаётся)
+   * чинит на 0,1% × навык игрока и даёт ровно 1 практику. Первое полное восстановление — бонус XP.
+   */
+  const repairCar = useCallback((carId: string): boolean => {
+    const car = storedGarage.find((c) => c.id === carId);
+    if (!car || mechanicRepairs[carId] || activeSells[carId] || car.condition >= car.maxCondition) return false;
+
+    const repairAmount = PLAYER_TAP_REPAIR * economy.playerTapMultiplier;
+    // Точность до тысячных: +5% навыка не теряются при округлении
+    const newCondition = Math.min(
+      Math.round(car.maxCondition * 1000) / 1000,
+      Math.round((car.condition + repairAmount) * 1000) / 1000,
     );
-  }, []);
+    setGarage((prev) => prev.map((c) => (c.id === carId ? { ...c, condition: newCondition } : c)));
+    economy.recordPlayerTap();
+    if (newCondition >= car.maxCondition) economy.awardFullRepair(carId);
+    return true;
+  }, [storedGarage, mechanicRepairs, activeSells, economy]);
 
-  const getCar = useCallback((carId: string) => {
-    return garage.find((car) => car.id === carId);
-  }, [garage]);
-
-  const sellCar = useCallback((carId: string, sellPrice: number) => {
-    removeCar(carId);
-    onSellCar?.(sellPrice);
-  }, [removeCar, onSellCar]);
+  const getCar = useCallback((carId: string) => garage.find((car) => car.id === carId), [garage]);
 
   /**
    * Покупка более крутого гаража: он становится активным, машины и механики
@@ -320,25 +396,7 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
     });
   }, [garageSlots]);
 
-  const upgradeMechanicSkill = useCallback((mechanicId: string): boolean => {
-    const mechanic = mechanics.find((m) => m.id === mechanicId);
-    if (!mechanic) return false;
-
-    setMechanics((prev) =>
-      prev.map((m) => {
-        if (m.id === mechanicId) {
-          return {
-            ...m,
-            skillLevel: m.skillLevel + 1,
-            experience: m.experience + 100,
-          };
-        }
-        return m;
-      })
-    );
-    return true;
-  }, [mechanics]);
-
+  // ─── Механики ─────────────────────────────────────────────────────
   const changeMechanicSlot = useCallback((mechanicId: string, newSlotIndex: number): boolean => {
     // Разрешаем -1 для открепления и 0-garageSlots для прикрепления
     if (newSlotIndex !== -1 && (newSlotIndex < 0 || newSlotIndex >= garageSlots)) return false;
@@ -354,20 +412,42 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
     return true;
   }, [garageSlots]);
 
+  /** Наём открывает трудовой контракт: зарплата начисляется с этого момента */
   const hireMechanic = useCallback((mechanicId: string): boolean => {
     const mechanic = mechanics.find((m) => m.id === mechanicId);
     if (!mechanic || mechanic.hired) return false;
 
+    economy.hireMechanic(mechanicId);
     setMechanics((prev) =>
-      prev.map((m) => {
-        if (m.id === mechanicId) {
-          return { ...m, hired: true };
-        }
-        return m;
-      })
+      prev.map((m) => (m.id === mechanicId ? { ...m, hired: true } : m))
     );
     return true;
-  }, [mechanics]);
+  }, [mechanics, economy]);
+
+  /** Останавливает ремонт и сохраняет уже достигнутое состояние машины */
+  const stopRepair = useCallback((carId: string, repair: MechanicRepairInfo, now: number) => {
+    const reached = repairConditionAt(repair, now);
+    setGarage((prev) => prev.map((car) => (car.id === carId ? { ...car, condition: reached } : car)));
+    setMechanicRepairs((prev) => without(prev, carId));
+  }, []);
+
+  /**
+   * Увольнение: расчёт (долг по зарплате + оклад) через экономику, затем механик
+   * освобождает слот, а его прокачка сбрасывается — повторный наём начинается с нуля.
+   */
+  const fireMechanic = useCallback((mechanicId: string): boolean => {
+    if (!economy.fireMechanic(mechanicId)) return false;
+    const now = economy.getNow();
+    for (const [carId, repair] of Object.entries(mechanicRepairs)) {
+      if (repair.mechanicId === mechanicId) stopRepair(carId, repair, now);
+    }
+    setMechanics((prev) =>
+      prev.map((m) =>
+        m.id === mechanicId ? { ...m, hired: false, slotIndex: -1, skillLevel: 1, experience: 0 } : m,
+      ),
+    );
+    return true;
+  }, [economy, mechanicRepairs, stopRepair]);
 
   const changeCarSlot = useCallback((carId: string, newSlotIndex: number): boolean => {
     // Проверяем, что слот в допустимом диапазоне
@@ -390,253 +470,220 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
     return true;
   }, [garage, garageSlots]);
 
-  // ─── Mechanic repair effects ──────────────────────────────────────────
-
-  // Update progress & visual condition for active repairs
-  useEffect(() => {
-    if (Object.keys(mechanicRepairs).length === 0 || !callbacks) {
-      setMechanicRepairsProgress({});
-      setMechanicRepairsCondition({});
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const newProgress: Record<string, number> = {};
-      const newCondition: Record<string, number> = {};
-
-      Object.entries(mechanicRepairs).forEach(([carId, repair]) => {
-        newProgress[carId] = callbacks.getProgress(repair.timerId);
-        const elapsedSeconds = (Date.now() - repair.startTime) / 1000;
-        const repairAmount = elapsedSeconds * 0.05;
-        const currentCondition = Math.round((repair.startCondition + repairAmount) * 100) / 100;
-        newCondition[carId] = Math.min(repair.maxCondition, currentCondition);
-      });
-
-      setMechanicRepairsProgress(newProgress);
-      setMechanicRepairsCondition(newCondition);
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [mechanicRepairs, callbacks]);
-
-  // Actually apply repair ticks every 500ms
-  useEffect(() => {
-    if (Object.keys(mechanicRepairs).length === 0) return;
-
-    const interval = setInterval(() => {
-      Object.keys(mechanicRepairs).forEach((carId) => {
-        repairCar(carId, 0.25);
-      });
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, [mechanicRepairs, repairCar]);
-
-  // Check if car reached max condition => finish repair
-  useEffect(() => {
-    if (!callbacks) return;
-
-    Object.keys(mechanicRepairs).forEach((carId) => {
-      const repair = mechanicRepairs[carId];
-      if (!repair) return;
-
-      const currentCar = garage.find((c) => c.id === carId);
-      if (currentCar && currentCar.condition >= currentCar.maxCondition) {
-        callbacks.removeTimer(repair.timerId);
-        changeMechanicSlot(repair.mechanicId, -1);
-
-        setMechanicRepairs((prev) => {
-          const updated = { ...prev };
-          delete updated[carId];
-          return updated;
-        });
-        setMechanicRepairsProgress((prev) => {
-          const updated = { ...prev };
-          delete updated[carId];
-          return updated;
-        });
-      }
-    });
-  }, [garage, mechanicRepairs, callbacks, changeMechanicSlot]);
-
-  // Start mechanic repair
+  // ─── Ремонт механиком ─────────────────────────────────────────────
   const startMechanicRepair = useCallback((carId: string, mechanicId: string) => {
-    if (!callbacks) return;
+    const car = storedGarage.find((c) => c.id === carId);
+    if (!car || car.condition >= car.maxCondition || mechanicRepairs[carId]) return;
 
-    const car = garage.find((c) => c.id === carId);
-    if (!car || car.condition >= car.maxCondition) return;
-
+    const now = economy.getNow();
+    const contract = economy.state.contracts[mechanicId];
+    const speedPerSec = MECHANIC_REPAIR_SPEED * workerSpeedMultiplier(contract);
     const improvementNeeded = car.maxCondition - car.condition;
-    const repairSpeedPerSecond = 0.05;
-    const durationSeconds = improvementNeeded / repairSpeedPerSecond;
-    const durationMs = durationSeconds * 1000;
+    const durationMs = Math.ceil((improvementNeeded / speedPerSec) * 1000);
 
-    const timerId = callbacks.addTimer(
-      {
-        type: 'repair' as const,
-        duration: durationMs,
-        onComplete: () => {
-          changeMechanicSlot(mechanicId, -1);
-          setMechanicRepairs((prev) => {
-            const updated = { ...prev };
-            delete updated[carId];
-            return updated;
-          });
-          setMechanicRepairsProgress((prev) => {
-            const updated = { ...prev };
-            delete updated[carId];
-            return updated;
-          });
-        },
-        metadata: { carId, mechanicId },
-      },
-      durationMs,
-    );
-
+    economy.setMechanicBusy(mechanicId, true, now);
     setMechanicRepairs((prev) => ({
       ...prev,
       [carId]: {
-        timerId,
         mechanicId,
         startCondition: car.condition,
         maxCondition: car.maxCondition,
-        startTime: Date.now(),
+        startedAtMs: now,
+        durationMs,
+        speedPerSec,
+        skillLevel: contract?.skill.level ?? 1,
       },
     }));
-  }, [garage, callbacks, changeMechanicSlot]);
+  }, [storedGarage, mechanicRepairs, economy]);
 
-  // Cancel mechanic repair
   const cancelMechanicRepair = useCallback((carId: string) => {
-    if (!callbacks) return;
-
     const repair = mechanicRepairs[carId];
     if (!repair) return;
-
-    callbacks.removeTimer(repair.timerId);
+    const now = economy.getNow();
+    stopRepair(carId, repair, now);
+    economy.setMechanicBusy(repair.mechanicId, false, now);
     changeMechanicSlot(repair.mechanicId, -1);
+  }, [mechanicRepairs, economy, stopRepair, changeMechanicSlot]);
 
-    setMechanicRepairs((prev) => {
-      const updated = { ...prev };
-      delete updated[carId];
-      return updated;
-    });
-    setMechanicRepairsProgress((prev) => {
-      const updated = { ...prev };
-      delete updated[carId];
-      return updated;
-    });
-  }, [mechanicRepairs, callbacks, changeMechanicSlot]);
-
-  // ─── Active sells effects ──────────────────────────────────────────
-
-  // Update sell progress
-  useEffect(() => {
-    if (Object.keys(activeSells).length === 0 || !callbacks) {
-      setActiveSellsProgress({});
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const newProgress: Record<string, number> = {};
-      Object.entries(activeSells).forEach(([carId, sell]) => {
-        newProgress[carId] = callbacks.getProgress(sell.timerId);
-      });
-      setActiveSellsProgress(newProgress);
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [activeSells, callbacks]);
-
-  // Start sell
+  // ─── Продажа ──────────────────────────────────────────────────────
   const startSell = useCallback((carId: string, sellPrice: number, duration: number) => {
-    if (!callbacks) return;
-
-    // Capture boughtPrice before the car is removed
-    const car = garage.find((c) => c.id === carId);
-    const boughtPrice = car?.price ?? sellPrice;
-
-    const timerId = callbacks.addTimer(
-      {
-        type: 'sell' as const,
-        duration,
-        onComplete: () => {
-          // Sell the car, add balance, mark as sold
-          sellCar(carId, sellPrice);
-          callbacks.addBalance(sellPrice);
-          callbacks.markAsSold(carId);
-
-          // Add XP equal to profit percentage
-          const profitPercent = Math.round(((sellPrice - boughtPrice) / boughtPrice) * 100);
-          if (profitPercent > 0) {
-            callbacks.addExperience(profitPercent);
-          }
-
-          setActiveSells((prev) => {
-            const updated = { ...prev };
-            delete updated[carId];
-            return updated;
-          });
-          setActiveSellsProgress((prev) => {
-            const updated = { ...prev };
-            delete updated[carId];
-            return updated;
-          });
-        },
-        metadata: { carId, sellPrice },
-      },
-      duration,
-    );
-
+    const car = storedGarage.find((c) => c.id === carId);
+    if (!car || activeSells[carId]) return;
     setActiveSells((prev) => ({
       ...prev,
-      [carId]: { timerId, sellPrice, duration },
+      [carId]: {
+        sellPrice,
+        boughtPrice: car.price,
+        startedAtMs: economy.getNow(),
+        durationMs: Math.max(0, Math.round(duration)),
+      },
     }));
-  }, [callbacks, sellCar]);
+  }, [storedGarage, activeSells, economy]);
 
-  // Cancel sell
   const cancelSell = useCallback((carId: string) => {
-    if (!callbacks) return;
+    setActiveSells((prev) => without(prev, carId));
+  }, []);
 
-    const activeSell = activeSells[carId];
-    if (!activeSell) return;
+  // ─── Завершение ремонтов и продаж по игровому времени ─────────────
+  useEffect(() => {
+    if (!isLoaded || !isConfigLoaded || !economy.isLoaded) return;
 
-    callbacks.removeTimer(activeSell.timerId);
+    for (const [carId, repair] of Object.entries(mechanicRepairs)) {
+      const finishedAt = repair.startedAtMs + repair.durationMs;
+      if (gameTimeMs < finishedAt) continue;
+      setGarage((prev) => prev.map((car) => (car.id === carId ? { ...car, condition: repair.maxCondition } : car)));
+      setMechanicRepairs((prev) => without(prev, carId));
+      economy.setMechanicBusy(repair.mechanicId, false, finishedAt);
+      economy.recordMechanicJob(repair.mechanicId);
+      economy.awardFullRepair(carId);
+      changeMechanicSlot(repair.mechanicId, -1);
 
-    setActiveSells((prev) => {
-      const updated = { ...prev };
-      delete updated[carId];
-      return updated;
-    });
-    setActiveSellsProgress((prev) => {
-      const updated = { ...prev };
-      delete updated[carId];
-      return updated;
-    });
-  }, [activeSells, callbacks]);
+      // Два уведомления на любом экране: механик освободился и машина готова
+      const mechanicName = mechanics.find((m) => m.id === repair.mechanicId)?.name ?? 'Механик';
+      const car = storedGarage.find((c) => c.id === carId);
+      const tier = car ? getCarTier(car) : undefined;
+      showToast({
+        title: `${mechanicName} закончил работу`,
+        message: 'Теперь он бездействует — назначьте его на следующую машину.',
+        icon: getMechanicAvatar(repair.mechanicId),
+      });
+      showToast({
+        title: `${car?.name ?? 'Автомобиль'} готов`,
+        message: `Отремонтирован до ${repair.maxCondition}% — можно продавать.`,
+        icon: tier ? TIER_ICONS[tier] : undefined,
+        tone: 'success',
+      });
+    }
 
-  // Оборачиваем возвращаемый объект в useMemo с зависимостью на все состояния
-  const garageState = useMemo(
+    for (const [carId, sell] of Object.entries(activeSells)) {
+      if (gameTimeMs < sell.startedAtMs + sell.durationMs) continue;
+      const car = storedGarage.find((c) => c.id === carId);
+      setActiveSells((prev) => without(prev, carId));
+      if (!car) continue;
+      // Экономика запоминает продажу по id машины: повтор после перезапуска не начислит ни деньги, ни XP
+      const alreadyRecorded = economy.state.processedOps.includes(`sale:${carId}`);
+      const asset = economy.state.assets[carId];
+      economy.recordCarSale(car, sell.sellPrice);
+      markAsSold(carId);
+      removeCar(carId);
+
+      if (!alreadyRecorded) {
+        const priceCents = toCents(sell.sellPrice);
+        const costCents = asset ? assetCostCents(asset) : toCents(car.price);
+        const profitCents = priceCents - costCents;
+        const tier = asset?.tier ?? getCarTier(car);
+        const xp = saleXp(tier, priceCents, asset ? asset.purchaseCents : toCents(car.price), asset?.extraCostsCents ?? 0);
+        showToast({
+          title: `${car.name} продан за ${formatMoney(priceCents)}`,
+          message: `${profitCents >= 0 ? 'Прибыль' : 'Убыток'} ${formatMoney(profitCents, { sign: true })}${xp > 0 ? ` · +${xp} XP` : ''}`,
+          icon: tier ? TIER_ICONS[tier] : undefined,
+          tone: profitCents > 0 ? 'success' : 'info',
+        });
+      }
+    }
+  }, [gameTimeMs, isLoaded, isConfigLoaded]);
+
+  // ─── Механик повысил навык во время ремонта: с момента повышения — новая скорость ──
+  useEffect(() => {
+    for (const [carId, repair] of Object.entries(mechanicRepairs)) {
+      const contract = economy.state.contracts[repair.mechanicId];
+      if (!contract || contract.skill.level === (repair.skillLevel ?? 1)) continue;
+      const at = Math.min(gameTimeMs, Math.max(repair.startedAtMs, contract.levelChangedAtMs));
+      const reached = repairConditionAt(repair, at);
+      const speedPerSec = MECHANIC_REPAIR_SPEED * workerSpeedMultiplier(contract);
+      setMechanicRepairs((prev) =>
+        prev[carId] === repair
+          ? {
+              ...prev,
+              [carId]: {
+                ...repair,
+                startCondition: reached,
+                startedAtMs: at,
+                speedPerSec,
+                skillLevel: contract.skill.level,
+                durationMs: Math.ceil((Math.max(0, repair.maxCondition - reached) / speedPerSec) * 1000),
+              },
+            }
+          : prev,
+      );
+    }
+  }, [economy.state.contracts, mechanicRepairs, gameTimeMs]);
+
+  // ─── Сверка с экономикой после загрузки (и перенос старых сохранений) ──
+  useEffect(() => {
+    if (reconciledRef.current || !isLoaded || !isConfigLoaded || !economy.isLoaded) return;
+    reconciledRef.current = true;
+
+    let employed: Set<string>;
+    if (!economy.state.contractsMigrated) {
+      // Сохранение до финансовой системы: нанятые механики получают контракт с текущего момента
+      const hiredIds = mechanics.filter((m) => m.hired).map((m) => m.id);
+      economy.migrateContracts(hiredIds);
+      employed = new Set(hiredIds);
+    } else {
+      // Контракт — единственный признак работы в штате. Нет контракта — механик не нанят и без прокачки.
+      employed = new Set(Object.keys(economy.state.contracts));
+      setMechanics((prev) =>
+        prev.map((m) => {
+          const isEmployed = employed.has(m.id);
+          if (isEmployed === m.hired) return m;
+          return isEmployed
+            ? { ...m, hired: true }
+            : { ...m, hired: false, slotIndex: -1, skillLevel: 1, experience: 0 };
+        }),
+      );
+    }
+
+    // Ремонт без механика в штате прекращаем; занятость механиков синхронизируем с ремонтами
+    const now = economy.getNow();
+    const busy = new Set<string>();
+    for (const [carId, repair] of Object.entries(mechanicRepairs)) {
+      if (employed.has(repair.mechanicId)) busy.add(repair.mechanicId);
+      else stopRepair(carId, repair, now);
+    }
+    for (const id of employed) economy.setMechanicBusy(id, busy.has(id), now);
+
+    // Контракты до системы навыков: уровень берётся из прежней прокачки механика (не выше 20)
+    for (const m of mechanics) {
+      if (employed.has(m.id)) economy.initLegacyWorkerSkill(m.id, Math.min(20, m.skillLevel || 1));
+    }
+
+    // Машины из старых сохранений становятся активами по цене покупки
+    economy.ensureAssets(storedGarage);
+  }, [isLoaded, isConfigLoaded, economy.isLoaded]);
+
+  const staffMechanics = useMemo(
+    () =>
+      mechanics.map((m) => {
+        const contract = economy.state.contracts[m.id];
+        return { ...m, skillLevel: contract ? contract.skill.level : 1 };
+      }),
+    [mechanics, economy.state.contracts],
+  );
+
+  return useMemo(
     () => ({
       garage,
       garageSlots,
       garageId,
-      mechanics,
+      mechanics: staffMechanics,
       mechanicRepairs,
       mechanicRepairsProgress,
       mechanicRepairsCondition,
+      mechanicRepairsRemaining,
       activeSells,
       activeSellsProgress,
+      activeSellsRemaining,
       addCar,
       removeCar,
       hasCar,
       repairCar,
       getCar,
-      sellCar,
       changeCarSlot,
       buyGarage,
-      upgradeMechanicSkill,
       changeMechanicSlot,
       hireMechanic,
+      fireMechanic,
       startMechanicRepair,
       cancelMechanicRepair,
       startSell,
@@ -646,29 +693,30 @@ export const useGarage = (onSellCar?: (amount: number) => void, callbacks?: Gara
       garage,
       garageSlots,
       garageId,
-      mechanics,
+      staffMechanics,
       mechanicRepairs,
       mechanicRepairsProgress,
       mechanicRepairsCondition,
+      mechanicRepairsRemaining,
       activeSells,
       activeSellsProgress,
+      activeSellsRemaining,
       addCar,
       removeCar,
       hasCar,
       repairCar,
       getCar,
-      sellCar,
       changeCarSlot,
       buyGarage,
-      upgradeMechanicSkill,
       changeMechanicSlot,
       hireMechanic,
+      fireMechanic,
       startMechanicRepair,
       cancelMechanicRepair,
       startSell,
       cancelSell,
-    ]
+    ],
   );
-
-  return garageState;
 };
+
+export type GarageState = ReturnType<typeof useGarage>;

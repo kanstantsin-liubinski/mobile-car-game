@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   generateAllInitialListings,
   generateRandomListing,
@@ -8,6 +9,7 @@ import {
 import type { MarketListing } from '../utils/marketGenerator';
 import { TOTAL_TIERS } from '../data/carModels';
 import { MARKETS } from '../data/cityBuildings';
+import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 
 type TierListings = Record<number, MarketListing[]>;
 
@@ -20,13 +22,14 @@ interface MarketContextType {
   removeListing: (listingId: string) => void;
   /** Оставшееся время до исчезновения (мс), -1 если не найдено */
   getTimeRemaining: (listingId: string) => number;
-  /** Текущее время (обновляется каждую секунду для пересчёта таймеров) */
+  /** Текущее игровое время — объявления живут по игровым часам и стоят на паузе вместе с игрой */
   currentTime: number;
 }
 
 const MarketContext = createContext<MarketContextType | undefined>(undefined);
 
-const MARKET_TICK_INTERVAL = 1000; // Обновляем каждую секунду
+const MARKET_KEY = 'game_market';
+const MARKET_TICK_MS = 1000; // Проверяем объявления раз в секунду игрового времени
 
 /** Один тик авторынка: убираем истёкшие объявления, добавляем новые, если не хватает */
 const tickMarket = (prev: TierListings, now: number): { listings: TierListings; changed: boolean } => {
@@ -51,7 +54,7 @@ const tickMarket = (prev: TierListings, now: number): { listings: TierListings; 
 
       for (let i = 0; i < Math.max(1, needed); i++) {
         const allModels = [...existingModelIds, ...active.map((l) => l.modelId)];
-        const newListing = generateRandomListing(tier, allModels);
+        const newListing = generateRandomListing(tier, now, allModels);
         active.push(newListing);
         existingModelIds.push(newListing.modelId);
       }
@@ -63,37 +66,55 @@ const tickMarket = (prev: TierListings, now: number): { listings: TierListings; 
   return { listings: updated, changed };
 };
 
+const tickAllMarkets = (prev: Record<string, TierListings>, now: number) => {
+  let changed = false;
+  const updated: Record<string, TierListings> = {};
+  for (const market of MARKETS) {
+    const { listings: marketListings, changed: marketChanged } = tickMarket(prev[market.id] || {}, now);
+    updated[market.id] = marketListings;
+    if (marketChanged) changed = true;
+  }
+  return changed ? updated : prev;
+};
+
 export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isLoaded: economyLoaded } = useEconomy();
+  const { gameTimeMs } = useGameClock();
   // У каждого авторынка свой независимый набор объявлений
-  const [listings, setListings] = useState<Record<string, TierListings>>(() =>
-    Object.fromEntries(MARKETS.map((m) => [m.id, generateAllInitialListings()]))
-  );
-  const [currentTime, setCurrentTime] = useState(Date.now());
-  const listingsRef = useRef(listings);
-  listingsRef.current = listings;
+  const [listings, setListings] = useState<Record<string, TierListings>>({});
+  const [isLoaded, setIsLoaded] = useState(false);
+  const currentTime = gameTimeMs;
+  const marketSecond = Math.floor(gameTimeMs / MARKET_TICK_MS);
 
-  // Основной цикл: обновляем таймеры, убираем истёкшие, добавляем новые
+  // Загружаем сохранённые объявления, когда известно игровое время
   useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now();
-      setCurrentTime(now);
+    if (!economyLoaded || isLoaded) return;
+    const load = async () => {
+      let saved: Record<string, TierListings> = {};
+      try {
+        const raw = await AsyncStorage.getItem(MARKET_KEY);
+        if (raw) saved = JSON.parse(raw);
+      } catch (error) {
+        console.error('Error loading market:', error);
+      }
+      setListings(tickAllMarkets(saved, gameTimeMs));
+      setIsLoaded(true);
+    };
+    load();
+  }, [economyLoaded, isLoaded]);
 
-      setListings((prev) => {
-        let changed = false;
-        const updated: Record<string, TierListings> = {};
+  useEffect(() => {
+    if (!isLoaded) return;
+    AsyncStorage.setItem(MARKET_KEY, JSON.stringify(listings)).catch((error) =>
+      console.error('Error saving market:', error),
+    );
+  }, [listings, isLoaded]);
 
-        for (const market of MARKETS) {
-          const { listings: marketListings, changed: marketChanged } = tickMarket(prev[market.id] || {}, now);
-          updated[market.id] = marketListings;
-          if (marketChanged) changed = true;
-        }
-
-        return changed ? updated : prev;
-      });
-    }, MARKET_TICK_INTERVAL);
-
-    return () => clearInterval(interval);
-  }, []);
+  // Раз в игровую секунду убираем истёкшие объявления и добавляем новые
+  useEffect(() => {
+    if (!isLoaded) return;
+    setListings((prev) => tickAllMarkets(prev, gameTimeMs));
+  }, [marketSecond, isLoaded]);
 
   const getListingsForTier = useCallback(
     (marketId: string, tier: number): MarketListing[] => {
