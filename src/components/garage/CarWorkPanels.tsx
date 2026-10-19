@@ -8,10 +8,11 @@ import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { GameIcon } from '@components/GameIcon';
 import { SheetHeader } from '@components/SheetHeader';
+import { ActionTiles, type TileSpec } from '@components/ActionTiles';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { formatMoney, formatGameDays, pluralDays } from '../../economy/format';
 import { DAY_MS } from '../../economy/time';
-import { PLAYER_PAINT_PER_TAP } from '../../economy/balance';
+import { MAX_SELL_DAYS_INFO, PLAYER_PAINT_PER_TAP } from '../../economy/balance';
 import { overallCondition } from '../../economy/carCondition';
 import { pickingMismatch, serviceDef } from '../../economy/orders';
 import type { GarageCar, Mechanic } from '@/types';
@@ -47,45 +48,50 @@ export const PaintBars = ({ car }: { car: GarageCar }) => {
   );
 };
 
-// ─── Плитка действия ───────────────────────────────────────────────────────
-
-interface TileProps {
-  title: string;
-  subtitle?: string;
+/** Компактная полоска идущего процесса (продажа, ремонт механиком) */
+const ProcessPanel = ({
+  color,
+  title,
+  text,
+  progress,
+  avatar,
+}: {
   color: string;
-  icon?: ImageSourcePropType;
-  emoji?: string;
-  disabled?: boolean;
-  onPress: () => void;
-}
-
-/** Все действия над машиной — одинаковые плитки: иконка, название, подпись, свой цвет */
-export const ActionTile = ({ title, subtitle, color, icon, emoji, disabled, onPress }: TileProps) => (
-  <TouchableOpacity
-    style={[styles.tile, { backgroundColor: color }, disabled && styles.tileDisabled]}
-    disabled={disabled}
-    onPress={onPress}
-    activeOpacity={0.8}
-  >
-    <View style={styles.tileHead}>
-      {icon ? <GameIcon source={icon} size={20} /> : emoji ? <Text style={styles.tileEmoji}>{emoji}</Text> : null}
-      <Text style={styles.tileTitle} numberOfLines={1}>
-        {title}
-      </Text>
+  title: string;
+  text: string;
+  progress: number;
+  avatar?: ImageSourcePropType;
+}) => (
+  <View style={[styles.panel, { borderColor: color }]}>
+    <View style={styles.row}>
+      {avatar && <GameIcon source={avatar} size={24} />}
+      <Text style={[styles.title, { flex: 1 }]}>{title}</Text>
     </View>
-    {!!subtitle && (
-      <Text style={styles.tileSub} numberOfLines={1}>
-        {subtitle}
-      </Text>
-    )}
-  </TouchableOpacity>
+    <View style={styles.track}>
+      <View style={[styles.fill, { width: `${Math.min(100, Math.max(0, progress))}%`, backgroundColor: color }]} />
+    </View>
+    <Text style={styles.text}>{text}</Text>
+  </View>
 );
 
 // ─── Процессы покраски и заказ клиента ─────────────────────────────────────
 
 /** Карточки идущих процессов покраски и информация о заказе — над плитками действий */
 export const CarStatusPanels = ({ car }: { car: GarageCar }) => {
-  const { boothSlot, boothJob, painterRun, painters, servicePaints, cancelBoothJob } = useGarageContext();
+  const {
+    boothSlot,
+    boothJob,
+    painterRun,
+    painters,
+    servicePaints,
+    activeSells,
+    activeSellsProgress,
+    activeSellsRemaining,
+    mechanicRepairs,
+    mechanicRepairsProgress,
+    mechanicRepairsRemaining,
+    mechanics,
+  } = useGarageContext();
   const { state } = useEconomy();
   const { gameTimeMs } = useGameClock();
   const paint = car.paintCondition ?? car.condition;
@@ -93,8 +99,30 @@ export const CarStatusPanels = ({ car }: { car: GarageCar }) => {
   const job = boothSlot !== null && car.slotIndex === boothSlot && boothJob?.carId === car.id ? boothJob : null;
   const order = car.clientOrderId ? state.orders.active.find((o) => o.id === car.clientOrderId) : undefined;
 
+  const sale = activeSells[car.id];
+  const repair = mechanicRepairs[car.id];
+
   return (
     <>
+      {sale && (
+        <ProcessPanel
+          color={ACTION_COLORS.sell}
+          title={`💰 Продаётся за ${formatMoney(Math.round(sale.sellPrice * 100))}`}
+          text={`До продажи ${formatGameDays(activeSellsRemaining[car.id] ?? 0, DAY_MS)}`}
+          progress={activeSellsProgress[car.id] ?? 0}
+        />
+      )}
+
+      {repair && (
+        <ProcessPanel
+          color={ACTION_COLORS.mechanic}
+          avatar={getMechanicAvatar(repair.mechanicId)}
+          title={`${mechanics.find((m) => m.id === repair.mechanicId)?.name ?? 'Механик'} ремонтирует до ${repair.maxCondition}%`}
+          text={`Осталось ${formatGameDays(mechanicRepairsRemaining[car.id] ?? 0, DAY_MS)}`}
+          progress={mechanicRepairsProgress[car.id] ?? 0}
+        />
+      )}
+
       {order && order.kind === 'service' && (
         <View style={[styles.panel, { borderColor: ACTION_COLORS.client }]}>
           <Text style={styles.title}>👤 Машина клиента · {serviceDef(order.type).name}</Text>
@@ -149,11 +177,8 @@ export const CarStatusPanels = ({ car }: { car: GarageCar }) => {
               </Text>
             </View>
           ) : (
-            <Text style={styles.text}>Красьте кнопкой «Покрасить» или поручите маляру.</Text>
+            <Text style={styles.text}>Красьте плиткой «Покрасить» или поручите маляру.</Text>
           )}
-          <TouchableOpacity style={styles.cancel} onPress={cancelBoothJob}>
-            <Text style={styles.cancelText}>✕ Остановить покраску (материалы не вернутся)</Text>
-          </TouchableOpacity>
         </View>
       )}
     </>
@@ -164,7 +189,7 @@ export const CarStatusPanels = ({ car }: { car: GarageCar }) => {
 
 interface CarActionsProps {
   car: GarageCar;
-  /** Механик, прикреплённый к слоту машины (если может ремонтировать) */
+  /** Механик, прикреплённый к слоту машины (нанятый) */
   mechanic: Mechanic | null;
   tapRepairPercent: number;
   onRepair: () => void;
@@ -174,7 +199,13 @@ interface CarActionsProps {
 
 type PaintConfirm = { kind: 'service' | 'booth' } | null;
 
-/** Плитки всех действий над машиной: ремонт, механик, продажа, покраска, передача клиенту */
+const STOP = '#EF4444';
+const fmtNum = (v: number, digits = 3) => v.toLocaleString('ru-RU', { maximumFractionDigits: digits });
+
+/**
+ * Все действия над машиной — плитками в стиле авторынка: ремонт, механик, покраска,
+ * продажа, передача клиенту и остановка идущих процессов. У каждой — подсказка (i).
+ */
 export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, onMechanic }: CarActionsProps) => {
   const {
     boothSlot,
@@ -183,10 +214,15 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
     painterPaused,
     painters,
     servicePaints,
+    activeSells,
+    mechanicRepairs,
     servicePaintQuote,
     boothPaintQuote,
     paintTap,
     setPainterPaused,
+    cancelBoothJob,
+    cancelSell,
+    cancelMechanicRepair,
     carBusyReason,
     pickingCandidate,
     deliverPicking,
@@ -198,132 +234,189 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
   const inBooth = boothSlot !== null && car.slotIndex === boothSlot;
   const job = inBooth && boothJob?.carId === car.id ? boothJob : null;
   const servicePaint = servicePaints[car.id];
+  const selling = activeSells[car.id];
+  const repairing = mechanicRepairs[car.id];
   const paint = car.paintCondition ?? car.condition;
   const atMax = car.condition >= car.maxCondition;
   const busy = carBusyReason(car.id);
   const hiredPainter = painters.find((p) => p.hired);
+  const tiles: TileSpec[] = [];
 
-  const tiles: React.ReactNode[] = [];
+  // Машина на продаже: единственное действие — снять с продажи
+  if (selling) {
+    tiles.push({
+      key: 'unsell',
+      emoji: '✕',
+      title: 'Снять',
+      subtitle: 'с продажи',
+      state: 'ready',
+      accent: STOP,
+      info: 'Машина вернётся в гараж, продажа отменится. Позже можно выставить снова с другой ценой.',
+      onPress: () => cancelSell(car.id),
+    });
+  } else {
+    // ─ Технический ремонт: тапом и механиком (не в камере и не во время покраски в сервисе)
+    if (!inBooth && !servicePaint) {
+      tiles.push({
+        key: 'repair',
+        icon: ICONS.repair,
+        title: 'Ремонт',
+        subtitle: atMax ? `Максимум ${car.maxCondition}%` : repairing ? 'Чинит механик' : `+${fmtNum(tapRepairPercent)}% за тап`,
+        state: atMax ? 'done' : repairing ? 'locked' : 'ready',
+        accent: ACTION_COLORS.repair,
+        info: `Ручной ремонт: каждый тап добавляет ${fmtNum(tapRepairPercent)}% технического состояния, до максимума ${car.maxCondition}%. Тап даёт 1 практику навыка «Механик»${
+          isClient ? '.' : ', а первое полное восстановление своей машины — бонус XP.'
+        }`,
+        onPress: onRepair,
+      });
 
-  // Технический ремонт — не в камере и не во время покраски в сервисе
-  if (!inBooth && !servicePaint) {
-    tiles.push(
-      <ActionTile
-        key="repair"
-        icon={atMax ? undefined : ICONS.repair}
-        emoji={atMax ? '✓' : undefined}
-        title={atMax ? 'Техника в максимуме' : 'Ремонт'}
-        subtitle={atMax ? `${car.maxCondition}%` : `+${tapRepairPercent.toLocaleString('ru-RU', { maximumFractionDigits: 3 })}% за тап`}
-        color={ACTION_COLORS.repair}
-        disabled={atMax}
-        onPress={onRepair}
-      />,
-    );
-  }
-
-  if (mechanic) {
-    tiles.push(
-      <ActionTile
-        key="mechanic"
-        icon={getMechanicAvatar(mechanic.id)}
-        title="Механику"
-        subtitle={`${mechanic.name} починит до ${car.maxCondition}%`}
-        color={ACTION_COLORS.mechanic}
-        onPress={onMechanic}
-      />,
-    );
-  }
-
-  // Покраска: в камере — своими силами или маляром, вне камеры — в стороннем сервисе
-  if (job) {
-    if (painterRun) {
-      tiles.push(
-        <ActionTile key="self" emoji="🖌️" title="Красить самому" subtitle="Остановить маляра" color={PAINT} onPress={() => setPainterPaused(true)} />,
-      );
-    } else {
-      tiles.push(
-        <ActionTile
-          key="tap"
-          emoji="🖌️"
-          title="Покрасить"
-          subtitle={`+${(PLAYER_PAINT_PER_TAP * paintTapMultiplier).toLocaleString('ru-RU', { maximumFractionDigits: 3 })} п. ЛКП за тап`}
-          color={PAINT}
-          onPress={() => paintTap()}
-        />,
-      );
-      if (hiredPainter && painterPaused) {
-        tiles.push(
-          <ActionTile
-            key="painter"
-            icon={getMechanicAvatar(hiredPainter.id)}
-            title="Маляру"
-            subtitle={`${hiredPainter.name} докрасит сам`}
-            color={PAINT}
-            onPress={() => setPainterPaused(false)}
-          />,
-        );
+      if (repairing) {
+        tiles.push({
+          key: 'stoprepair',
+          emoji: '✕',
+          title: 'Стоп',
+          subtitle: 'остановить механика',
+          state: 'ready',
+          accent: STOP,
+          info: 'Механик прекратит ремонт и освободит слот. Уже сделанный ремонт сохранится.',
+          onPress: () => cancelMechanicRepair(car.id),
+        });
+      } else if (!atMax) {
+        tiles.push({
+          key: 'mechanic',
+          icon: mechanic ? getMechanicAvatar(mechanic.id) : ICONS.hireMechanic,
+          title: 'Механику',
+          subtitle: mechanic ? mechanic.name : 'нет на слоте',
+          state: mechanic ? 'ready' : 'locked',
+          accent: ACTION_COLORS.mechanic,
+          info: mechanic
+            ? `${mechanic.name} сам отремонтирует машину до ${car.maxCondition}%. Пока работает, копит практику; зарплата идёт и в простое.`
+            : 'Наймите механика и прикрепите его к этому слоту: гараж → «Механики». Он будет ремонтировать сам, пока вы заняты другим.',
+          onPress: onMechanic,
+        });
       }
     }
-  } else if (inBooth) {
-    const quote = boothPaintQuote(car.id);
-    if (quote && quote.from < quote.target) {
-      tiles.push(
-        <ActionTile
-          key="booth"
-          emoji="🎨"
-          title="Покрасить в камере"
-          subtitle={quote.materialsCents > 0 ? `материалы ${formatMoney(quote.materialsCents)}` : 'материалы оплачены'}
-          color={PAINT}
-          disabled={!!busy || state.balanceCents < quote.materialsCents}
-          onPress={() => setConfirm({ kind: 'booth' })}
-        />,
-      );
-    }
-  } else if (!isClient && !servicePaint && paint < 100) {
-    const quote = servicePaintQuote(car.id);
-    if (quote) {
-      tiles.push(
-        <ActionTile
-          key="service"
-          emoji="🎨"
-          title="Покраска в сервисе"
-          subtitle={`${formatMoney(quote.costCents)} · ${pluralDays(quote.days)}`}
-          color={PAINT}
-          disabled={!!busy || state.balanceCents < quote.costCents}
-          onPress={() => setConfirm({ kind: 'service' })}
-        />,
-      );
-    }
-  }
 
-  if (!isClient && !busy) {
-    tiles.push(<ActionTile key="sell" icon={ICONS.sell} title="Продать" subtitle="Выставить на рынок" color={ACTION_COLORS.sell} onPress={onSell} />);
-  }
+    // ─ Покраска: в камере — своими силами или маляром, вне камеры — сторонний сервис
+    if (job) {
+      if (painterRun) {
+        tiles.push({
+          key: 'self',
+          emoji: '🖌️',
+          title: 'Сам',
+          subtitle: 'остановить маляра',
+          state: 'ready',
+          accent: ACTION_COLORS.paint,
+          info: 'Маляр прервётся (останется в штате), дальше красите тапами сами — это прокачивает ваш навык «Маляр».',
+          onPress: () => setPainterPaused(true),
+        });
+      } else {
+        tiles.push({
+          key: 'tap',
+          emoji: '🖌️',
+          title: 'Покрасить',
+          subtitle: `+${fmtNum(PLAYER_PAINT_PER_TAP * paintTapMultiplier)} п. ЛКП`,
+          state: 'ready',
+          accent: ACTION_COLORS.paint,
+          info: `Каждый тап добавляет ${fmtNum(PLAYER_PAINT_PER_TAP * paintTapMultiplier)} п. ЛКП (растёт с навыком «Маляр») и даёт 1 практику. Материалы уже оплачены.`,
+          onPress: () => paintTap(),
+        });
+        if (hiredPainter && painterPaused) {
+          tiles.push({
+            key: 'painter',
+            icon: getMechanicAvatar(hiredPainter.id),
+            title: 'Маляру',
+            subtitle: hiredPainter.name,
+            state: 'ready',
+            accent: ACTION_COLORS.paint,
+            info: `${hiredPainter.name} докрасит машину сам, 2,5 п. ЛКП в день с учётом навыка.`,
+            onPress: () => setPainterPaused(false),
+          });
+        }
+      }
+      tiles.push({
+        key: 'stoppaint',
+        emoji: '✕',
+        title: 'Стоп',
+        subtitle: 'остановить покраску',
+        state: 'ready',
+        accent: STOP,
+        info: 'Покраска прекратится, уже нанесённое ЛКП сохранится. Оплаченные материалы не возвращаются.',
+        onPress: cancelBoothJob,
+      });
+    } else if (inBooth) {
+      const quote = boothPaintQuote(car.id);
+      const done = !quote || quote.from >= quote.target;
+      const cost = quote?.materialsCents ?? 0;
+      tiles.push({
+        key: 'booth',
+        emoji: '🎨',
+        title: 'Покраска',
+        subtitle: done ? 'ЛКП 100%' : cost > 0 ? `материалы ${formatMoney(cost)}` : 'материалы оплачены',
+        state: done ? 'done' : busy || state.balanceCents < cost ? 'locked' : 'ready',
+        accent: ACTION_COLORS.paint,
+        info: `Покраска в своей камере до ${quote?.target ?? 100}%: материалы — 30% прироста стоимости, они входят в себестоимость машины. Красите тапами сами или нанятый маляр.`,
+        onPress: () => setConfirm({ kind: 'booth' }),
+      });
+    } else if (!isClient) {
+      const quote = servicePaintQuote(car.id);
+      const done = paint >= 100;
+      tiles.push({
+        key: 'service',
+        emoji: '🎨',
+        title: 'Покраска',
+        subtitle: servicePaint
+          ? 'в сервисе'
+          : done
+            ? 'ЛКП 100%'
+            : quote
+              ? `${formatMoney(quote.costCents)} · ${pluralDays(quote.days)}`
+              : '',
+        state: servicePaint ? 'pending' : done ? 'done' : !quote || busy || state.balanceCents < quote.costCents ? 'locked' : 'ready',
+        accent: ACTION_COLORS.paint,
+        info: 'Сторонний сервис покрасит до 100%: цена — 80% прироста стоимости, срок 2 дня + 1 день на каждые 15 п. ЛКП. Машина в это время занята. Затраты входят в себестоимость. Своя покрасочная камера — дешевле (гараж → «Оборудование»).',
+        onPress: () => setConfirm({ kind: 'service' }),
+      });
+    }
 
-  // Передача клиенту по заказу на подбор — если класс подходит
-  const picking = state.orders.active.find((o) => o.kind === 'picking');
-  let pickingNote: string | null = null;
-  if (!isClient && picking && picking.kind === 'picking' && car.tier === picking.tier) {
-    const candidate = pickingCandidate(car.id);
-    const problems = candidate ? pickingMismatch(picking, candidate) : ['нет данных'];
-    pickingNote = problems.length > 0 ? `Для заказа на подбор пока не подходит: ${problems.join(', ')}.` : null;
-    tiles.push(
-      <ActionTile
-        key="client"
-        emoji="🤝"
-        title="Передать клиенту"
-        subtitle={formatMoney(picking.priceCents)}
-        color={ACTION_COLORS.client}
-        disabled={problems.length > 0 || !!busy}
-        onPress={() => deliverPicking(picking.id, car.id)}
-      />,
-    );
+    // ─ Продажа
+    if (!isClient) {
+      tiles.push({
+        key: 'sell',
+        icon: ICONS.sell,
+        title: 'Продать',
+        subtitle: busy ? 'машина занята' : 'на рынок',
+        state: busy ? 'locked' : 'ready',
+        accent: ACTION_COLORS.sell,
+        info: `Выставить на продажу: цена ±10% ползунком — чем дороже, тем дольше ждать (до ${MAX_SELL_DAYS_INFO} дней), −10% — сразу. Навык «Торговля» добавляет к выручке.`,
+        onPress: onSell,
+      });
+    }
+
+    // ─ Передача клиенту по заказу на подбор — если класс подходит
+    const picking = state.orders.active.find((o) => o.kind === 'picking');
+    if (!isClient && picking && picking.kind === 'picking' && car.tier === picking.tier) {
+      const candidate = pickingCandidate(car.id);
+      const problems = candidate ? pickingMismatch(picking, candidate) : ['нет данных'];
+      tiles.push({
+        key: 'client',
+        emoji: '🤝',
+        title: 'Клиенту',
+        subtitle: problems.length > 0 ? 'не подходит' : formatMoney(picking.priceCents),
+        state: problems.length > 0 || busy ? 'locked' : 'ready',
+        accent: ACTION_COLORS.client,
+        info:
+          problems.length > 0
+            ? `Для заказа на подбор пока не подходит: ${problems.join(', ')}.`
+            : `Продажа клиенту сразу по цене заказа ${formatMoney(picking.priceCents)}, без ожидания. Плюс репутация и практика.`,
+        onPress: () => deliverPicking(picking.id, car.id),
+      });
+    }
   }
 
   return (
     <>
-      <View style={styles.tiles}>{tiles}</View>
-      {pickingNote && <Text style={styles.note}>{pickingNote}</Text>}
+      <ActionTiles tiles={tiles} />
       <PaintConfirmModal car={car} confirm={confirm} onClose={() => setConfirm(null)} />
     </>
   );

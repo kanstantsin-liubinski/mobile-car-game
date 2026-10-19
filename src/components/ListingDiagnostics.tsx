@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors } from '@styles/colors';
+import { ActionTiles } from '@components/ActionTiles';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useMarketContext } from '@hooks/MarketContext';
 import type { MarketListing } from '../utils/marketGenerator';
@@ -41,34 +42,6 @@ const RangeBar = ({ label, iv, exact, color }: { label: string; iv: Interval; ex
 
 type ActionKey = 'inspect' | 'scan' | 'service';
 
-interface TileProps {
-  emoji: string;
-  title: string;
-  subtitle: string;
-  state: 'ready' | 'done' | 'locked' | 'pending';
-  info: boolean;
-  onPress: () => void;
-  onInfo: () => void;
-}
-
-/** Одинаковые плитки действий диагностики: заголовок, подпись и (i) с описанием */
-const Tile = ({ emoji, title, subtitle, state, info, onPress, onInfo }: TileProps) => (
-  <View style={[styles.tile, state === 'done' && styles.tileDone, state === 'locked' && styles.tileLocked, state === 'pending' && styles.tilePending]}>
-    <TouchableOpacity style={styles.tileBody} disabled={state !== 'ready'} onPress={onPress} activeOpacity={0.75}>
-      <Text style={styles.tileEmoji}>{state === 'locked' ? '🔒' : state === 'done' ? '✓' : emoji}</Text>
-      <Text style={styles.tileTitle} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={styles.tileSub} numberOfLines={2}>
-        {subtitle}
-      </Text>
-    </TouchableOpacity>
-    <TouchableOpacity style={[styles.info, info && styles.infoActive]} onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-      <Text style={[styles.infoText, info && { color: '#FFF' }]}>i</Text>
-    </TouchableOpacity>
-  </View>
-);
-
 /**
  * Что игрок знает о машине на рынке. До покупки — интервалы (каждый содержит реальное значение),
  * точные значения — только после сторонней проверки. Реальные числа в разметку не попадают.
@@ -77,7 +50,6 @@ export const ListingDiagnostics = ({ listing }: { listing: MarketListing }) => {
   const { state, balance } = useEconomy();
   const { gameTimeMs } = useGameClock();
   const { getReadout, getDiag, inspectListing, scanListing, orderServiceDiagnostics } = useMarketContext();
-  const [infoFor, setInfoFor] = useState<ActionKey | null>(null);
   const readout = getReadout(listing);
   const diag = getDiag(listing.car.id);
   const exact = readout.level === 'exact';
@@ -100,7 +72,6 @@ export const ListingDiagnostics = ({ listing }: { listing: MarketListing }) => {
     service: `Полная проверка в стороннем сервисе: точные значения через ${B.SERVICE_DIAGNOSTICS_DAYS} игровой день. Цена зависит от класса машины, практику не даёт. Если объявление исчезнет раньше, купить машину уже не получится.`,
   };
 
-  const toggleInfo = (key: ActionKey) => setInfoFor((prev) => (prev === key ? null : key));
   const inspected = readout.level !== 'visual';
   const scanned = readout.level === 'scanned' || exact;
   const canPayService = balance * 100 >= serviceCents;
@@ -125,46 +96,41 @@ export const ListingDiagnostics = ({ listing }: { listing: MarketListing }) => {
         </View>
       )}
 
-      <View style={styles.tiles}>
-        <Tile
-          emoji="👀"
-          title="Осмотреть"
-          subtitle={inspected ? 'Осмотрено' : 'Бесплатно'}
-          state={inspected ? 'done' : 'ready'}
-          info={infoFor === 'inspect'}
-          onPress={() => inspectListing(listing)}
-          onInfo={() => toggleInfo('inspect')}
-        />
-        <Tile
-          emoji="💻"
-          title="Компьютер"
-          subtitle={!hasScanner ? 'Нужен сканер' : scanned ? 'Проверено' : 'Бесплатно'}
-          state={scanned ? 'done' : hasScanner ? 'ready' : 'locked'}
-          info={infoFor === 'scan'}
-          onPress={() => scanListing(listing)}
-          onInfo={() => toggleInfo('scan')}
-        />
-        <Tile
-          emoji="🧰"
-          title="Сервис"
-          subtitle={
-            exact
+      <ActionTiles
+        tiles={[
+          {
+            key: 'inspect',
+            emoji: '👀',
+            title: 'Осмотреть',
+            subtitle: inspected ? 'Осмотрено' : 'Бесплатно',
+            state: inspected ? 'done' : 'ready',
+            info: INFO.inspect,
+            onPress: () => inspectListing(listing),
+          },
+          {
+            key: 'scan',
+            emoji: '💻',
+            title: 'Компьютер',
+            subtitle: !hasScanner ? 'Нужен сканер' : scanned ? 'Проверено' : 'Бесплатно',
+            state: scanned ? 'done' : hasScanner ? 'ready' : 'locked',
+            info: INFO.scan,
+            onPress: () => scanListing(listing),
+          },
+          {
+            key: 'service',
+            emoji: '🧰',
+            title: 'Сервис',
+            subtitle: exact
               ? 'Точные данные'
               : servicePending
                 ? `Готово через ${formatGameDays((diag.serviceReadyAtMs ?? 0) - gameTimeMs, DAY_MS)}`
-                : `${formatMoney(serviceCents)} · 1 день`
-          }
-          state={exact ? 'done' : servicePending ? 'pending' : canPayService ? 'ready' : 'locked'}
-          info={infoFor === 'service'}
-          onPress={() => orderServiceDiagnostics(listing)}
-          onInfo={() => toggleInfo('service')}
-        />
-      </View>
-      {infoFor && (
-        <TouchableOpacity style={styles.tooltip} onPress={() => setInfoFor(null)} activeOpacity={0.8}>
-          <Text style={styles.tooltipText}>{INFO[infoFor]}</Text>
-        </TouchableOpacity>
-      )}
+                : `${formatMoney(serviceCents)} · 1 день`,
+            state: exact ? 'done' : servicePending ? 'pending' : canPayService ? 'ready' : 'locked',
+            info: INFO.service,
+            onPress: () => orderServiceDiagnostics(listing),
+          },
+        ]}
+      />
     </View>
   );
 };
@@ -188,42 +154,4 @@ const styles = StyleSheet.create({
   overall: { fontSize: 12, fontWeight: '700', color: colors.textPrimary, marginTop: 2 },
   notes: { gap: 2 },
   note: { fontSize: 11, color: colors.textTertiary },
-  tiles: { flexDirection: 'row', gap: 6, marginTop: 4 },
-  tile: {
-    flex: 1,
-    minHeight: 74,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBg,
-  },
-  tileDone: { borderColor: '#22C55E' },
-  tileLocked: { opacity: 0.55 },
-  tilePending: { borderColor: '#F59E0B' },
-  tileBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 4, gap: 2 },
-  tileEmoji: { fontSize: 18, color: '#22C55E', fontWeight: '800' },
-  tileTitle: { fontSize: 12, fontWeight: '800', color: colors.textPrimary },
-  tileSub: { fontSize: 10, color: colors.textTertiary, textAlign: 'center' },
-  info: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.textTertiary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  infoText: { fontSize: 10, fontWeight: '800', color: colors.textTertiary, fontStyle: 'italic' },
-  tooltip: {
-    backgroundColor: 'rgba(99, 102, 241, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.4)',
-    borderRadius: 8,
-    padding: 8,
-  },
-  tooltipText: { fontSize: 12, color: colors.textPrimary, lineHeight: 17 },
 });
