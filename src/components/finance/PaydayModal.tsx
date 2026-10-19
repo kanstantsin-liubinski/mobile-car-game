@@ -10,7 +10,7 @@ import { ICONS } from '@img/gameIcons';
 import { FinanceRow, FinanceSection, Notice, ui } from './FinanceUI';
 import * as E from '../../economy/economy';
 import { formatMoney } from '../../economy/format';
-import { monthXp } from '../../economy/progression';
+import { managementMonthPractice, monthXp } from '../../economy/progression';
 
 /**
  * Зарплатный день: обязательный отчёт за месяц. Закрыть его можно только выплатой —
@@ -86,6 +86,10 @@ export const PaydayModal = () => {
                 label="Бонус за прибыльный месяц"
                 value={monthBonusXp > 0 ? `+${monthBonusXp} XP` : 'нет — месяц без прибыли'}
                 bold={monthBonusXp > 0}
+              />
+              <FinanceRow
+                label="Практика «Менеджмента» за месяц"
+                value={result.netProfitCents > 0 ? `+${managementMonthPractice(result.netProfitCents)}` : 'нет'}
               />
             </FinanceSection>
 

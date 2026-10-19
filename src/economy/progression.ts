@@ -108,18 +108,25 @@ export const createSkill = (level = 1): SkillState => ({
   coursesTaken: 0,
 });
 
-export const requiredPractice = (level: number): number => 1000 + 250 * (level - 1);
+/** Сколько практики нужно на уровне, чтобы перейти на следующий (своя у каждого навыка) */
+export type PracticeCurve = (level: number) => number;
+
+/** Навык «Механик» */
+export const requiredPractice: PracticeCurve = (level) => 1000 + 250 * (level - 1);
+
+/** Навык «Менеджмент» */
+export const requiredManagementPractice: PracticeCurve = (level) => 350 + 75 * (level - 1);
 
 /** +5% эффективности за каждый уровень после первого (линейно, без перемножения) */
 export const skillMultiplier = (level: number): number => 1 + 0.05 * (level - 1);
 
 /** Практика с переносом остатка; на максимальном уровне больше не копится */
-export const addPractice = (skill: SkillState, amount: number): SkillState => {
+export const addPractice = (skill: SkillState, amount: number, curve: PracticeCurve = requiredPractice): SkillState => {
   if (skill.level >= SKILL_MAX_LEVEL || !(amount > 0)) return skill;
   let level = skill.level;
   let practice = skill.practice + amount;
-  while (level < SKILL_MAX_LEVEL && practice >= requiredPractice(level)) {
-    practice -= requiredPractice(level);
+  while (level < SKILL_MAX_LEVEL && practice >= curve(level)) {
+    practice -= curve(level);
     level += 1;
   }
   if (level >= SKILL_MAX_LEVEL) practice = 0;
@@ -139,11 +146,12 @@ export interface CoursePreview {
   cooldownLeftMs: number;
 }
 
-export const courseCapacity = (level: number): number => Math.floor(requiredPractice(level) * 0.5);
+export const courseCapacity = (level: number, curve: PracticeCurve = requiredPractice): number =>
+  Math.floor(curve(level) * 0.5);
 
-export const previewCourse = (skill: SkillState, now: number): CoursePreview => {
-  const required = requiredPractice(skill.level);
-  const capacity = courseCapacity(skill.level);
+export const previewCourse = (skill: SkillState, now: number, curve: PracticeCurve = requiredPractice): CoursePreview => {
+  const required = curve(skill.level);
+  const capacity = courseCapacity(skill.level, curve);
   const granted = Math.max(0, Math.min(capacity, Math.ceil(required - skill.practice)));
   const cooldownLeftMs = Math.max(0, skill.courseCooldownUntilMs - now);
   let block: CourseBlock | null = null;
@@ -165,8 +173,8 @@ export const previewCourse = (skill: SkillState, now: number): CoursePreview => 
  * Курс покрывает не больше половины порога текущего уровня. Если порог достигнут —
  * уровень повышается, а прогресс нового уровня строго 0: избыток курса не переносится.
  */
-export const applyCourse = (skill: SkillState, now: number): SkillState | null => {
-  const preview = previewCourse(skill, now);
+export const applyCourse = (skill: SkillState, now: number, curve: PracticeCurve = requiredPractice): SkillState | null => {
+  const preview = previewCourse(skill, now, curve);
   if (!preview.available) return null;
   const base = {
     ...skill,
@@ -186,6 +194,27 @@ export const playerCourseCost = (level: number): number => roundToNearest50(1000
 /** Курс нанятого механика, в долларах, от его текущего оклада */
 export const workerCourseCost = (monthlySalaryCents: number, level: number): number =>
   Math.max(100, roundToNearest50(0.5 * (monthlySalaryCents / 100) * skillMultiplier(level)));
+
+// ─── Навык «Менеджмент» ────────────────────────────────────────────────────
+
+/** Шанс горящего предложения на одной проверке: +5% к базовым 22% за уровень (относительно), не выше 60% */
+export const hotOfferChance = (managementLevel: number): number =>
+  Math.min(0.6, 0.22 * (1 + 0.05 * (managementLevel - 1)));
+
+/** С этого уровня менеджмента — уведомления о горящих предложениях и индикатор авторынка */
+export const HOT_OFFER_NOTIFY_LEVEL = 2;
+
+/** Практика менеджмента за продажу: от ROI сделки (тот же расчёт, что и для XP) */
+export const managementSalePractice = (salePrice: number, purchasePrice: number, directCosts = 0): number => {
+  if (!(purchasePrice > 0)) return 0;
+  const roi = (salePrice - purchasePrice - directCosts) / purchasePrice;
+  if (roi >= 0.1) return 80;
+  if (roi > 0) return 20;
+  return 0;
+};
+
+/** Практика менеджмента за прибыльный месяц */
+export const managementMonthPractice = (netProfitCents: number): number => (netProfitCents > 0 ? 160 : 0);
 
 // ─── Календарь недели ──────────────────────────────────────────────────────
 

@@ -17,11 +17,12 @@ import { FinancePanel } from '@components/finance/FinancePanel';
 import { BankruptcyScreen } from '@components/finance/BankruptcyScreen';
 import { ToastProvider } from '@components/toast/ToastContext';
 import { ProgressionToasts } from '@components/toast/ProgressionToasts';
+import { HotOfferNotifier } from '@components/toast/HotOfferNotifier';
 import { commonStyles } from '@styles/styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 function GameContent() {
-  const { currentScreen, goToScreen, activeMarketId, openMarket } = useNavigation();
+  const { currentScreen, goToScreen, activeMarketId, marketFocus, openMarket } = useNavigation();
   const [financeOpen, setFinanceOpen] = useState(false);
 
   // Используем нативные insets на мобильных, веб-версию на браузере
@@ -47,7 +48,7 @@ function GameContent() {
                 onOpenGarage={() => goToScreen('garage')}
               />
             )}
-            {currentScreen === 'market' && <MarketScreen marketId={activeMarketId} onBack={() => goToScreen('city')} />}
+            {currentScreen === 'market' && <MarketScreen marketId={activeMarketId} focus={marketFocus} onBack={() => goToScreen('city')} />}
             {currentScreen === 'dealership' && <DealershipScreen onBack={() => goToScreen('city')} />}
             {currentScreen === 'skills' && <SkillsScreen />}
           </View>
@@ -59,6 +60,7 @@ function GameContent() {
           <PaydayModal />
           <BankruptcyScreen />
           <ProgressionToasts />
+          <HotOfferNotifier onOpen={openMarket} />
 
           <StatusBar style="auto" />
         </View>

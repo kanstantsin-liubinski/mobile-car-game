@@ -20,6 +20,8 @@ import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useEconomy } from '@hooks/EconomyContext';
 import { useExperienceContext } from '@hooks/ExperienceContext';
+import { useMarketContext } from '@hooks/MarketContext';
+import { RedDot } from '@components/RedDot';
 import { LocationHeader } from '@components/LocationHeader';
 import { GameIcon } from '@components/GameIcon';
 import { ICONS, BUILDING_ICONS } from '@img/gameIcons';
@@ -130,6 +132,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
   const { garageId, buyGarage } = useGarageContext();
   const { balance, addOtherIncome, buyGarage: payForGarage } = useEconomy();
   const { level } = useExperienceContext();
+  const { marketHasAlert } = useMarketContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
@@ -279,7 +282,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
   };
 
   const getStatusText = (building: CityBuilding): string => {
-    if (building.type === 'market') return 'Подержанные авто';
+    if (building.type === 'market') return marketHasAlert(building.id) ? '🔥 Горящее предложение' : 'Подержанные авто';
     if (building.type === 'dealership') return 'Новые авто';
     if (building.type === 'fountain') return '';
     switch (getGarageState(building)) {
@@ -349,6 +352,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
                     <Text style={[styles.labelStatus, dimmed && styles.labelStatusDimmed]}>
                       {getStatusText(building)}
                     </Text>
+                    {building.type === 'market' && marketHasAlert(building.id) && <RedDot />}
                   </View>
                 )}
               </Pressable>

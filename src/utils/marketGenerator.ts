@@ -34,14 +34,17 @@ const MAX_LISTING_DURATION = 20 * 60 * 1000;  // 20 минут
 export const MIN_LISTINGS_PER_TIER = 5;
 export const MAX_LISTINGS_PER_TIER = 7;
 
+/** Источник случайности: по умолчанию Math.random, для горящих предложений — детерминированный */
+export type Rng = () => number;
+
 /** Случайное целое число в диапазоне [min, max] включительно */
-function randInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function randInt(min: number, max: number, rng: Rng = Math.random): number {
+  return Math.floor(rng() * (max - min + 1)) + min;
 }
 
 /** Случайное число с плавающей точкой [min, max) */
-function randFloat(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
+function randFloat(min: number, max: number, rng: Rng = Math.random): number {
+  return rng() * (max - min) + min;
 }
 
 /** Уникальный ID для сгенерированного объявления */
@@ -55,16 +58,16 @@ function generateListingId(modelId: string): string {
  * Генерирует случайный пробег на основе года выпуска.
  * Старые машины → больше пробег
  */
-function generateMileage(year: number): number {
+function generateMileage(year: number, rng: Rng): number {
   const CURRENT_YEAR = 2026;
   const age = CURRENT_YEAR - year;
   
   // В среднем 12000-20000 км/год, но с рандомом
-  const avgPerYear = randInt(8000, 22000);
+  const avgPerYear = randInt(8000, 22000, rng);
   const base = age * avgPerYear;
   
   // Разброс ±30%
-  const variance = base * randFloat(-0.3, 0.3);
+  const variance = base * randFloat(-0.3, 0.3, rng);
   const mileage = Math.max(100, Math.round(base + variance));
   
   return mileage;
@@ -74,11 +77,11 @@ function generateMileage(year: number): number {
  * Генерирует состояние на основе года, пробега и maxCondition.
  * Состояние не может быть больше maxCondition.
  */
-function generateCondition(year: number, mileage: number): number {
+function generateCondition(year: number, mileage: number, rng: Rng): number {
   const maxCondition = calculateMaxCondition(year, mileage);
 
   // Состояние от 30% до 95% от maxCondition
-  const ratio = randFloat(0.3, 0.95);
+  const ratio = randFloat(0.3, 0.95, rng);
   const condition = maxCondition * ratio;
   
   return Math.round(condition * 10) / 10;
@@ -87,15 +90,15 @@ function generateCondition(year: number, mileage: number): number {
 /**
  * Генерирует одно объявление на основе модели.
  */
-export function generateListing(model: CarModel, now: number): MarketListing {
+export function generateListing(model: CarModel, now: number, rng: Rng = Math.random): MarketListing {
   const [minYear, maxYear] = YEAR_RANGES[model.tier];
-  const year = randInt(minYear, maxYear);
-  const mileage = generateMileage(year);
-  const condition = generateCondition(year, mileage);
+  const year = randInt(minYear, maxYear, rng);
+  const mileage = generateMileage(year, rng);
+  const condition = generateCondition(year, mileage, rng);
   
   const price = calculateCarPrice(model.basePrice, { year, mileage, condition });
   
-  const duration = randInt(MIN_LISTING_DURATION, MAX_LISTING_DURATION);
+  const duration = randInt(MIN_LISTING_DURATION, MAX_LISTING_DURATION, rng);
   
   const car: Car = {
     id: generateListingId(model.modelId),
@@ -126,7 +129,8 @@ export function generateListing(model: CarModel, now: number): MarketListing {
 export function generateRandomListing(
   tier: number,
   now: number,
-  existingModelIds: string[] = []
+  existingModelIds: string[] = [],
+  rng: Rng = Math.random
 ): MarketListing {
   const models = CAR_MODELS_BY_TIER[tier];
   
@@ -134,8 +138,8 @@ export function generateRandomListing(
   const available = models.filter((m) => !existingModelIds.includes(m.modelId));
   const pool = available.length > 0 ? available : models;
   
-  const model = pool[randInt(0, pool.length - 1)];
-  return generateListing(model, now);
+  const model = pool[randInt(0, pool.length - 1, rng)];
+  return generateListing(model, now, rng);
 }
 
 /**

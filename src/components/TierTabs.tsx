@@ -9,10 +9,12 @@ import { TIER_ICONS } from '@img/gameIcons';
 interface TierTabsProps {
   selectedTier: number;
   onSelect: (tier: number) => void;
+  /** Класс, где сейчас горящее предложение — помечается огоньком */
+  hotTier?: number | null;
 }
 
 /** Горизонтальные вкладки классов авто (авторынок, автосалон) с замками по уровню */
-export const TierTabs = ({ selectedTier, onSelect }: TierTabsProps) => {
+export const TierTabs = ({ selectedTier, onSelect, hotTier }: TierTabsProps) => {
   const { isTierUnlocked } = useExperienceContext();
 
   // Custom scrollbar state for tier tabs
@@ -71,6 +73,9 @@ export const TierTabs = ({ selectedTier, onSelect }: TierTabsProps) => {
             >
               {!unlocked && (
                 <Text style={{ position: 'absolute', top: 4, right: 6, fontSize: 10 }}>🔒</Text>
+              )}
+              {hotTier === tier && (
+                <Text style={{ position: 'absolute', top: 4, left: 6, fontSize: 12 }}>🔥</Text>
               )}
               <GameIcon source={TIER_ICONS[tier]} size={40} style={!unlocked && { opacity: 0.4 }} />
               <Text

@@ -40,13 +40,23 @@ import {
   awardFullRepair,
   buyPlayerCourse,
   buyWorkerCourse,
+  buyManagementCourse,
+  managementCourseOffer,
   migrateLegacyPlayer,
   recordPlayerTap,
   syncWorkerSkill,
   workerPracticeAt,
   type EconomyState,
 } from './economy.ts';
-import { COURSE_COOLDOWN_MS, requiredXp } from './progression.ts';
+import {
+  COURSE_COOLDOWN_MS,
+  addPractice,
+  createSkill,
+  managementSalePractice,
+  playerCourseCost,
+  requiredManagementPractice,
+  requiredXp,
+} from './progression.ts';
 
 const $ = (dollars: number) => dollars * 100;
 
@@ -528,5 +538,95 @@ describe('навыки и курсы в экономике', () => {
   it('курс не оплачивается кредитом', () => {
     const s = createEconomy($(500));
     assert.equal(buyPlayerCourse(s, 0).ok, false);
+  });
+});
+
+describe('навык «Менеджмент»', () => {
+  const car = { carId: 'c1', name: 'Car', tier: 1, priceCents: $(1000), conditionPct: 50, maxConditionPct: 80 };
+  const sold = (price: number) =>
+    sellCar(buyCar(createEconomy($(10_000)), car).state, { carId: 'c1', priceCents: $(price), fallbackCostCents: 0 });
+
+  it('порог уровня: 350 + 75 за уровень', () => {
+    assert.equal(requiredManagementPractice(1), 350);
+    assert.equal(requiredManagementPractice(2), 425);
+    assert.equal(requiredManagementPractice(20), 350 + 75 * 19);
+  });
+
+  it('практика за продажу по ROI: ≥10% → 80, 0–10% → 20, без прибыли → 0', () => {
+    assert.equal(sold(1100).player.management.practice, 80);
+    assert.equal(sold(1500).player.management.practice, 80);
+    assert.equal(sold(1050).player.management.practice, 20);
+    assert.equal(sold(1000).player.management.practice, 0);
+    assert.equal(sold(900).player.management.practice, 0);
+    assert.equal(managementSalePractice(1099.99, 1000), 20);
+  });
+
+  it('ROI считается от фактической (сниженной) цены покупки', () => {
+    // Горящее предложение: купили за $800 вместо $1000, продали за $900 → ROI 12.5%
+    let s = buyCar(createEconomy($(10_000)), { ...car, priceCents: $(800) }).state;
+    s = sellCar(s, { carId: 'c1', priceCents: $(900), fallbackCostCents: 0 });
+    assert.equal(s.player.management.practice, 80);
+    assert.equal(s.player.xp.totalXp, 25, 'XP — по обычной формуле, без особых бонусов');
+  });
+
+  it('повторная обработка продажи не даёт практику', () => {
+    const s = sold(1500);
+    const again = sellCar(s, { carId: 'c1', priceCents: $(1500), fallbackCostCents: 0 });
+    assert.equal(again.player.management.practice, 80);
+    const restored = must(deserializeEconomy(serializeEconomy(s, 0)));
+    assert.equal(sellCar(restored.state, { carId: 'c1', priceCents: $(1500), fallbackCostCents: 0 }).player.management.practice, 80);
+  });
+
+  it('прибыльный месяц: +160 один раз; убыточный — 0', () => {
+    const closed = close(sold(1500), MONTH_MS);
+    assert.equal(closed.state.player.management.practice, 80 + 160);
+    assert.equal(closed.state.history[0].managementPractice, 160);
+    assert.equal(close(closed.state, MONTH_MS).outcome, 'noop');
+    const losing = close(createEconomy(0), MONTH_MS);
+    assert.equal(losing.state.player.management.practice, 0);
+  });
+
+  it('остаток практики переносится на следующий уровень', () => {
+    const skill = addPractice({ ...createSkill(), practice: 300 }, 80, requiredManagementPractice);
+    assert.equal(skill.level, 2);
+    assert.equal(skill.practice, 30);
+  });
+
+  it('курс: половина порога, без переноса, цена как у «Механика», своя перезарядка', () => {
+    let s = createEconomy($(10_000));
+    const offer = managementCourseOffer(s, 0);
+    assert.equal(offer.costCents, $(playerCourseCost(1)));
+    assert.equal(offer.preview.granted, 175);
+    s = must(buyManagementCourse(s, 0).ok ? buyManagementCourse(s, 0).state : null);
+    assert.equal(s.player.management.practice, 175);
+    assert.equal(s.balanceCents, $(9000));
+    assert.equal(s.ledger.otherExpenseCents, $(1000), 'расход месяца');
+    assert.equal(buyManagementCourse(s, 0).ok, false, 'второй курс на том же уровне нельзя');
+    // Курс «Механика» доступен — перезарядки независимы
+    assert.equal(buyPlayerCourse(s, 0).ok, true);
+
+    // Курс, закрывающий уровень, не переносит избыток
+    let near = createEconomy($(10_000));
+    near = { ...near, player: { ...near.player, management: { ...createSkill(), practice: 300 } } };
+    const leveled = buyManagementCourse(near, 0);
+    assert.equal(leveled.ok, true);
+    assert.equal(leveled.state.player.management.level, 2);
+    assert.equal(leveled.state.player.management.practice, 0);
+    // Следующий курс — только после перезарядки
+    assert.equal(managementCourseOffer(leveled.state, 0).preview.block, 'cooldown');
+    assert.equal(managementCourseOffer(leveled.state, COURSE_COOLDOWN_MS).preview.available, true);
+  });
+
+  it('курс оплачивается только свободными деньгами', () => {
+    assert.equal(buyManagementCourse(createEconomy($(500)), 0).ok, false);
+  });
+
+  it('старое сохранение без менеджмента получает 1 уровень', () => {
+    const s = createEconomy(0);
+    const { management: _m, ...player } = s.player;
+    const raw = JSON.stringify({ version: 1, gameTimeMs: 0, state: { ...s, player } });
+    const restored = must(deserializeEconomy(raw));
+    assert.equal(restored.state.player.management.level, 1);
+    assert.equal(restored.state.player.management.practice, 0);
   });
 });

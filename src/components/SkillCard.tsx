@@ -5,7 +5,14 @@ import { GameIcon } from '@components/GameIcon';
 import { ICONS } from '@img/gameIcons';
 import { formatGameCooldown, formatMoney } from '../economy/format';
 import { DAY_MS, DAYS_IN_MONTH, type CourseOffer } from '../economy/economy';
-import { COURSE_COOLDOWN_MS, SKILL_MAX_LEVEL, requiredPractice, skillMultiplier, type SkillState } from '../economy/progression';
+import {
+  COURSE_COOLDOWN_MS,
+  SKILL_MAX_LEVEL,
+  requiredPractice,
+  skillMultiplier,
+  type PracticeCurve,
+  type SkillState,
+} from '../economy/progression';
 
 interface SkillCardProps {
   title: string;
@@ -19,14 +26,32 @@ interface SkillCardProps {
   onBuyCourse: () => void;
   /** Дополнительные строки (скорость, зарплата механика) */
   extraRows?: { label: string; value: string }[];
+  /** Порог практики по уровням — у каждого навыка свой */
+  curve?: PracticeCurve;
+  /** Значение бонуса на уровне (по умолчанию +5% за уровень) */
+  bonusValue?: (level: number) => string;
+  /** Подсказка под заголовком */
+  note?: string;
 }
 
 const bonusText = (level: number) => `+${Math.round((skillMultiplier(level) - 1) * 100)}%`;
 
 /** Навык «Механик»: уровень, практика, бонус и курс — всё из текущего состояния игры */
-export const SkillCard = ({ title, icon, skill, practice, bonusLabel, offer, onBuyCourse, extraRows }: SkillCardProps) => {
+export const SkillCard = ({
+  title,
+  icon,
+  skill,
+  practice,
+  bonusLabel,
+  offer,
+  onBuyCourse,
+  extraRows,
+  curve = requiredPractice,
+  bonusValue = bonusText,
+  note,
+}: SkillCardProps) => {
   const isMax = skill.level >= SKILL_MAX_LEVEL;
-  const required = requiredPractice(skill.level);
+  const required = curve(skill.level);
   const current = Math.min(required, Math.floor(practice));
   const preview = offer?.preview;
 
@@ -50,6 +75,7 @@ export const SkillCard = ({ title, icon, skill, practice, bonusLabel, offer, onB
           {isMax ? ' (макс.)' : ''}
         </Text>
       </View>
+      {note && <Text style={styles.note}>{note}</Text>}
 
       {!isMax && (
         <>
@@ -68,12 +94,12 @@ export const SkillCard = ({ title, icon, skill, practice, bonusLabel, offer, onB
 
       <View style={styles.row}>
         <Text style={styles.label}>{bonusLabel}</Text>
-        <Text style={styles.value}>{bonusText(skill.level)}</Text>
+        <Text style={styles.value}>{bonusValue(skill.level)}</Text>
       </View>
       {!isMax && (
         <View style={styles.row}>
           <Text style={styles.label}>Следующий уровень</Text>
-          <Text style={[styles.value, { color: colors.primary }]}>{bonusText(skill.level + 1)}</Text>
+          <Text style={[styles.value, { color: colors.primary }]}>{bonusValue(skill.level + 1)}</Text>
         </View>
       )}
       {extraRows?.map((row) => (
@@ -168,6 +194,12 @@ const styles = StyleSheet.create({
   fill: {
     height: '100%',
     backgroundColor: colors.primary,
+  },
+  note: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#FBBF24',
+    marginBottom: 8,
   },
   hint: {
     fontSize: 11,

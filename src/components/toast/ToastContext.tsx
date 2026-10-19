@@ -20,7 +20,9 @@ export interface ToastOptions {
   title: string;
   message?: string;
   icon?: ImageSourcePropType;
-  tone?: 'info' | 'success';
+  tone?: 'info' | 'success' | 'hot';
+  /** Тап по тосту: действие и закрытие */
+  onPress?: () => void;
 }
 
 interface Toast extends ToastOptions {
@@ -99,7 +101,13 @@ const ToastItem = ({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
     Animated.timing(appear, { toValue: 1, duration: 200, useNativeDriver: Platform.OS !== 'web' }).start();
   }, [appear]);
 
-  const accent = toast.tone === 'success' ? '#22C55E' : colors.primary;
+  const accent = toast.tone === 'success' ? '#22C55E' : toast.tone === 'hot' ? '#F97316' : colors.primary;
+  const handlePress = toast.onPress
+    ? () => {
+        onDismiss(toast.id);
+        toast.onPress?.();
+      }
+    : undefined;
 
   return (
     <Animated.View
@@ -112,11 +120,13 @@ const ToastItem = ({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
         },
       ]}
     >
-      {toast.icon && <GameIcon source={toast.icon} size={40} />}
-      <View style={styles.texts}>
-        <Text style={styles.title}>{toast.title}</Text>
-        {toast.message && <Text style={styles.message}>{toast.message}</Text>}
-      </View>
+      <TouchableOpacity style={styles.body} onPress={handlePress} disabled={!handlePress} activeOpacity={0.8}>
+        {toast.icon && <GameIcon source={toast.icon} size={40} />}
+        <View style={styles.texts}>
+          <Text style={styles.title}>{toast.title}</Text>
+          {toast.message && <Text style={styles.message}>{toast.message}</Text>}
+        </View>
+      </TouchableOpacity>
       <TouchableOpacity onPress={() => onDismiss(toast.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
         <Text style={styles.close}>✕</Text>
       </TouchableOpacity>
@@ -148,6 +158,12 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
+  },
+  body: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   texts: {
     flex: 1,

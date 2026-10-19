@@ -42,3 +42,10 @@ export const formatGameCooldown = (ms: number, dayMs: number, daysInMonth: numbe
   if (months === 0) return pluralDays(days);
   return days === 0 ? `${months} мес.` : `${months} мес. ${days} дн.`;
 };
+
+/** Таймер горящего предложения: дни, а в последний игровой день — секунды */
+export const formatHotTimer = (ms: number, dayMs: number): string => {
+  if (ms <= 0) return '0 сек';
+  if (ms >= dayMs) return pluralDays(Math.ceil(ms / dayMs));
+  return `${Math.ceil(ms / 1000)} сек`;
+};

@@ -3,7 +3,7 @@ import { useEconomy } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useToast } from '@components/toast/ToastContext';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
-import { skillMultiplier } from '../../economy/progression';
+import { HOT_OFFER_NOTIFY_LEVEL, hotOfferChance, skillMultiplier } from '../../economy/progression';
 
 const bonus = (level: number) => `+${Math.round((skillMultiplier(level) - 1) * 100)}%`;
 
@@ -15,7 +15,8 @@ export const ProgressionToasts = () => {
 
   const playerLevel = state.player.xp.level;
   const playerSkill = state.player.skill.level;
-  const prev = useRef<{ level: number; skill: number; workers: Record<string, number> } | null>(null);
+  const management = state.player.management.level;
+  const prev = useRef<{ level: number; skill: number; management: number; workers: Record<string, number> } | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -26,7 +27,7 @@ export const ProgressionToasts = () => {
         .map((c) => [c.mechanicId, c.skill.level]),
     );
     const before = prev.current;
-    prev.current = { level: playerLevel, skill: playerSkill, workers };
+    prev.current = { level: playerLevel, skill: playerSkill, management, workers };
     // Первое значение после загрузки — это не повышение
     if (!before) return;
 
@@ -46,6 +47,18 @@ export const ProgressionToasts = () => {
         tone: 'success',
       });
     }
+    if (management > before.management) {
+      const chance = `${(Math.round(hotOfferChance(management) * 1000) / 10).toLocaleString('ru-RU')}%`;
+      showToast({
+        title: `Навык «Менеджмент»: уровень ${management}`,
+        message:
+          before.management < HOT_OFFER_NOTIFY_LEVEL && management >= HOT_OFFER_NOTIFY_LEVEL
+            ? `Шанс горящего предложения ${chance}. Открыты уведомления и индикатор авторынка.`
+            : `Шанс горящего предложения теперь ${chance}.`,
+        icon: ICONS.money,
+        tone: 'success',
+      });
+    }
     for (const [id, level] of Object.entries(workers)) {
       const was = before.workers[id];
       if (was !== undefined && level > was) {
@@ -58,7 +71,7 @@ export const ProgressionToasts = () => {
         });
       }
     }
-  }, [isLoaded, playerLevel, playerSkill, state.contracts]);
+  }, [isLoaded, playerLevel, playerSkill, management, state.contracts]);
 
   return null;
 };

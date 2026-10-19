@@ -34,6 +34,8 @@ interface EconomyContextType {
   playerTapMultiplier: number;
   playerCourseOffer: () => E.CourseOffer;
   buyPlayerCourse: () => boolean;
+  managementCourseOffer: () => E.CourseOffer;
+  buyManagementCourse: () => boolean;
   workerCourseOffer: (mechanicId: string) => E.CourseOffer | null;
   buyWorkerCourse: (mechanicId: string) => boolean;
   initLegacyWorkerSkill: (mechanicId: string, level: number) => void;
@@ -252,6 +254,8 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const playerCourseOffer = useCallback(() => E.playerCourseOffer(stateRef.current, timeRef.current), []);
   const buyPlayerCourse = useCallback(() => run((s, now) => E.buyPlayerCourse(s, now)), [run]);
+  const managementCourseOffer = useCallback(() => E.managementCourseOffer(stateRef.current, timeRef.current), []);
+  const buyManagementCourse = useCallback(() => run((s, now) => E.buyManagementCourse(s, now)), [run]);
   const workerCourseOffer = useCallback(
     (mechanicId: string) => E.workerCourseOffer(stateRef.current, mechanicId, timeRef.current),
     [],
@@ -358,6 +362,8 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       playerTapMultiplier: E.playerTapMultiplier(state),
       playerCourseOffer,
       buyPlayerCourse,
+      managementCourseOffer,
+      buyManagementCourse,
       workerCourseOffer,
       buyWorkerCourse,
       initLegacyWorkerSkill,
@@ -385,6 +391,8 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       recordPlayerTap,
       playerCourseOffer,
       buyPlayerCourse,
+      managementCourseOffer,
+      buyManagementCourse,
       workerCourseOffer,
       buyWorkerCourse,
       initLegacyWorkerSkill,

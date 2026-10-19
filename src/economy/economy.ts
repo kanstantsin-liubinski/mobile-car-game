@@ -139,6 +139,8 @@ export interface MonthReport extends MonthLedger {
   mechanics: MechanicMonthStat[];
   /** Бонус XP за прибыльный месяц */
   monthXp: number;
+  /** Практика менеджмента за месяц */
+  managementPractice: number;
 }
 
 export interface Bankruptcy {
@@ -171,6 +173,8 @@ export interface EconomyState {
 export interface PlayerProgress {
   xp: P.PlayerXp;
   skill: P.SkillState;
+  /** Навык «Менеджмент»: шанс горящих предложений, с 2 уровня — уведомления о них */
+  management: P.SkillState;
   /** Успешные ручные тапы ремонта за всё время */
   manualTaps: number;
 }
@@ -178,6 +182,7 @@ export interface PlayerProgress {
 export const createPlayerProgress = (): PlayerProgress => ({
   xp: P.createPlayerXp(),
   skill: P.createSkill(),
+  management: P.createSkill(),
   manualTaps: 0,
 });
 
@@ -435,6 +440,11 @@ export interface OpResult {
 const awardXp = (s: EconomyState, amount: number): EconomyState =>
   amount > 0 ? { ...s, player: { ...s.player, xp: P.addXp(s.player.xp, amount) } } : s;
 
+const awardManagement = (s: EconomyState, amount: number): EconomyState =>
+  amount > 0
+    ? { ...s, player: { ...s.player, management: P.addPractice(s.player.management, amount, P.requiredManagementPractice) } }
+    : s;
+
 /** Списание свободных денег. Кредит здесь не используется — только реальный баланс. */
 const spend = (s: EconomyState, cents: number, apply: (l: MonthLedger) => MonthLedger, opId?: string): OpResult => {
   if (isProcessed(s, opId)) return { state: s, ok: true };
@@ -512,8 +522,9 @@ export const sellCar = (s: EconomyState, sale: CarSale): EconomyState => {
   const cost = asset ? assetCostCents(asset) : sale.fallbackCostCents;
   const purchase = asset ? asset.purchaseCents : sale.fallbackCostCents;
   const xp = P.saleXp(asset?.tier ?? sale.tier, sale.priceCents, purchase, asset?.extraCostsCents ?? 0);
+  const practice = P.managementSalePractice(sale.priceCents, purchase, asset?.extraCostsCents ?? 0);
   const { [sale.carId]: _sold, ...assets } = s.assets;
-  return withProcessed(awardXp({
+  const withXp = awardXp({
     ...s,
     balanceCents: s.balanceCents + sale.priceCents,
     assets,
@@ -529,7 +540,8 @@ export const sellCar = (s: EconomyState, sale: CarSale): EconomyState => {
       carsSold: s.totals.carsSold + 1,
       revenueCents: s.totals.revenueCents + sale.priceCents,
     },
-  }, xp), opId);
+  }, xp);
+  return withProcessed(awardManagement(withXp, practice), opId);
 };
 
 /** XP за первое полное восстановление конкретной машины — один раз за экземпляр */
@@ -620,6 +632,25 @@ export const buyPlayerCourse = (s: EconomyState, now: number): OpResult => {
   const paid = spendOtherExpense(s, offer.costCents);
   if (!paid.ok) return paid;
   return { ok: true, state: { ...paid.state, player: { ...paid.state.player, skill } } };
+};
+
+export const managementCourseOffer = (s: EconomyState, now: number): CourseOffer => {
+  const costCents = toCents(P.playerCourseCost(s.player.management.level));
+  return {
+    costCents,
+    preview: P.previewCourse(s.player.management, now, P.requiredManagementPractice),
+    affordable: canAfford(s, costCents),
+  };
+};
+
+/** Курс менеджмента: те же правила и цена, что у курса «Механика», перезарядка своя */
+export const buyManagementCourse = (s: EconomyState, now: number): OpResult => {
+  const offer = managementCourseOffer(s, now);
+  const management = P.applyCourse(s.player.management, now, P.requiredManagementPractice);
+  if (!offer.preview.available || !management) return { state: s, ok: false };
+  const paid = spendOtherExpense(s, offer.costCents);
+  if (!paid.ok) return paid;
+  return { ok: true, state: { ...paid.state, player: { ...paid.state.player, management } } };
 };
 
 export const workerCourseOffer = (s: EconomyState, mechanicId: string, now: number): CourseOffer | null => {
@@ -876,6 +907,9 @@ export const closeMonth = (
   // Бонус за прибыльный месяц: от XP продаж этого месяца, ремонт в базу не входит
   const bonusXp = P.monthXp(result.netProfitCents, s.ledger.salesXp);
   state = awardXp(state, bonusXp);
+  // Практика менеджмента за прибыльный месяц — тоже ровно один раз, вместе с закрытием
+  const managementPractice = P.managementMonthPractice(result.netProfitCents);
+  state = awardManagement(state, managementPractice);
 
   const ledger = state.ledger;
   const report: MonthReport = {
@@ -890,6 +924,7 @@ export const closeMonth = (
     loanEndCents: state.loan?.principalCents ?? 0,
     mechanics,
     monthXp: bonusXp,
+    managementPractice,
   };
 
   // Новый период: начисления начинаются заново с конца месяца по текущей ставке
@@ -1090,9 +1125,11 @@ export const deserializeEconomy = (raw: string): EconomySave | null => {
       ledger: { ...base.ledger, ...save.state.ledger },
       totals: { ...base.totals, ...save.state.totals },
       // Нет данных прогрессии — это сохранение старой версии, опыт перенесёт провайдер
-      player: loaded.player ?? base.player,
+      player: loaded.player
+        ? { ...loaded.player, management: loaded.player.management ?? P.createSkill() }
+        : base.player,
       playerMigrated: loaded.player ? (loaded.playerMigrated ?? true) : false,
-      history: (loaded.history ?? []).map((m) => ({ ...m, monthXp: m.monthXp ?? 0, salesXp: m.salesXp ?? 0, repairXp: m.repairXp ?? 0 })),
+      history: (loaded.history ?? []).map((m) => ({ ...m, monthXp: m.monthXp ?? 0, managementPractice: m.managementPractice ?? 0, salesXp: m.salesXp ?? 0, repairXp: m.repairXp ?? 0 })),
     };
     const gameTimeMs = Math.min(Math.max(0, save.gameTimeMs || 0), monthEndMs(state));
     return { version: 1, gameTimeMs, state };

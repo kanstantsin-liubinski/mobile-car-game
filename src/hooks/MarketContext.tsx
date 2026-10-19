@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   generateAllInitialListings,
@@ -6,12 +6,23 @@ import {
   MIN_LISTINGS_PER_TIER,
   MAX_LISTINGS_PER_TIER,
 } from '../utils/marketGenerator';
-import type { MarketListing } from '../utils/marketGenerator';
-import { TOTAL_TIERS } from '../data/carModels';
+import type { MarketListing, Rng } from '../utils/marketGenerator';
+import { TOTAL_TIERS, TIER_UNLOCK_LEVELS } from '../data/carModels';
 import { MARKETS } from '../data/cityBuildings';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
+import * as H from '../economy/hotOffers';
+import { HOT_OFFER_NOTIFY_LEVEL, hotOfferChance } from '../economy/progression';
 
 type TierListings = Record<number, MarketListing[]>;
+export type HotOffer = H.HotOffer<MarketListing>;
+type HotState = H.HotOfferState<MarketListing>;
+
+/** Сохранение авторынка: обычные объявления и горящие предложения отдельно — обновление рынка не трогает горящее */
+interface MarketSave {
+  version: 2;
+  listings: Record<string, TierListings>;
+  hot: HotState;
+}
 
 interface MarketContextType {
   /** Все текущие объявления: авторынок → тир → объявления */
@@ -24,6 +35,14 @@ interface MarketContextType {
   getTimeRemaining: (listingId: string) => number;
   /** Текущее игровое время — объявления живут по игровым часам и стоят на паузе вместе с игрой */
   currentTime: number;
+  /** Активное горящее предложение (не больше одного) */
+  hotOffer: HotOffer | null;
+  /** Горящее предложение как объявление этого рынка и класса, если оно там есть */
+  getHotListing: (marketId: string, tier: number) => MarketListing | null;
+  /** Красная точка авторынка: менеджмент от 2 уровня и есть активное предложение */
+  marketHasAlert: (marketId: string) => boolean;
+  /** Уведомление по предложению показано — больше не показывать */
+  markHotNotified: (offerId: string) => void;
 }
 
 const MarketContext = createContext<MarketContextType | undefined>(undefined);
@@ -66,6 +85,32 @@ const tickMarket = (prev: TierListings, now: number): { listings: TierListings; 
   return { listings: updated, changed };
 };
 
+/** Горящее предложение собирается обычным генератором, но только из открытых игроку классов */
+const hotContext = (managementLevel: number, playerLevel: number): H.HotOfferContext<MarketListing> => ({
+  chance: hotOfferChance(managementLevel),
+  generate: (rng: Rng) => {
+    const tiers = Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).filter(
+      (tier) => playerLevel >= (TIER_UNLOCK_LEVELS[tier] ?? 0),
+    );
+    if (tiers.length === 0) return null;
+    const market = MARKETS[Math.floor(rng() * MARKETS.length)];
+    const tier = tiers[Math.floor(rng() * tiers.length)];
+    const listing = generateRandomListing(tier, 0, [], rng);
+    return { marketId: market.id, tier, listing, normalPrice: listing.car.price };
+  },
+  // Скидка только на цену покупки: рыночная стоимость машины в гараже остаётся обычной
+  applyPrice: (listing, price, id) => ({
+    ...listing,
+    car: { ...listing.car, id, price, marketPrice: listing.car.price },
+  }),
+});
+
+const hotAsListing = (offer: HotOffer): MarketListing => ({
+  ...offer.listing,
+  createdAt: offer.createdAtMs,
+  expiresAt: offer.expiresAtMs,
+});
+
 const tickAllMarkets = (prev: Record<string, TierListings>, now: number) => {
   let changed = false;
   const updated: Record<string, TierListings> = {};
@@ -78,43 +123,69 @@ const tickAllMarkets = (prev: Record<string, TierListings>, now: number) => {
 };
 
 export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isLoaded: economyLoaded } = useEconomy();
+  const { isLoaded: economyLoaded, state: economy } = useEconomy();
   const { gameTimeMs } = useGameClock();
   // У каждого авторынка свой независимый набор объявлений
   const [listings, setListings] = useState<Record<string, TierListings>>({});
+  const [hot, setHot] = useState<HotState | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const currentTime = gameTimeMs;
   const marketSecond = Math.floor(gameTimeMs / MARKET_TICK_MS);
+  const managementLevel = economy.player.management.level;
+  const playerLevel = economy.player.xp.level;
+  // Шанс и открытые классы берутся на момент проверки
+  const hotCtxRef = useRef(hotContext(managementLevel, playerLevel));
+  hotCtxRef.current = hotContext(managementLevel, playerLevel);
 
   // Загружаем сохранённые объявления, когда известно игровое время
   useEffect(() => {
     if (!economyLoaded || isLoaded) return;
     const load = async () => {
       let saved: Record<string, TierListings> = {};
+      let savedHot: unknown = null;
       try {
         const raw = await AsyncStorage.getItem(MARKET_KEY);
-        if (raw) saved = JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          // Старый формат — просто объявления без горящих предложений
+          if (parsed && parsed.version === 2) {
+            saved = parsed.listings ?? {};
+            savedHot = parsed.hot;
+          } else {
+            saved = parsed ?? {};
+          }
+        }
       } catch (error) {
         console.error('Error loading market:', error);
       }
       setListings(tickAllMarkets(saved, gameTimeMs));
+      setHot(H.advanceHotOffers(H.restoreHotOfferState<MarketListing>(savedHot, gameTimeMs), gameTimeMs, hotCtxRef.current));
       setIsLoaded(true);
     };
     load();
   }, [economyLoaded, isLoaded]);
 
   useEffect(() => {
-    if (!isLoaded) return;
-    AsyncStorage.setItem(MARKET_KEY, JSON.stringify(listings)).catch((error) =>
+    if (!isLoaded || !hot) return;
+    const save: MarketSave = { version: 2, listings, hot };
+    AsyncStorage.setItem(MARKET_KEY, JSON.stringify(save)).catch((error) =>
       console.error('Error saving market:', error),
     );
-  }, [listings, isLoaded]);
+  }, [listings, hot, isLoaded]);
 
-  // Раз в игровую секунду убираем истёкшие объявления и добавляем новые
+  // Раз в игровую секунду убираем истёкшие объявления, добавляем новые и проводим проверки горящих предложений
   useEffect(() => {
     if (!isLoaded) return;
     setListings((prev) => tickAllMarkets(prev, gameTimeMs));
+    setHot((prev) => {
+      if (!prev) return prev;
+      const next = H.advanceHotOffers(prev, gameTimeMs, hotCtxRef.current);
+      // Пересчёт без изменений не должен вызывать сохранение
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+    });
   }, [marketSecond, isLoaded]);
+
+  const hotOffer = hot ? H.activeOffer(hot, gameTimeMs) : null;
 
   const getListingsForTier = useCallback(
     (marketId: string, tier: number): MarketListing[] => {
@@ -124,6 +195,8 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 
   const removeListing = useCallback((listingId: string) => {
+    // Купленное горящее предложение исчезает навсегда
+    setHot((prev) => (prev ? H.markOfferBought(prev, listingId) : prev));
     setListings((prev) => {
       const updated: Record<string, TierListings> = {};
       let found = false;
@@ -149,6 +222,7 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const getTimeRemaining = useCallback(
     (listingId: string): number => {
+      if (hotOffer && hotOffer.id === listingId) return Math.max(0, hotOffer.expiresAtMs - currentTime);
       for (const marketListings of Object.values(listings)) {
         for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
           const listing = (marketListings[tier] || []).find((l) => l.car.id === listingId);
@@ -159,8 +233,23 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       return -1;
     },
-    [listings, currentTime]
+    [listings, currentTime, hotOffer]
   );
+
+  const getHotListing = useCallback(
+    (marketId: string, tier: number): MarketListing | null =>
+      hotOffer && hotOffer.marketId === marketId && hotOffer.tier === tier ? hotAsListing(hotOffer) : null,
+    [hotOffer],
+  );
+
+  const marketHasAlert = useCallback(
+    (marketId: string) => managementLevel >= HOT_OFFER_NOTIFY_LEVEL && !!hotOffer && hotOffer.marketId === marketId,
+    [managementLevel, hotOffer],
+  );
+
+  const markHotNotified = useCallback((offerId: string) => {
+    setHot((prev) => (prev ? H.markOfferNotified(prev, offerId) : prev));
+  }, []);
 
   return (
     <MarketContext.Provider
@@ -170,6 +259,10 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         removeListing,
         getTimeRemaining,
         currentTime,
+        hotOffer,
+        getHotListing,
+        marketHasAlert,
+        markHotNotified,
       }}
     >
       {children}

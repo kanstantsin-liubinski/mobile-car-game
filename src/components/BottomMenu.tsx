@@ -5,6 +5,9 @@ import { menuStyles } from '@styles/styles';
 import { GameIcon } from '@components/GameIcon';
 import { ICONS } from '@img/gameIcons';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
+import { useMarketContext } from '@hooks/MarketContext';
+import { RedDot } from '@components/RedDot';
+import { MARKETS } from '../data/cityBuildings';
 import type { Screen } from '@/types/index';
 
 const MENU_ICON_SIZE = 40;
@@ -20,6 +23,9 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
   // Авторынок и автосалон открываются из города, поэтому вкладка «Город» активна и на них
   const isCityActive = currentScreen === 'city' || currentScreen === 'market' || currentScreen === 'dealership';
+  // Горящее предложение на любом авторынке подсвечивает вкладку «Город»
+  const { marketHasAlert } = useMarketContext();
+  const cityAlert = currentScreen !== 'market' && MARKETS.some((m) => marketHasAlert(m.id));
 
   return (
     <View style={[menuStyles.bottomMenu, { paddingBottom: insets.bottom }]}>
@@ -34,7 +40,10 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
         style={[menuStyles.menuButton, isCityActive && menuStyles.menuButtonActive]}
         onPress={() => onScreenChange('city')}
       >
-        <GameIcon source={ICONS.navCity} size={MENU_ICON_SIZE} style={!isCityActive && menuStyles.menuIconInactive} />
+        <View>
+          <GameIcon source={ICONS.navCity} size={MENU_ICON_SIZE} style={!isCityActive && menuStyles.menuIconInactive} />
+          {cityAlert && <RedDot />}
+        </View>
       </TouchableOpacity>
 
       <TouchableOpacity
