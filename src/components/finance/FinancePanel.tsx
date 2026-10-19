@@ -12,7 +12,7 @@ import { getMechanicAvatar } from '@img/gameIcons';
 import { TIER_NAMES } from '../../data/carModels';
 import { FinanceRow, FinanceSection, Notice, financeColors, moneyColor, ui } from './FinanceUI';
 import * as E from '../../economy/economy';
-import { formatDuration, formatMoney, formatPercent } from '../../economy/format';
+import { formatGameDays, formatGameSpan, formatMoney, formatPercent } from '../../economy/format';
 
 type Tab = 'overview' | 'pnl' | 'assets' | 'mechanics' | 'advice' | 'loan';
 
@@ -86,7 +86,7 @@ const OverviewTab = () => {
   return (
     <>
       <FinanceSection title={`Месяц ${calendar.month} · День ${calendar.day}/${E.DAYS_IN_MONTH}`}>
-        <FinanceRow label="До зарплатного дня" value={formatDuration(calendar.msToPayday)} />
+        <FinanceRow label="До зарплатного дня" value={formatGameDays(calendar.msToPayday)} />
       </FinanceSection>
       <FinanceSection title="Деньги и обязательства">
         <FinanceRow label="Свободные деньги" cents={state.balanceCents} bold />
@@ -251,8 +251,8 @@ const MechanicsTab = () => {
             <FinanceRow label="Начислено в этом месяце" cents={E.accruedSalaryCents(c, gameTimeMs)} />
             <FinanceRow label="Прокачка" value={`ур. ${m.skillLevel} · опыт ${m.experience}`} />
             <FinanceRow label="Ремонтов" value={`${c.jobsDoneMonth} в этом месяце · ${c.jobsDoneTotal} всего`} />
-            <FinanceRow label="Занят" value={formatDuration(activity.busyMs)} />
-            <FinanceRow label="Простой" value={formatDuration(activity.idleMs)} />
+            <FinanceRow label="Занят" value={formatGameSpan(activity.busyMs)} />
+            <FinanceRow label="Простой" value={formatGameSpan(activity.idleMs)} />
             <Text style={styles.hint}>Загрузка — доля времени в ремонте от времени в штате в этом месяце.</Text>
           </View>
         );

@@ -58,13 +58,14 @@ export const SkillCard = ({
   let courseStatus: string | null = null;
   if (preview && !preview.available) {
     if (preview.block === 'already-taken') courseStatus = 'Курс на этом уровне уже пройден — дальше только практика';
-    else if (preview.block === 'cooldown')
-      courseStatus = `Перезарядка: ещё ${formatGameCooldown(preview.cooldownLeftMs, DAY_MS, DAYS_IN_MONTH)}`;
     else if (preview.block === 'threshold-reached') courseStatus = 'Порог уровня уже достигнут';
   } else if (offer && !offer.affordable) {
     courseStatus = 'Недостаточно свободных денег';
   }
   const canBuy = !!offer && !!preview?.available && offer.affordable;
+  // Перезарядка после пройденного курса — видна всегда, пока идёт
+  const cooldownLeft = preview?.cooldownLeftMs ?? 0;
+  const cooldownText = formatGameCooldown(cooldownLeft, DAY_MS, DAYS_IN_MONTH);
 
   return (
     <View style={styles.card}>
@@ -126,6 +127,19 @@ export const SkillCard = ({
             Курс покрывает до половины порога уровня ({preview.capacity.toLocaleString('ru-RU')}), остаток не переносится.
             Перезарядка — {COURSE_COOLDOWN_MS / (DAY_MS * DAYS_IN_MONTH)} игровых месяца.
           </Text>
+          {cooldownLeft > 0 && (
+            <View style={styles.cooldown}>
+              <View style={styles.row}>
+                <Text style={styles.cooldownLabel}>⏳ Перезарядка курса</Text>
+                <Text style={styles.cooldownValue}>ещё {cooldownText}</Text>
+              </View>
+              <View style={styles.track}>
+                <View
+                  style={[styles.cooldownFill, { width: `${(1 - cooldownLeft / COURSE_COOLDOWN_MS) * 100}%` }]}
+                />
+              </View>
+            </View>
+          )}
           {courseStatus && <Text style={styles.status}>{courseStatus}</Text>}
           <TouchableOpacity
             style={[styles.button, !canBuy && styles.buttonDisabled]}
@@ -133,7 +147,13 @@ export const SkillCard = ({
             onPress={onBuyCourse}
           >
             <GameIcon source={ICONS.upgradeSkill} size={22} />
-            <Text style={styles.buttonText}>Пройти курс за {formatMoney(offer.costCents)}</Text>
+            <Text style={styles.buttonText}>
+              {preview.block === 'already-taken'
+                ? `Следующий курс — на ${skill.level + 1} уровне`
+                : cooldownLeft > 0
+                  ? `Курс доступен через ${cooldownText}`
+                  : `Пройти курс за ${formatMoney(offer.costCents)}`}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -212,6 +232,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  cooldown: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    padding: 8,
+    marginBottom: 6,
+  },
+  cooldownLabel: { fontSize: 12, fontWeight: '700', color: '#F59E0B' },
+  cooldownValue: { fontSize: 12, fontWeight: '800', color: '#F59E0B', fontVariant: ['tabular-nums'] },
+  cooldownFill: { height: '100%', backgroundColor: '#F59E0B' },
   status: {
     fontSize: 12,
     fontWeight: '600',

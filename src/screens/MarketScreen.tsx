@@ -26,14 +26,6 @@ import type { Car } from '@/types';
 
 const HOT_COLOR = '#F97316';
 
-/** Форматирует оставшееся время: MM:SS */
-function formatTimeRemaining(ms: number): string {
-  if (ms <= 0) return '0:00';
-  const totalSeconds = Math.ceil(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
 
 interface MarketScreenProps {
   marketId: string;
@@ -92,7 +84,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
     const finalPrice = priceFor(car);
     const canAfford = balance >= finalPrice;
     const timeRemaining = getTimeRemaining(car.id);
-    const isUrgent = hot ? timeRemaining < DAY_MS : timeRemaining > 0 && timeRemaining < 2 * 60 * 1000; // < 2 мин
+    const isUrgent = timeRemaining > 0 && timeRemaining < (hot ? 1 : 3) * DAY_MS;
 
     return (
       <View key={car.id} style={[marketStyles.carCard, hot && styles.hotCard]}>
@@ -107,7 +99,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
         <View style={[marketStyles.timerContainer, hot && styles.hotTimer]}>
           <GameIcon source={ICONS.timer} size={16} />
           <Text style={[marketStyles.timerText, isUrgent && marketStyles.timerTextUrgent, hot && styles.hotTimerText]}>
-            {hot ? formatHotTimer(timeRemaining, DAY_MS) : formatTimeRemaining(timeRemaining)}
+            {formatHotTimer(timeRemaining, DAY_MS)}
           </Text>
         </View>
 

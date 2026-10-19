@@ -30,9 +30,23 @@ export const pluralDays = (n: number): string => {
   return `${n} дней`;
 };
 
-/** Игровое время в днях, с округлением вверх: остаток 1 мс — это ещё «1 день» */
-export const formatGameDays = (ms: number, dayMs: number): string =>
-  ms <= 0 ? 'сейчас' : pluralDays(Math.ceil(ms / dayMs));
+/**
+ * Все таймеры игры — в игровых днях. От суток и больше — целые дни с округлением вверх
+ * («3 дня»), в последний день — десятые доли («0,4 дня»), чтобы было видно, что время идёт.
+ */
+export const formatGameDays = (ms: number, dayMs = 10_000): string => {
+  if (ms <= 0) return 'сейчас';
+  if (ms >= dayMs) return pluralDays(Math.ceil(ms / dayMs));
+  const tenths = Math.ceil((ms / dayMs) * 10);
+  return tenths >= 10 ? '1 день' : `${(tenths / 10).toLocaleString('ru-RU')} дня`;
+};
+
+/** Длительность в игровых днях с одним знаком: «3,5 дня», «12 дней» */
+export const formatGameSpan = (ms: number, dayMs = 10_000): string => {
+  const days = Math.round((Math.max(0, ms) / dayMs) * 10) / 10;
+  if (Number.isInteger(days)) return pluralDays(days);
+  return `${days.toLocaleString('ru-RU')} дня`;
+};
 
 /** Оставшаяся перезарядка в игровых месяцах и днях: «2 мес. 14 дн.» */
 export const formatGameCooldown = (ms: number, dayMs: number, daysInMonth: number): string => {
@@ -43,9 +57,5 @@ export const formatGameCooldown = (ms: number, dayMs: number, daysInMonth: numbe
   return days === 0 ? `${months} мес.` : `${months} мес. ${days} дн.`;
 };
 
-/** Таймер горящего предложения: дни, а в последний игровой день — секунды */
-export const formatHotTimer = (ms: number, dayMs: number): string => {
-  if (ms <= 0) return '0 сек';
-  if (ms >= dayMs) return pluralDays(Math.ceil(ms / dayMs));
-  return `${Math.ceil(ms / 1000)} сек`;
-};
+/** Таймер горящего предложения — как все таймеры, в игровых днях */
+export const formatHotTimer = (ms: number, dayMs: number): string => formatGameDays(ms, dayMs);

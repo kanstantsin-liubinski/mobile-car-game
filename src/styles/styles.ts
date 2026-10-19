@@ -82,6 +82,13 @@ export const headerStyles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.primary,
   },
+  dayTrack: {
+    height: 3,
+    marginBottom: 2,
+  },
+  dayFill: {
+    backgroundColor: '#FBBF24',
+  },
   calendarMonth: {
     fontSize: 9,
     fontWeight: '600',
@@ -359,6 +366,12 @@ export const garageStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 20,
   },
+  /** Отступы внутри прокрутки — полоса прокрутки идёт по краю экрана, а не поверх карточек */
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
   title: {
     fontSize: 28,
     fontWeight: '700',
@@ -574,6 +587,11 @@ export const skillsStyles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingVertical: 20,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   title: {
     fontSize: 28,

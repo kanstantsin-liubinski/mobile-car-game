@@ -8,7 +8,7 @@ import { BottomMenu, TopMenu, MainMenu } from '@components';
 import { useNavigation } from '@hooks/useNavigation';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { GarageProvider } from '@hooks/GarageContext';
-import { EconomyProvider } from '@hooks/EconomyContext';
+import { EconomyProvider, useGameClock } from '@hooks/EconomyContext';
 import { SoldCarsProvider } from '@hooks/SoldCarsContext';
 import { GameStateProvider, useGameState } from '@hooks/GameStateContext';
 import { MarketProvider } from '@hooks/MarketContext';
@@ -24,6 +24,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 function GameContent() {
   const { currentScreen, goToScreen, activeMarketId, marketFocus, openMarket } = useNavigation();
   const [financeOpen, setFinanceOpen] = useState(false);
+  const { paydayPending } = useGameClock();
+  useEffect(() => {
+    if (paydayPending) setFinanceOpen(false);
+  }, [paydayPending]);
 
   // Используем нативные insets на мобильных, веб-версию на браузере
   const nativeInsets = useSafeAreaInsets();
@@ -57,7 +61,8 @@ function GameContent() {
           <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
 
           {/* Финансы: панель по нажатию на баланс, обязательный отчёт в зарплатный день, банкротство */}
-          <FinancePanel visible={financeOpen} onClose={() => setFinanceOpen(false)} />
+          {/* В зарплатный день панель закрывается: отчёт — поверх всей игры */}
+          <FinancePanel visible={financeOpen && !paydayPending} onClose={() => setFinanceOpen(false)} />
           <PaydayModal />
           <BankruptcyScreen />
           <ProgressionToasts />

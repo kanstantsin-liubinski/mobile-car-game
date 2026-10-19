@@ -8,6 +8,7 @@ import { useEconomy } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useToast } from '@components/toast/ToastContext';
 import { GameIcon } from '@components/GameIcon';
+import { SheetHeader } from '@components/SheetHeader';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { EQUIPMENT, PAINTER_MONTHLY_SALARY_CENTS, type EquipmentId } from '../../economy/balance';
 import { equipmentBlock, hasEquipment } from '../../economy/economy';
@@ -44,8 +45,8 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
-          <Text style={garageStyles.modalTitle}>Оборудование</Text>
-          <ScrollView style={{ flexGrow: 0, marginBottom: 12 }}>
+          <SheetHeader title="Оборудование" onClose={onClose} />
+          <ScrollView style={{ flexShrink: 1, marginBottom: 12 }}>
             {EQUIPMENT.map((eq) => {
               const owned = hasEquipment(state, eq.id);
               const block = equipmentBlock(state, eq.id);
@@ -123,7 +124,7 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
               );
             })}
           </ScrollView>
-          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton]} onPress={onClose}>
+          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton, { flex: 0 }]} onPress={onClose}>
             <Text style={garageStyles.modalButtonText}>Закрыть</Text>
           </TouchableOpacity>
         </View>
@@ -138,11 +139,14 @@ export const PainterModal = ({
   onClose,
   onTraining,
   onFire,
+  children,
 }: {
   visible: boolean;
   onClose: () => void;
   onTraining: (painter: Mechanic) => void;
   onFire: (painter: Mechanic) => void;
+  /** Вложенные окна (навык, увольнение) — рисуются слоем внутри этого окна */
+  children?: React.ReactNode;
 }) => {
   const { state } = useEconomy();
   const { painters, hirePainter, boothSlot, painterRun } = useGarageContext();
@@ -154,7 +158,7 @@ export const PainterModal = ({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12 }]}>
-          <Text style={garageStyles.modalTitle}>Маляр</Text>
+          <SheetHeader title="Маляр" onClose={onClose} />
           {painters.map((p) => {
             const contract = state.contracts[p.id];
             return (
@@ -198,10 +202,11 @@ export const PainterModal = ({
               </View>
             );
           })}
-          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton]} onPress={onClose}>
+          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton, { flex: 0 }]} onPress={onClose}>
             <Text style={garageStyles.modalButtonText}>Закрыть</Text>
           </TouchableOpacity>
         </View>
+        {children}
       </View>
     </Modal>
   );

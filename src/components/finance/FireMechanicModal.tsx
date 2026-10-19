@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { InnerOverlay } from '@components/InnerOverlay';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
@@ -17,7 +18,10 @@ interface FireMechanicModalProps {
   onConfirm: (mechanicId: string) => void;
 }
 
-/** Подтверждение увольнения с полным расчётом: долг по зарплате + оклад компенсации */
+/**
+ * Подтверждение увольнения с полным расчётом: долг по зарплате + оклад компенсации.
+ * Открывается поверх окна персонала — поэтому слоем внутри него (см. InnerOverlay).
+ */
 export const FireMechanicModal = ({ mechanic, onCancel, onConfirm }: FireMechanicModalProps) => {
   const { previewFire } = useEconomy();
   useGameClock(); // начисление растёт со временем — пересчитываем при каждом тике
@@ -28,7 +32,7 @@ export const FireMechanicModal = ({ mechanic, onCancel, onConfirm }: FireMechani
   const preview = mechanic ? previewFire(mechanic.id) : null;
 
   return (
-    <Modal visible={!!mechanic && !!preview} transparent animationType="fade" onRequestClose={onCancel}>
+    <InnerOverlay visible={!!mechanic && !!preview}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 14 }]}>
           {mechanic && preview && (
@@ -77,6 +81,6 @@ export const FireMechanicModal = ({ mechanic, onCancel, onConfirm }: FireMechani
           )}
         </View>
       </View>
-    </Modal>
+    </InnerOverlay>
   );
 };

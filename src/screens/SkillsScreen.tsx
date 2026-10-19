@@ -80,7 +80,7 @@ export const SkillsScreen = () => {
   return (
     <View style={{ flex: 1 }}>
       <LocationHeader title="Навыки" icon={ICONS.skills} />
-      <ScrollView style={[skillsStyles.container, { paddingTop: 8 }]}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={skillsStyles.scrollContent}>
         {card(
           'mechanic',
           {

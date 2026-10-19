@@ -1,20 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, Platform, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Platform, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@styles/colors';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
-import { GameIcon } from '@components/GameIcon';
-import { ICONS } from '@img/gameIcons';
 import { FinanceRow, FinanceSection, Notice, ui } from './FinanceUI';
 import * as E from '../../economy/economy';
 import { formatMoney } from '../../economy/format';
 import { managementMonthPractice, monthXp } from '../../economy/progression';
 
 /**
- * Зарплатный день: обязательный отчёт за месяц. Закрыть его можно только выплатой —
- * «Назад»/Escape ничего не делают, а после перезагрузки он откроется снова.
+ * Зарплатный день: обязательный отчёт за месяц на весь экран. Закрыть его можно только выплатой,
+ * после перезагрузки он откроется снова. Это слой поверх игры, а не Modal: на iOS Modal не
+ * покажется, если в этот момент открыто другое окно, а слой гарантированно окажется на экране.
  */
 export const PaydayModal = () => {
   const { state, closeMonth } = useEconomy();
@@ -48,9 +47,8 @@ export const PaydayModal = () => {
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => {}}>
-      <View style={styles.overlay}>
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
+    <View style={styles.overlay}>
+        <View style={[styles.sheet, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 }]}>
           <Text style={styles.title}>Финансовый отчёт — Месяц {preview.month}</Text>
 
           <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 4 }}>
@@ -151,31 +149,28 @@ export const PaydayModal = () => {
             onPress={handlePay}
             activeOpacity={0.85}
           >
-            <GameIcon source={ICONS.money} size={26} />
-            <Text style={ui.primaryButtonText}>
-              {preview.canContinue ? 'Выплатить и продолжить' : 'Подвести итоги'}
-            </Text>
+            <Text style={ui.primaryButtonText}>{preview.canContinue ? 'Продолжить' : 'Подвести итоги'}</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </Modal>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 500,
+    elevation: 500,
+    backgroundColor: colors.darkBg,
   },
   sheet: {
+    flex: 1,
     backgroundColor: colors.darkBg,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: 14,
-    maxHeight: '92%',
+    paddingHorizontal: 14,
   },
   title: {
     fontSize: 20,
@@ -185,7 +180,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   scroll: {
-    flexGrow: 0,
+    flex: 1,
   },
   payButton: {
     marginTop: 10,

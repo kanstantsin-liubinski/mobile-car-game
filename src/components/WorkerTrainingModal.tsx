@@ -1,5 +1,7 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { InnerOverlay } from '@components/InnerOverlay';
+import { SheetHeader } from '@components/SheetHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
@@ -16,10 +18,11 @@ import type { Mechanic } from '@/types';
 /** Базовая скорость ремонта механика, % состояния в секунду (как в useGarage) */
 const BASE_SPEED = 0.05;
 
+/** Скорость в игровой день (10 секунд) */
 const speedText = (level: number, painter: boolean) =>
-  `${((painter ? PAINTER_SPEED_PER_SEC : BASE_SPEED) * skillMultiplier(level)).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}${
+  `${((painter ? PAINTER_SPEED_PER_SEC : BASE_SPEED) * skillMultiplier(level) * 10).toLocaleString('ru-RU', { maximumFractionDigits: 3 })}${
     painter ? ' п. ЛКП' : '%'
-  } / сек`;
+  } в день`;
 
 interface WorkerTrainingModalProps {
   mechanic: Pick<Mechanic, 'id' | 'name'> | null;
@@ -59,12 +62,12 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
   const isMax = level >= SKILL_MAX_LEVEL;
 
   return (
-    <Modal visible={!!mechanic && !!contract} transparent animationType="fade" onRequestClose={onClose}>
+    <InnerOverlay visible={!!mechanic && !!contract}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
-          <Text style={garageStyles.modalTitle}>{painter ? 'Навык маляра' : 'Навык механика'}</Text>
+          <SheetHeader title={painter ? 'Навык маляра' : 'Навык механика'} onClose={onClose} />
           {mechanic && contract && (
-            <ScrollView style={{ flexGrow: 0 }}>
+            <ScrollView style={{ flexShrink: 1 }}>
               <SkillCard
                 title={mechanic.name}
                 icon={getMechanicAvatar(mechanic.id)}
@@ -81,16 +84,16 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
                 ]}
               />
               <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8 }}>
-                Практика копится только во время {painter ? 'покраски' : 'ремонта'}: 2 единицы за секунду работы. Оклад — около
+                Практика копится только во время {painter ? 'покраски' : 'ремонта'}: 20 единиц за игровой день работы. Оклад — около
                 40% того, что сотрудник приносит при полной загрузке, и растёт вместе со скоростью.
               </Text>
             </ScrollView>
           )}
-          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton]} onPress={onClose}>
+          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton, { flex: 0 }]} onPress={onClose}>
             <Text style={garageStyles.modalButtonText}>Закрыть</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    </InnerOverlay>
   );
 };

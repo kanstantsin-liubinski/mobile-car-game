@@ -6,6 +6,7 @@ import { colors } from '@styles/colors';
 import { useExperienceContext } from '@hooks/ExperienceContext';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { formatMoney } from '../economy/format';
+import { DAY_MS } from '../economy/time';
 import { GameIcon } from '@components/GameIcon';
 import { ICONS } from '@img/gameIcons';
 
@@ -76,6 +77,17 @@ export const TopMenu = ({ insets, onPressBalance }: TopMenuProps) => {
         <Text style={headerStyles.calendarText}>
           {calendar.weekday} День {calendar.day}
         </Text>
+        {/* Текущий день: 10 секунд активной игры */}
+        <View style={[headerStyles.calendarTrack, headerStyles.dayTrack]}>
+          <View
+            style={[
+              headerStyles.calendarFill,
+              headerStyles.dayFill,
+              { width: `${calendar.msToPayday <= 0 ? 100 : ((calendar.msIntoMonth % DAY_MS) / DAY_MS) * 100}%` },
+            ]}
+          />
+        </View>
+        {/* Месяц: 30 дней до зарплатного дня */}
         <View style={headerStyles.calendarTrack}>
           <View style={[headerStyles.calendarFill, { width: `${calendar.monthProgress * 100}%` }]} />
         </View>
