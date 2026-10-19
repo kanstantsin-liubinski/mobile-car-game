@@ -36,7 +36,9 @@ export const FireMechanicModal = ({ mechanic, onCancel, onConfirm }: FireMechani
               <View style={{ alignItems: 'center', marginBottom: 8 }}>
                 <GameIcon source={getMechanicAvatar(mechanic.id)} size={72} />
               </View>
-              <Text style={garageStyles.modalTitle}>Увольнение механика</Text>
+              <Text style={garageStyles.modalTitle}>
+                {mechanic.profession === 'painter' ? 'Увольнение маляра' : 'Увольнение механика'}
+              </Text>
               <Text style={{ color: colors.textTertiary, textAlign: 'center', marginTop: -8, marginBottom: 12 }}>
                 {mechanic.name} · уровень {mechanic.skillLevel}
               </Text>

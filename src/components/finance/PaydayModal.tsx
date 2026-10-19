@@ -65,10 +65,14 @@ export const PaydayModal = () => {
               <FinanceRow label="Выручка от продаж" cents={result.revenueCents} />
               <FinanceRow label="Себестоимость проданных" cents={-result.cogsCents} />
               <FinanceRow label="Прибыль от сделок" cents={result.dealProfitCents} signed />
-              <FinanceRow label="Зарплаты механиков" cents={-result.salaryCents} />
+              <FinanceRow label="Зарплаты механиков и маляров" cents={-result.salaryCents} />
               {result.severanceCents > 0 && (
                 <FinanceRow label="Компенсации при увольнении" cents={-result.severanceCents} />
               )}
+              {result.serviceRevenueCents + result.serviceCostsCents > 0 && (
+                <FinanceRow label="Заказы автосервиса (оплата − детали)" cents={result.serviceProfitCents} signed />
+              )}
+              {result.diagnosticsCents > 0 && <FinanceRow label="Сторонняя диагностика" cents={-result.diagnosticsCents} />}
               {result.otherIncomeCents > 0 && <FinanceRow label="Прочие доходы" cents={result.otherIncomeCents} />}
               {result.otherExpenseCents > 0 && (
                 <FinanceRow label="Обучение (курсы)" cents={-result.otherExpenseCents} />
@@ -76,7 +80,7 @@ export const PaydayModal = () => {
               <View style={ui.divider} />
               <FinanceRow label="Чистая прибыль" cents={result.netProfitCents} signed bold />
               {result.investmentsCents > 0 && (
-                <FinanceRow label="Вложения (покупка гаража)" cents={-result.investmentsCents} muted />
+                <FinanceRow label="Вложения (гаражи, оборудование)" cents={-result.investmentsCents} muted />
               )}
             </FinanceSection>
 

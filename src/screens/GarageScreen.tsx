@@ -23,7 +23,11 @@ import { skillMultiplier } from "../economy/progression";
 /** Самая долгая продажа (+10% к цене) в игровых днях; −10% — мгновенно */
 const MAX_SELL_DAYS = 30;
 import { colors } from "@styles/colors";
-import { calculateCarPrice } from "../utils/priceCalculator";
+import { carValue, tradeSaleBonus, tradeSalePrice } from "../economy/carCondition";
+import { CarOrderPanel, CarPaintPanel, PaintBars } from "@components/garage/CarWorkPanels";
+import { EquipmentModal, PainterModal } from "@components/garage/EquipmentModal";
+import { hasEquipment } from "../economy/economy";
+import type { Mechanic } from "@/types";
 import { getGarageById } from "../data/cityBuildings";
 import { LocationHeader } from "@components/LocationHeader";
 import { GameIcon } from "@components/GameIcon";
@@ -53,6 +57,11 @@ export const GarageScreen: React.FC = () => {
     activeSellsRemaining,
     startSell,
     cancelSell,
+    boothSlot,
+    servicePaints,
+    boothJob,
+    painters,
+    firePainter,
   } = useGarageContext();
   const { state: economyState, playerTapMultiplier } = useEconomy();
   const [mechanicToFire, setMechanicToFire] = useState<string | null>(null);
@@ -73,6 +82,11 @@ export const GarageScreen: React.FC = () => {
   const [mechanicForTraining, setMechanicForTraining] = useState<string | null>(null);
   const [showMechanicsModal, setShowMechanicsModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<number>(0); // Выбранный слот гаража
+  const [showEquipment, setShowEquipment] = useState(false);
+  const [showPainter, setShowPainter] = useState(false);
+  const [painterToFire, setPainterToFire] = useState<Mechanic | null>(null);
+  const tradeLevel = economyState.player.trade.level;
+  const boothOwned = hasEquipment(economyState, "paint_booth");
   const garageInfo = getGarageById(garageId);
 
   // Ручной тап: 0,1% состояния × навык игрока «Механик» (+5% за уровень)
@@ -129,23 +143,21 @@ export const GarageScreen: React.FC = () => {
   };
   const calculateSellDuration = (adjustment: number): number => calculateSellDays(adjustment) * DAY_MS;
 
+  // Ползунок ±10% к рыночной цене, затем один раз бонус навыка «Торговля» к итоговой выручке
   const calculateFinalSellPrice = (
     basePrice: number,
     adjustment: number,
   ): number => {
     const adjustmentPercent = adjustment / 100; // Convert to decimal (e.g., 5 -> 0.05)
-    return Math.round(basePrice * (1 + adjustmentPercent));
+    return tradeSalePrice(Math.round(basePrice * (1 + adjustmentPercent)), tradeLevel);
   };
 
   const handleSellCar = (carId: string) => {
     const car = garage.find((c) => c.id === carId);
     if (!car) return;
 
-    const baseSellPrice = calculateCarPrice(car.basePrice, {
-      year: car.year,
-      mileage: car.mileage,
-      condition: car.condition,
-    });
+    // Рыночная стоимость по общему состоянию (техника + ЛКП)
+    const baseSellPrice = carValue(car.basePrice, car);
 
     const finalSellPrice = calculateFinalSellPrice(baseSellPrice, 0); // 0% at start
     const profit = finalSellPrice - car.price;
@@ -359,6 +371,38 @@ export const GarageScreen: React.FC = () => {
               Механики
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              backgroundColor: colors.cardBg,
+              borderWidth: 1,
+              borderColor: colors.primary,
+              borderRadius: 10,
+              paddingVertical: 8,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onPress={() => setShowEquipment(true)}
+          >
+            <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700" }}>🛠️ Оборудование</Text>
+          </TouchableOpacity>
+          {boothOwned && (
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                backgroundColor: colors.cardBg,
+                borderWidth: 1,
+                borderColor: "#38BDF8",
+                borderRadius: 10,
+                paddingVertical: 8,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onPress={() => setShowPainter(true)}
+            >
+              <Text style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700" }}>🎨 Маляр</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -390,6 +434,7 @@ export const GarageScreen: React.FC = () => {
           {Array.from({ length: garageSlots }).map((_, slotIndex) => {
             const carInSlot = garage.find((c) => c.slotIndex === slotIndex);
             const isSelected = selectedSlot === slotIndex;
+            const isBooth = boothSlot === slotIndex;
 
             return (
               <TouchableOpacity
@@ -423,10 +468,20 @@ export const GarageScreen: React.FC = () => {
                 >
                   {slotIndex + 1}
                 </Text>
+                {(isBooth || carInSlot?.clientOrderId) && (
+                  <Text style={{ position: "absolute", top: 2, right: 4, fontSize: 11 }}>
+                    {isBooth ? "🎨" : "👤"}
+                  </Text>
+                )}
               </TouchableOpacity>
             );
           })}
         </ScrollView>
+        {boothSlot === selectedSlot && (
+          <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 6 }}>
+            🎨 Слот занят покрасочной камерой: здесь красят, механический ремонт не ведётся.
+          </Text>
+        )}
       </View>
 
       {garage.length === 0 ? (
@@ -438,11 +493,10 @@ export const GarageScreen: React.FC = () => {
           {garage
             .filter((car) => car.slotIndex === selectedSlot)
             .map((car) => {
-              const currentPrice = calculateCarPrice(car.basePrice, {
-                year: car.year,
-                mileage: car.mileage,
-                condition: car.condition,
-              });
+              const currentPrice = carValue(car.basePrice, car);
+              const isClient = !!car.clientOrderId;
+              const inBooth = boothSlot !== null && car.slotIndex === boothSlot;
+              const paintBusy = !!servicePaints[car.id] || boothJob?.carId === car.id;
               const priceChange = currentPrice - car.price;
               const priceChangePercent = (
                 (currentPrice / car.price - 1) *
@@ -451,7 +505,8 @@ export const GarageScreen: React.FC = () => {
 
               // Получаем механика на этом слоте
               const mechanicAtSlot = getMechanicAtSlot(car.slotIndex);
-              const canUseMechanic = mechanicAtSlot && mechanicAtSlot.hired && car.condition < car.maxCondition;
+              const canUseMechanic =
+                mechanicAtSlot && mechanicAtSlot.hired && car.condition < car.maxCondition && !inBooth && !servicePaints[car.id];
 
               return (
                 <View
@@ -542,6 +597,9 @@ export const GarageScreen: React.FC = () => {
                     </View>
                   </View>
 
+                  <PaintBars car={car} />
+
+                  {!isClient && (
                   <View style={garageStyles.priceContainer}>
                     <Text style={garageStyles.priceLabel}>Текущая цена:</Text>
                     <Text style={garageStyles.currentPrice}>
@@ -559,6 +617,7 @@ export const GarageScreen: React.FC = () => {
                       {priceChange.toLocaleString()}$ ({priceChangePercent}%)
                     </Text>
                   </View>
+                  )}
 
                   <View style={garageStyles.buttonsContainer}>
                     {activeSells[car.id] ? (
@@ -760,6 +819,7 @@ export const GarageScreen: React.FC = () => {
                         }}
                       >
                         <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                          {!inBooth && !servicePaints[car.id] && (
                           <TouchableOpacity
                             style={[
                               garageStyles.button,
@@ -783,7 +843,9 @@ export const GarageScreen: React.FC = () => {
                               </Text>
                             </View>
                           </TouchableOpacity>
+                          )}
 
+                          {!isClient && !paintBusy && (
                           <TouchableOpacity
                             style={[garageStyles.button, garageStyles.sellButton]}
                             onPress={() => handleSellCar(car.id)}
@@ -793,6 +855,7 @@ export const GarageScreen: React.FC = () => {
                               <Text style={garageStyles.buttonText}>Продать</Text>
                             </View>
                           </TouchableOpacity>
+                          )}
                         </View>
 
                         {canUseMechanic && (
@@ -811,7 +874,7 @@ export const GarageScreen: React.FC = () => {
                             <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6 }}>
                               <GameIcon source={getMechanicAvatar(mechanicAtSlot!.id)} size={22} />
                               <Text style={garageStyles.buttonText}>
-                                Механик ремонтирует (+0.05%/сек)
+                                Поручить механику
                               </Text>
                             </View>
                           </TouchableOpacity>
@@ -819,6 +882,8 @@ export const GarageScreen: React.FC = () => {
                       </View>
                     )}
                   </View>
+                  <CarPaintPanel car={car} />
+                  <CarOrderPanel car={car} />
                 </View>
               </View>
             );
@@ -911,6 +976,15 @@ export const GarageScreen: React.FC = () => {
                 </Text>
               </View>
             </View>
+
+            {tradeLevel > 1 && (
+              <View style={garageStyles.modalInfoBlock}>
+                <Text style={garageStyles.modalLabel}>Навык «Торговля»:</Text>
+                <Text style={[garageStyles.modalPrice, { color: "#22C55E" }]}>
+                  +{(tradeSaleBonus(tradeLevel) * 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}% к выручке (уже в цене)
+                </Text>
+              </View>
+            )}
 
             {/* Time to sell display */}
             <View style={garageStyles.modalInfoBlock}>
@@ -1114,8 +1188,8 @@ export const GarageScreen: React.FC = () => {
                               const mechanicColor =
                                 getMechanicColor(mechanicIndex);
                               const occupiedByOtherMechanic =
-                                mechanicAtSlot &&
-                                mechanicAtSlot.id !== mechanic.id;
+                                (mechanicAtSlot &&
+                                mechanicAtSlot.id !== mechanic.id) || index === boothSlot;
 
                               return (
                                 <TouchableOpacity
@@ -1130,7 +1204,7 @@ export const GarageScreen: React.FC = () => {
                                         ? getMechanicColor(
                                             Array.isArray(mechanics)
                                               ? mechanics.indexOf(
-                                                  mechanicAtSlot,
+                                                  mechanicAtSlot!,
                                                 )
                                               : 0,
                                           )
@@ -1142,7 +1216,7 @@ export const GarageScreen: React.FC = () => {
                                         ? getMechanicColor(
                                             Array.isArray(mechanics)
                                               ? mechanics.indexOf(
-                                                  mechanicAtSlot,
+                                                  mechanicAtSlot!,
                                                 )
                                               : 0,
                                           )
@@ -1349,6 +1423,28 @@ export const GarageScreen: React.FC = () => {
       <WorkerTrainingModal
         mechanic={mechanics.find((m) => m.id === mechanicForTraining) ?? null}
         onClose={() => setMechanicForTraining(null)}
+      />
+
+      <EquipmentModal visible={showEquipment} onClose={() => setShowEquipment(false)} />
+      <PainterModal
+        visible={showPainter}
+        onClose={() => setShowPainter(false)}
+        onTraining={(p) => setMechanicForTraining(p.id)}
+        onFire={(p) => setPainterToFire(p)}
+      />
+
+      {/* Навык маляра — тем же окном, что и у механиков */}
+      <WorkerTrainingModal
+        mechanic={showPainter ? painters.find((m) => m.id === mechanicForTraining) ?? null : null}
+        onClose={() => setMechanicForTraining(null)}
+      />
+      <FireMechanicModal
+        mechanic={painterToFire}
+        onCancel={() => setPainterToFire(null)}
+        onConfirm={(id) => {
+          firePainter(id);
+          setPainterToFire(null);
+        }}
       />
 
       {/* Подтверждение увольнения — последним, чтобы быть поверх окна механиков */}

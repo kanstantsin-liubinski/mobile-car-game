@@ -14,6 +14,7 @@ import { BUILDING_ICONS } from '@img/gameIcons';
 import { CAR_MODELS_BY_TIER, TIER_NAMES, TIER_UNLOCK_LEVELS, type CarModel } from '../data/carModels';
 import { DEALERSHIP } from '../data/cityBuildings';
 import { calculateCarPrice } from '../utils/priceCalculator';
+import { tradePurchasePrice } from '../economy/carCondition';
 import type { Car } from '@/types';
 
 const NEW_CAR_YEAR = 2026; // совпадает с CURRENT_YEAR в priceCalculator
@@ -53,6 +54,10 @@ const createNewCar = (model: CarModel): Car => {
     year: NEW_CAR_YEAR,
     mileage: NEW_CAR_MILEAGE,
     condition: NEW_CAR_CONDITION,
+    // Новая машина: ЛКП заводское, максимум — 100%
+    paintCondition: 100,
+    maxCondition: 100,
+    basePrice: model.basePrice,
     tier: model.tier,
   };
 };
@@ -62,7 +67,8 @@ interface DealershipScreenProps {
 }
 
 export const DealershipScreen = ({ onBack }: DealershipScreenProps) => {
-  const { balance, buyCar } = useEconomy();
+  const { balance, buyCar, state: economy } = useEconomy();
+  const tradeLevel = economy.player.trade.level;
   const { addCar } = useGarageContext();
   const { isTierUnlocked } = useExperienceContext();
 
@@ -96,7 +102,8 @@ export const DealershipScreen = ({ onBack }: DealershipScreenProps) => {
 
           {unlocked &&
             models.map((model) => {
-              const price = getNewCarPrice(model);
+              // Навык «Торговля» снижает цену покупки и в салоне
+              const price = tradePurchasePrice(getNewCarPrice(model), tradeLevel);
               const canAfford = balance >= price;
 
               return (
@@ -121,7 +128,7 @@ export const DealershipScreen = ({ onBack }: DealershipScreenProps) => {
 
                   <TouchableOpacity
                     style={[marketStyles.buyButton, !canAfford && marketStyles.buyButtonDisabled]}
-                    onPress={() => setCarToBuy(createNewCar(model))}
+                    onPress={() => setCarToBuy({ ...createNewCar(model), price })}
                     disabled={!canAfford}
                   >
                     <Text style={[marketStyles.buyButtonText, !canAfford && { color: colors.textTertiary }]}>

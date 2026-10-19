@@ -6,7 +6,8 @@
 import type { Car } from '@/types';
 import type { CarModel } from '../data/carModels';
 import { CAR_MODELS_BY_TIER } from '../data/carModels';
-import { calculateCarPrice, calculateMaxCondition } from './priceCalculator';
+import { calculateCarPrice } from './priceCalculator';
+import { generateTraits, overallCondition } from '../economy/carCondition';
 
 export interface MarketListing {
   car: Car;
@@ -74,29 +75,25 @@ function generateMileage(year: number, rng: Rng): number {
 }
 
 /**
- * Генерирует состояние на основе года, пробега и maxCondition.
- * Состояние не может быть больше maxCondition.
- */
-function generateCondition(year: number, mileage: number, rng: Rng): number {
-  const maxCondition = calculateMaxCondition(year, mileage);
-
-  // Состояние от 30% до 95% от maxCondition
-  const ratio = randFloat(0.3, 0.95, rng);
-  const condition = maxCondition * ratio;
-  
-  return Math.round(condition * 10) / 10;
-}
-
-/**
  * Генерирует одно объявление на основе модели.
+ */
+ /**
+ * Сначала создаются реальные характеристики экземпляра (тех. состояние, максимум со скрытым
+ * отклонением, ЛКП, коэффициент цены продавца), затем цена: рыночная стоимость по общему
+ * состоянию × коэффициент продавца. Что из этого увидит игрок, решает диагностика.
  */
 export function generateListing(model: CarModel, now: number, rng: Rng = Math.random): MarketListing {
   const [minYear, maxYear] = YEAR_RANGES[model.tier];
   const year = randInt(minYear, maxYear, rng);
   const mileage = generateMileage(year, rng);
-  const condition = generateCondition(year, mileage, rng);
-  
-  const price = calculateCarPrice(model.basePrice, { year, mileage, condition });
+  const traits = generateTraits(year, mileage, 2026, rng);
+  const condition = traits.condition;
+  const fairPrice = calculateCarPrice(model.basePrice, {
+    year,
+    mileage,
+    condition: overallCondition(traits.condition, traits.paintCondition),
+  });
+  const price = Math.max(1, Math.round(fairPrice * traits.sellerFactor));
   
   const duration = randInt(MIN_LISTING_DURATION, MAX_LISTING_DURATION, rng);
   
@@ -110,6 +107,10 @@ export function generateListing(model: CarModel, now: number, rng: Rng = Math.ra
     year,
     mileage,
     condition,
+    paintCondition: traits.paintCondition,
+    maxCondition: traits.maxCondition,
+    basePrice: model.basePrice,
+    marketPrice: fairPrice,
     tier: model.tier,
   };
   

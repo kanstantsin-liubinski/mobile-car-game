@@ -3,7 +3,7 @@ import { View, Platform } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 
-import { GarageScreen, MarketScreen, SkillsScreen, CityScreen, DealershipScreen } from '@screens';
+import { GarageScreen, MarketScreen, SkillsScreen, CityScreen, DealershipScreen, OrdersScreen } from '@screens';
 import { BottomMenu, TopMenu, MainMenu } from '@components';
 import { useNavigation } from '@hooks/useNavigation';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
@@ -51,6 +51,7 @@ function GameContent() {
             {currentScreen === 'market' && <MarketScreen marketId={activeMarketId} focus={marketFocus} onBack={() => goToScreen('city')} />}
             {currentScreen === 'dealership' && <DealershipScreen onBack={() => goToScreen('city')} />}
             {currentScreen === 'skills' && <SkillsScreen />}
+            {currentScreen === 'orders' && <OrdersScreen />}
           </View>
 
           <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />

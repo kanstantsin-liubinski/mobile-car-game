@@ -17,12 +17,14 @@
  */
 
 import * as P from './progression.ts';
+import * as B from './balance.ts';
+import * as O from './orders.ts';
+import { randomSeed } from './hotOffers.ts';
 
 // ─── Константы ─────────────────────────────────────────────────────────────
 
-export const DAY_MS = 10_000;
-export const DAYS_IN_MONTH = 30;
-export const MONTH_MS = DAY_MS * DAYS_IN_MONTH; // 5 минут активной игры
+import { DAY_MS, DAYS_IN_MONTH, MONTH_MS } from './time.ts';
+export { DAY_MS, DAYS_IN_MONTH, MONTH_MS };
 export const LOAN_TERM_MONTHS = 6;
 export const HISTORY_MONTHS = 12;
 /**
@@ -34,10 +36,15 @@ export const HISTORY_MONTHS = 12;
 export const MECHANIC_MONTHLY_SALARY_CENTS = 36_000;
 
 /** Оклад растёт вместе со скоростью механика: каждый уровень навыка +5% к выработке и к окладу */
-export const salaryForLevel = (skillLevel: number): number =>
-  Math.round(MECHANIC_MONTHLY_SALARY_CENTS * P.skillMultiplier(skillLevel));
+export type Profession = 'mechanic' | 'painter';
+
+export const baseSalaryCents = (profession: Profession = 'mechanic'): number =>
+  profession === 'painter' ? B.PAINTER_MONTHLY_SALARY_CENTS : MECHANIC_MONTHLY_SALARY_CENTS;
+
+export const salaryForLevel = (skillLevel: number, profession: Profession = 'mechanic'): number =>
+  Math.round(baseSalaryCents(profession) * P.skillMultiplier(skillLevel));
 /** Сколько последних операций помнить для защиты от повторного применения */
-const PROCESSED_OPS_LIMIT = 300;
+const PROCESSED_OPS_LIMIT = 1000;
 /** Минимальное время наблюдения, после которого показываем советы об эффективности */
 export const ADVICE_MIN_OBSERVATION_MS = 6 * DAY_MS;
 
@@ -75,6 +82,8 @@ export interface Contract {
   levelChangedAtMs: number;
   /** Контракт из сохранения до системы навыков: уровень возьмётся из старых данных механика */
   legacySkillPending?: boolean;
+  /** Профессия: механик (по умолчанию) или маляр. Навык, курсы и оклад — по профессии */
+  profession?: Profession;
 }
 
 /** Непроданная машина по себестоимости */
@@ -118,6 +127,16 @@ export interface MonthLedger {
   salesXp: number;
   /** XP за полные ремонты в этом месяце (в бонус не входит) */
   repairXp: number;
+  /** Оплата клиентов за выполненные заказы автосервиса */
+  serviceRevenueCents: number;
+  /** Детали и материалы для заказов клиентов */
+  serviceCostsCents: number;
+  /** Сторонняя диагностика объявлений */
+  diagnosticsCents: number;
+  /** Затраты на собственные машины (покраска): деньги ушли, но это себестоимость машины, а не расход месяца */
+  carExtraCostsCents: number;
+  /** Практика «Подборщика» за осмотры в этом месяце (лимит) */
+  inspectPractice: number;
 }
 
 export interface MechanicMonthStat {
@@ -168,13 +187,30 @@ export interface EconomyState {
   player: PlayerProgress;
   /** Опыт и навык игрока перенесены из сохранений до системы прогрессии */
   playerMigrated: boolean;
+  /** Купленное оборудование и слот покрасочной камеры (null — камера не установлена) */
+  equipment: EquipmentState;
+  /** Заказы клиентов и репутация */
+  orders: O.OrdersState;
 }
+
+export interface EquipmentState {
+  owned: B.EquipmentId[];
+  boothSlot: number | null;
+}
+
+export const createEquipment = (): EquipmentState => ({ owned: ['basic_tools'], boothSlot: null });
 
 export interface PlayerProgress {
   xp: P.PlayerXp;
   skill: P.SkillState;
   /** Навык «Менеджмент»: шанс горящих предложений, с 2 уровня — уведомления о них */
   management: P.SkillState;
+  /** «Маляр»: ручная покраска в своей камере */
+  painter: P.SkillState;
+  /** «Подборщик»: точность своего сканера */
+  picker: P.SkillState;
+  /** «Торговля»: скидка при покупке и прибавка при продаже */
+  trade: P.SkillState;
   /** Успешные ручные тапы ремонта за всё время */
   manualTaps: number;
 }
@@ -183,6 +219,9 @@ export const createPlayerProgress = (): PlayerProgress => ({
   xp: P.createPlayerXp(),
   skill: P.createSkill(),
   management: P.createSkill(),
+  painter: P.createSkill(),
+  picker: P.createSkill(),
+  trade: P.createSkill(),
   manualTaps: 0,
 });
 
@@ -203,9 +242,19 @@ export const emptyLedger = (): MonthLedger => ({
   loanRepaidCents: 0,
   salesXp: 0,
   repairXp: 0,
+  serviceRevenueCents: 0,
+  serviceCostsCents: 0,
+  diagnosticsCents: 0,
+  carExtraCostsCents: 0,
+  inspectPractice: 0,
 });
 
-export const createEconomy = (balanceCents: number, contractsMigrated = true, playerMigrated = true): EconomyState => ({
+export const createEconomy = (
+  balanceCents: number,
+  contractsMigrated = true,
+  playerMigrated = true,
+  seed: number = randomSeed(),
+): EconomyState => ({
   version: 1,
   completedMonths: 0,
   balanceCents,
@@ -221,6 +270,8 @@ export const createEconomy = (balanceCents: number, contractsMigrated = true, pl
   contractsMigrated,
   player: createPlayerProgress(),
   playerMigrated,
+  equipment: createEquipment(),
+  orders: O.createOrdersState(seed, 0),
 });
 
 // ─── Календарь ─────────────────────────────────────────────────────────────
@@ -286,10 +337,13 @@ export const startContract = (
   s: EconomyState,
   mechanicId: string,
   now: number,
-  monthlyCents = salaryForLevel(1),
+  monthlyCents?: number,
+  profession: Profession = 'mechanic',
 ): EconomyState => {
   if (s.contracts[mechanicId]) return s;
+  monthlyCents = monthlyCents ?? salaryForLevel(1, profession);
   const contract: Contract = {
+    profession,
     mechanicId,
     contractId: `${mechanicId}@${now}`,
     hiredAtMs: now,
@@ -310,7 +364,7 @@ export const startContract = (
 export const syncSalariesWithSkill = (s: EconomyState, now: number): EconomyState => {
   let state = s;
   for (const c of Object.values(s.contracts)) {
-    const target = salaryForLevel(c.skill.level);
+    const target = salaryForLevel(c.skill.level, c.profession);
     if (c.monthlyCents !== target) state = changeSalary(state, c.mechanicId, target, now);
   }
   return state;
@@ -355,7 +409,7 @@ export const syncWorkerSkill = (s: EconomyState, mechanicId: string, until: numb
     skill = { ...skill, level: skill.level + 1, practice: Math.max(0, overshoot) };
     t = crossAt;
     levelChangedAtMs = crossAt;
-    monthlyCents = salaryForLevel(skill.level);
+    monthlyCents = salaryForLevel(skill.level, c.profession);
     segments = [
       ...segments.map((seg) => (seg.toMs === null ? { ...seg, toMs: crossAt } : seg)),
       { monthlyCents, fromMs: crossAt, toMs: null },
@@ -440,10 +494,29 @@ export interface OpResult {
 const awardXp = (s: EconomyState, amount: number): EconomyState =>
   amount > 0 ? { ...s, player: { ...s.player, xp: P.addXp(s.player.xp, amount) } } : s;
 
-const awardManagement = (s: EconomyState, amount: number): EconomyState =>
-  amount > 0
-    ? { ...s, player: { ...s.player, management: P.addPractice(s.player.management, amount, P.requiredManagementPractice) } }
-    : s;
+// ─── Навыки игрока: единая инфраструктура ─────────────────────────────────
+
+export type SkillKey = 'mechanic' | 'painter' | 'picker' | 'trade' | 'management';
+
+export const SKILL_CURVES: Record<SkillKey, P.PracticeCurve> = {
+  mechanic: P.requiredPractice,
+  painter: P.requiredPractice,
+  picker: P.requiredPickerPractice,
+  trade: P.requiredTradePractice,
+  management: P.requiredManagementPractice,
+};
+
+export const playerSkill = (s: EconomyState, key: SkillKey): P.SkillState =>
+  key === 'mechanic' ? s.player.skill : s.player[key];
+
+const withPlayerSkill = (s: EconomyState, key: SkillKey, skill: P.SkillState): EconomyState =>
+  key === 'mechanic' ? { ...s, player: { ...s.player, skill } } : { ...s, player: { ...s.player, [key]: skill } };
+
+/** Практика навыку игрока (каждое событие начисляется вызывающей операцией ровно один раз) */
+export const awardSkill = (s: EconomyState, key: SkillKey, amount: number): EconomyState =>
+  amount > 0 ? withPlayerSkill(s, key, P.addPractice(playerSkill(s, key), amount, SKILL_CURVES[key])) : s;
+
+const awardManagement = (s: EconomyState, amount: number): EconomyState => awardSkill(s, 'management', amount);
 
 /** Списание свободных денег. Кредит здесь не используется — только реальный баланс. */
 const spend = (s: EconomyState, cents: number, apply: (l: MonthLedger) => MonthLedger, opId?: string): OpResult => {
@@ -496,7 +569,7 @@ export const buyCar = (s: EconomyState, car: CarPurchase): OpResult => {
 export const spendOnCar = (s: EconomyState, carId: string, cents: number, opId?: string): OpResult => {
   const asset = s.assets[carId];
   if (!asset) return { state: s, ok: false };
-  const res = spend(s, cents, (l) => l, opId);
+  const res = spend(s, cents, (l) => ({ ...l, carExtraCostsCents: l.carExtraCostsCents + cents }), opId);
   if (!res.ok || isProcessed(s, opId)) return res;
   const updated = { ...asset, extraCostsCents: asset.extraCostsCents + cents };
   return { ...res, state: { ...res.state, assets: { ...res.state.assets, [carId]: updated } } };
@@ -541,7 +614,7 @@ export const sellCar = (s: EconomyState, sale: CarSale): EconomyState => {
       revenueCents: s.totals.revenueCents + sale.priceCents,
     },
   }, xp);
-  return withProcessed(awardManagement(withXp, practice), opId);
+  return withProcessed(awardSkill(awardManagement(withXp, practice), 'trade', practice), opId);
 };
 
 /** XP за первое полное восстановление конкретной машины — один раз за экземпляр */
@@ -602,7 +675,8 @@ export const earnOtherIncome = (s: EconomyState, cents: number): EconomyState =>
 // ─── Навыки: тапы игрока и курсы ───────────────────────────────────────────
 
 /** Сила ручного тапа ремонта: ×(1 + 5% за уровень навыка игрока) */
-export const playerTapMultiplier = (s: EconomyState): number => P.skillMultiplier(s.player.skill.level);
+/** Сила ручного тапа ремонта: навык «Механик» × профессиональные инструменты */
+export const playerTapMultiplier = (s: EconomyState): number => P.skillMultiplier(s.player.skill.level) * repairToolsMultiplier(s);
 
 /** Успешный ручной тап — ровно 1 практика, независимо от того, сколько он починил */
 export const recordPlayerTap = (s: EconomyState): EconomyState => {
@@ -684,7 +758,7 @@ export const buyWorkerCourse = (s: EconomyState, mechanicId: string, now: number
       },
     },
   };
-  if (skill.level !== c.skill.level) state = changeSalary(state, mechanicId, salaryForLevel(skill.level), now);
+  if (skill.level !== c.skill.level) state = changeSalary(state, mechanicId, salaryForLevel(skill.level, c.profession), now);
   return { state, ok: true };
 };
 
@@ -775,6 +849,11 @@ export interface MonthResult {
   otherIncomeCents: number;
   otherExpenseCents: number;
   investmentsCents: number;
+  /** Заказы автосервиса: оплата клиентов и детали */
+  serviceRevenueCents: number;
+  serviceCostsCents: number;
+  serviceProfitCents: number;
+  diagnosticsCents: number;
   netProfitCents: number;
   carsSold: number;
 }
@@ -793,7 +872,18 @@ export const getMonthResult = (s: EconomyState, now: number): MonthResult => {
     otherIncomeCents: l.otherIncomeCents,
     otherExpenseCents: l.otherExpenseCents,
     investmentsCents: l.investmentsCents,
-    netProfitCents: dealProfitCents - salaryCents - l.severanceCents - l.otherExpenseCents + l.otherIncomeCents,
+    serviceRevenueCents: l.serviceRevenueCents,
+    serviceCostsCents: l.serviceCostsCents,
+    serviceProfitCents: l.serviceRevenueCents - l.serviceCostsCents,
+    diagnosticsCents: l.diagnosticsCents,
+    netProfitCents:
+      dealProfitCents +
+      (l.serviceRevenueCents - l.serviceCostsCents) -
+      salaryCents -
+      l.severanceCents -
+      l.otherExpenseCents -
+      l.diagnosticsCents +
+      l.otherIncomeCents,
     carsSold: l.carsSold,
   };
 };
@@ -1087,6 +1177,189 @@ export const initLegacyWorkerSkill = (s: EconomyState, mechanicId: string, level
   return syncSalariesWithSkill({ ...s, contracts: { ...s.contracts, [mechanicId]: updated } }, now);
 };
 
+// ─── Оборудование ──────────────────────────────────────────────────────────
+
+export const hasEquipment = (s: EconomyState, id: B.EquipmentId): boolean => s.equipment.owned.includes(id);
+
+export const equipmentDef = (id: B.EquipmentId): B.EquipmentDef =>
+  B.EQUIPMENT.find((e) => e.id === id) ?? B.EQUIPMENT[0];
+
+export type EquipmentBlock = 'owned' | 'level' | 'money';
+
+export const equipmentBlock = (s: EconomyState, id: B.EquipmentId): EquipmentBlock | null => {
+  const def = equipmentDef(id);
+  if (hasEquipment(s, id)) return 'owned';
+  if (s.player.xp.level < def.requiredLevel) return 'level';
+  if (!canAfford(s, toCents(def.price))) return 'money';
+  return null;
+};
+
+/** Покупка оборудования — вложение в бизнес (как гараж), из свободных денег, без кредита */
+export const buyEquipment = (s: EconomyState, id: B.EquipmentId): OpResult => {
+  if (equipmentBlock(s, id)) return { state: s, ok: false };
+  const cents = toCents(equipmentDef(id).price);
+  const res = spend(s, cents, (l) => ({ ...l, investmentsCents: l.investmentsCents + cents }), `equip:${id}`);
+  if (!res.ok) return res;
+  return { ok: true, state: { ...res.state, equipment: { ...res.state.equipment, owned: [...res.state.equipment.owned, id] } } };
+};
+
+export type BoothInstallBlock = 'not-owned' | 'installed' | 'bad-slot' | 'last-slot';
+
+/**
+ * Камеру можно поставить только так, чтобы остался хотя бы один обычный слот.
+ * Что слот свободен (нет машины и механика) — проверяет гараж.
+ */
+export const boothInstallBlock = (s: EconomyState, slot: number, garageSlots: number): BoothInstallBlock | null => {
+  if (!hasEquipment(s, 'paint_booth')) return 'not-owned';
+  if (s.equipment.boothSlot !== null) return 'installed';
+  if (slot < 0 || slot >= garageSlots) return 'bad-slot';
+  if (garageSlots - 1 < 1) return 'last-slot';
+  return null;
+};
+
+export const installBooth = (s: EconomyState, slot: number, garageSlots: number): OpResult =>
+  boothInstallBlock(s, slot, garageSlots)
+    ? { state: s, ok: false }
+    : { ok: true, state: { ...s, equipment: { ...s.equipment, boothSlot: slot } } };
+
+/** Демонтаж: что в камере нет работы, проверяет гараж; камера остаётся купленной */
+export const uninstallBooth = (s: EconomyState): EconomyState =>
+  s.equipment.boothSlot === null ? s : { ...s, equipment: { ...s.equipment, boothSlot: null } };
+
+/** Профессиональные инструменты: +15% к скорости технического ремонта (игрок и механики), не к покраске */
+export const repairToolsMultiplier = (s: EconomyState): number =>
+  hasEquipment(s, 'pro_tools') ? B.PRO_TOOLS_REPAIR_BONUS : 1;
+
+/** Сила ручного тапа покраски: ×(1 + 5% за уровень «Маляра») */
+export const paintTapMultiplier = (s: EconomyState): number => P.skillMultiplier(s.player.painter.level);
+
+/** Успешный тап покраски в своей камере — 1 практика «Маляра» */
+export const recordPaintTap = (s: EconomyState): EconomyState => (s.bankruptcy ? s : awardSkill(s, 'painter', 1));
+
+// ─── Диагностика объявлений ────────────────────────────────────────────────
+
+/** Первый осмотр объявления: +5 «Подборщика», не больше 30 таких очков в месяц */
+export const recordInspection = (s: EconomyState, listingId: string): EconomyState => {
+  const opId = `inspect:${listingId}`;
+  if (isProcessed(s, opId) || s.bankruptcy) return s;
+  const amount = Math.max(0, Math.min(B.PICKER_INSPECT_PRACTICE, B.PICKER_INSPECT_MONTHLY_CAP - s.ledger.inspectPractice));
+  const state = awardSkill({ ...s, ledger: { ...s.ledger, inspectPractice: s.ledger.inspectPractice + amount } }, 'picker', amount);
+  return withProcessed(state, opId);
+};
+
+/** Первая диагностика объявления своим сканером: +40 «Подборщика» */
+export const recordScan = (s: EconomyState, listingId: string): OpResult => {
+  if (!hasEquipment(s, 'scanner') || s.bankruptcy) return { state: s, ok: false };
+  const opId = `scan:${listingId}`;
+  if (isProcessed(s, opId)) return { state: s, ok: true };
+  return { ok: true, state: withProcessed(awardSkill(s, 'picker', B.PICKER_SCAN_PRACTICE), opId) };
+};
+
+export const serviceDiagnosticsCents = (tier: number | undefined): number =>
+  toCents(B.SERVICE_DIAGNOSTICS_PRICE[tier ?? 1] ?? B.SERVICE_DIAGNOSTICS_PRICE[1]);
+
+/** Сторонняя диагностика: расход месяца, без практики; повторно за то же объявление не списывается */
+export const payServiceDiagnostics = (s: EconomyState, listingId: string, tier: number | undefined): OpResult => {
+  const cents = serviceDiagnosticsCents(tier);
+  return spend(s, cents, (l) => ({ ...l, diagnosticsCents: l.diagnosticsCents + cents }), `diag:${listingId}`);
+};
+
+// ─── Заказы клиентов ───────────────────────────────────────────────────────
+
+/** Проверки доски и сроки заказов к моменту now; без изменений возвращает то же состояние */
+export const advanceOrders = (s: EconomyState, now: number, ctx: Omit<O.OrdersContext, 'owned'>): EconomyState => {
+  if (s.bankruptcy) return s;
+  const orders = O.advanceOrders(s.orders, now, { ...ctx, owned: s.equipment.owned });
+  return orders === s.orders ? s : { ...s, orders };
+};
+
+/** Принять заказ. Ремонтный: детали оплачиваются сразу из свободных денег (свободный слот проверяет гараж) */
+export const acceptOrder = (s: EconomyState, id: string, now: number, unlockedTiers: number[]): OpResult => {
+  if (s.bankruptcy) return { state: s, ok: false };
+  if (O.acceptBlock(s.orders, id, { owned: s.equipment.owned, unlockedTiers })) return { state: s, ok: false };
+  const order = s.orders.board.find((o) => o.id === id)!;
+  let state = s;
+  if (order.kind === 'service' && order.partsCents > 0) {
+    const cents = order.partsCents;
+    const paid = spend(s, cents, (l) => ({ ...l, serviceCostsCents: l.serviceCostsCents + cents }), `accept:${id}`);
+    if (!paid.ok) return paid;
+    state = paid.state;
+  }
+  return { ok: true, state: { ...state, orders: O.acceptOrder(state.orders, id, now) } };
+};
+
+export const declineOffer = (s: EconomyState, id: string): EconomyState => ({ ...s, orders: O.declineOffer(s.orders, id) });
+
+/** Отказ от принятого заказа: −5 репутации, деньги за детали не возвращаются */
+export const cancelOrder = (s: EconomyState, id: string, now: number): EconomyState =>
+  s.orders.active.some((o) => o.id === id) ? { ...s, orders: O.cancelOrder(s.orders, id, now) } : s;
+
+export const markOrderWorkDone = (s: EconomyState, id: string, at: number): EconomyState => {
+  const orders = O.markWorkDone(s.orders, id, at);
+  return orders === s.orders ? s : { ...s, orders };
+};
+
+/** Сдать ремонтный заказ: оплата по моменту фактического окончания работы, один раз */
+export const deliverServiceOrder = (s: EconomyState, id: string, now: number): OpResult => {
+  const opId = `deliver:${id}`;
+  const o = s.orders.active.find((x) => x.id === id);
+  if (isProcessed(s, opId) || s.bankruptcy || !o || o.kind !== 'service' || o.completedAtMs === undefined) {
+    return { state: s, ok: false };
+  }
+  const outcome = O.deliveryOutcome(o, o.completedAtMs);
+  const paid = Math.round(o.rewardCents * outcome.payShare);
+  let state: EconomyState = {
+    ...s,
+    balanceCents: s.balanceCents + paid,
+    ledger: { ...s.ledger, serviceRevenueCents: s.ledger.serviceRevenueCents + paid },
+    orders: O.completeOrder(s.orders, id, now, outcome, paid),
+  };
+  state = awardSkill(state, 'management', B.MANAGEMENT_ORDER_PRACTICE);
+  return { ok: true, state: withProcessed(state, opId) };
+};
+
+/**
+ * Передать машину по заказу на подбор: обычная продажа (себестоимость, прибыль, XP — стандартно)
+ * по согласованной цене, сразу, без таймера продажи. Плюс репутация и практика за заказ.
+ */
+export const deliverPickingOrder = (
+  s: EconomyState,
+  id: string,
+  carId: string,
+  candidate: O.PickingCandidate,
+  now: number,
+): OpResult => {
+  const opId = `deliver:${id}`;
+  const o = s.orders.active.find((x) => x.id === id);
+  if (isProcessed(s, opId) || s.bankruptcy || !o || o.kind !== 'picking' || !s.assets[carId]) return { state: s, ok: false };
+  if (O.pickingMismatch(o, candidate).length > 0) return { state: s, ok: false };
+  const outcome = O.deliveryOutcome(o, now);
+  const price = outcome.late ? Math.round(o.priceCents * B.PICKING_LATE_PRICE_SHARE) : o.priceCents;
+  let state = sellCar(s, { carId, priceCents: price, fallbackCostCents: 0, tier: candidate.tier });
+  state = { ...state, orders: O.completeOrder(state.orders, id, now, outcome, price, carId) };
+  state = awardSkill(state, 'management', B.MANAGEMENT_ORDER_PRACTICE);
+  state = awardSkill(state, 'trade', B.TRADE_PICKING_PRACTICE);
+  return { ok: true, state: withProcessed(state, opId) };
+};
+
+// ─── Курсы всех навыков игрока ─────────────────────────────────────────────
+
+export const skillCourseOffer = (s: EconomyState, key: SkillKey, now: number): CourseOffer => {
+  const skill = playerSkill(s, key);
+  const costCents = toCents(P.playerCourseCost(skill.level));
+  return { costCents, preview: P.previewCourse(skill, now, SKILL_CURVES[key]), affordable: canAfford(s, costCents) };
+};
+
+/** Курс навыка игрока: до 50% порога, без переноса, раз на уровень, своя перезарядка у каждого навыка */
+export const buySkillCourse = (s: EconomyState, key: SkillKey, now: number): OpResult => {
+  const offer = skillCourseOffer(s, key, now);
+  const skill = P.applyCourse(playerSkill(s, key), now, SKILL_CURVES[key]);
+  if (!offer.preview.available || !skill) return { state: s, ok: false };
+  const paid = spendOtherExpense(s, offer.costCents);
+  if (!paid.ok) return paid;
+  return { ok: true, state: withPlayerSkill(paid.state, key, skill) };
+};
+
 // ─── Сохранение ────────────────────────────────────────────────────────────
 
 export interface EconomySave {
@@ -1126,8 +1399,18 @@ export const deserializeEconomy = (raw: string): EconomySave | null => {
       totals: { ...base.totals, ...save.state.totals },
       // Нет данных прогрессии — это сохранение старой версии, опыт перенесёт провайдер
       player: loaded.player
-        ? { ...loaded.player, management: loaded.player.management ?? P.createSkill() }
+        ? {
+            ...loaded.player,
+            management: loaded.player.management ?? P.createSkill(),
+            painter: loaded.player.painter ?? P.createSkill(),
+            picker: loaded.player.picker ?? P.createSkill(),
+            trade: loaded.player.trade ?? P.createSkill(),
+          }
         : base.player,
+      equipment: loaded.equipment
+        ? { owned: Array.from(new Set<B.EquipmentId>(['basic_tools', ...loaded.equipment.owned])), boothSlot: loaded.equipment.boothSlot ?? null }
+        : createEquipment(),
+      orders: O.restoreOrdersState(loaded.orders, randomSeed(), Math.max(0, save.gameTimeMs || 0)),
       playerMigrated: loaded.player ? (loaded.playerMigrated ?? true) : false,
       history: (loaded.history ?? []).map((m) => ({ ...m, monthXp: m.monthXp ?? 0, managementPractice: m.managementPractice ?? 0, salesXp: m.salesXp ?? 0, repairXp: m.repairXp ?? 0 })),
     };

@@ -117,6 +117,12 @@ export const requiredPractice: PracticeCurve = (level) => 1000 + 250 * (level - 
 /** Навык «Менеджмент» */
 export const requiredManagementPractice: PracticeCurve = (level) => 350 + 75 * (level - 1);
 
+/** Навык «Подборщик» */
+export const requiredPickerPractice: PracticeCurve = (level) => 200 + 45 * (level - 1);
+
+/** Навык «Торговля» */
+export const requiredTradePractice: PracticeCurve = (level) => 300 + 65 * (level - 1);
+
 /** +5% эффективности за каждый уровень после первого (линейно, без перемножения) */
 export const skillMultiplier = (level: number): number => 1 + 0.05 * (level - 1);
 

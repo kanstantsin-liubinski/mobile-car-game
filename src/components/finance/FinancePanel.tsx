@@ -20,7 +20,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Обзор' },
   { id: 'pnl', label: 'Доходы и расходы' },
   { id: 'assets', label: 'Активы' },
-  { id: 'mechanics', label: 'Механики' },
+  { id: 'mechanics', label: 'Персонал' },
   { id: 'advice', label: 'Советы' },
   { id: 'loan', label: 'Кредит' },
 ];
@@ -126,11 +126,15 @@ const PnlTab = () => {
         <FinanceRow label="Прибыль от сделок" cents={r.dealProfitCents} signed />
         <FinanceRow label="Зарплаты (начислено)" cents={-r.salaryCents} />
         <FinanceRow label="Компенсации при увольнении" cents={-r.severanceCents} />
+        <FinanceRow label="Заказы автосервиса: оплата" cents={r.serviceRevenueCents} />
+        <FinanceRow label="Заказы автосервиса: детали" cents={-r.serviceCostsCents} />
+        <FinanceRow label="Сторонняя диагностика" cents={-r.diagnosticsCents} />
         <FinanceRow label="Обучение (курсы)" cents={-r.otherExpenseCents} />
         <FinanceRow label="Прочие доходы" cents={r.otherIncomeCents} />
         <View style={ui.divider} />
         <FinanceRow label="Чистая прибыль" cents={r.netProfitCents} signed bold />
-        <FinanceRow label="Вложения (гаражи)" cents={-r.investmentsCents} muted />
+        <FinanceRow label="Вложения (гаражи, оборудование)" cents={-r.investmentsCents} muted />
+        <FinanceRow label="Покраска своих машин (в себестоимость)" cents={-state.ledger.carExtraCostsCents} muted />
         <FinanceRow label="Куплено машин" value={`${state.ledger.carsBought} на ${formatMoney(state.ledger.carPurchasesCents)}`} muted />
       </FinanceSection>
       <Text style={styles.hint}>
@@ -165,10 +169,14 @@ const PnlTab = () => {
 
 const AssetsTab = () => {
   const { state } = useEconomy();
-  const { garage, mechanicRepairs, mechanicRepairsProgress, activeSells, activeSellsProgress } = useGarageContext();
+  const { garage: allCars, mechanicRepairs, mechanicRepairsProgress, activeSells, activeSellsProgress, carBusyReason } = useGarageContext();
+  // Машины клиентов — не активы бизнеса
+  const garage = allCars.filter((c) => !c.clientOrderId);
 
   const stage = (carId: string, condition: number, maxCondition: number) => {
     if (activeSells[carId]) return `Продаётся · ${Math.round(activeSellsProgress[carId] ?? 0)}%`;
+    const paintBusy = carBusyReason(carId);
+    if (paintBusy && !mechanicRepairs[carId]) return paintBusy;
     if (mechanicRepairs[carId]) return `Ремонт механиком · ${Math.round(mechanicRepairsProgress[carId] ?? 0)}%`;
     if (condition < maxCondition) return `Ждёт ремонта · ${condition.toFixed(0)}% из ${maxCondition.toFixed(0)}%`;
     return 'Отремонтирована, готова к продаже';
@@ -212,13 +220,14 @@ const AssetsTab = () => {
 const MechanicsTab = () => {
   const { state } = useEconomy();
   const { gameTimeMs } = useGameClock();
-  const { mechanics } = useGarageContext();
-  const staff = mechanics.filter((m) => state.contracts[m.id]);
+  const { mechanics, painters } = useGarageContext();
+  // Механики и маляры — в одном зарплатном фонде
+  const staff = [...mechanics, ...painters].filter((m) => state.contracts[m.id]);
 
   return (
     <>
       {staff.length === 0 && (
-        <Text style={styles.empty}>В штате нет механиков. Нанять их можно в гараже → «Механики».</Text>
+        <Text style={styles.empty}>В штате никого нет. Механиков и маляра нанимают в гараже.</Text>
       )}
       {staff.map((m) => {
         const c = state.contracts[m.id];
@@ -229,9 +238,11 @@ const MechanicsTab = () => {
             <View style={styles.itemHeader}>
               <GameIcon source={getMechanicAvatar(m.id)} size={48} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.itemName}>{m.name}</Text>
+                <Text style={styles.itemName}>
+                  {m.name} · {c.profession === 'painter' ? 'маляр' : 'механик'}
+                </Text>
                 <Text style={[styles.itemMeta, busyNow && { color: financeColors.positive }]}>
-                  Уровень {m.skillLevel} · {busyNow ? 'ремонтирует' : 'простаивает'}
+                  Уровень {m.skillLevel} · {busyNow ? (c.profession === 'painter' ? 'красит' : 'ремонтирует') : 'простаивает'}
                 </Text>
               </View>
               <Text style={styles.load}>{formatPercent(activity.loadPct)}</Text>

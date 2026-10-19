@@ -4,7 +4,7 @@
  * Все случайности детерминированы (seed + номер проверки), поэтому перезагрузка ничего не перебрасывает.
  * Модуль не знает, как устроена машина: объявление генерирует и уценивает вызывающий код.
  */
-import { DAY_MS } from './economy.ts';
+import { DAY_MS } from './time.ts';
 
 export const HOT_CHECK_INTERVAL_MS = 10 * DAY_MS;
 export const HOT_GUARANTEE_MS = 90 * DAY_MS;

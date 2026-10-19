@@ -10,13 +10,22 @@ const bonus = (level: number) => `+${Math.round((skillMultiplier(level) - 1) * 1
 /** Тосты о повышениях: общий уровень игрока, навык игрока и навыки механиков (на любом экране) */
 export const ProgressionToasts = () => {
   const { state, isLoaded } = useEconomy();
-  const { mechanics } = useGarageContext();
+  const { mechanics, painters } = useGarageContext();
   const { showToast } = useToast();
 
   const playerLevel = state.player.xp.level;
   const playerSkill = state.player.skill.level;
   const management = state.player.management.level;
-  const prev = useRef<{ level: number; skill: number; management: number; workers: Record<string, number> } | null>(null);
+  const painter = state.player.painter.level;
+  const picker = state.player.picker.level;
+  const trade = state.player.trade.level;
+  const prev = useRef<{
+    level: number;
+    skill: number;
+    management: number;
+    others: Record<string, number>;
+    workers: Record<string, number>;
+  } | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -27,7 +36,8 @@ export const ProgressionToasts = () => {
         .map((c) => [c.mechanicId, c.skill.level]),
     );
     const before = prev.current;
-    prev.current = { level: playerLevel, skill: playerSkill, management, workers };
+    const others = { painter, picker, trade };
+    prev.current = { level: playerLevel, skill: playerSkill, management, others, workers };
     // Первое значение после загрузки — это не повышение
     if (!before) return;
 
@@ -59,19 +69,35 @@ export const ProgressionToasts = () => {
         tone: 'success',
       });
     }
+    const otherText: Record<string, [string, string]> = {
+      painter: ['Маляр', `Ручная покраска ${bonus(painter)} эффективнее.`],
+      picker: ['Подборщик', 'Сканер точнее: интервалы диагностики стали уже.'],
+      trade: ['Торговля', 'Покупки дешевле, продажи выгоднее.'],
+    };
+    for (const [key, level] of Object.entries(others)) {
+      if (level > (before.others[key] ?? level)) {
+        showToast({
+          title: `Навык «${otherText[key][0]}»: уровень ${level}`,
+          message: otherText[key][1],
+          icon: ICONS.upgradeSkill,
+          tone: 'success',
+        });
+      }
+    }
     for (const [id, level] of Object.entries(workers)) {
       const was = before.workers[id];
       if (was !== undefined && level > was) {
-        const name = mechanics.find((m) => m.id === id)?.name ?? 'Механик';
+        const name = [...mechanics, ...painters].find((m) => m.id === id)?.name ?? 'Сотрудник';
+        const isPainter = state.contracts[id]?.profession === 'painter';
         showToast({
           title: `${name}: навык ${level} уровня`,
-          message: `Скорость ремонта ${bonus(level)}, оклад пересчитан.`,
+          message: `Скорость ${isPainter ? 'покраски' : 'ремонта'} ${bonus(level)}, оклад пересчитан.`,
           icon: getMechanicAvatar(id),
           tone: 'success',
         });
       }
     }
-  }, [isLoaded, playerLevel, playerSkill, management, state.contracts]);
+  }, [isLoaded, playerLevel, playerSkill, management, painter, picker, trade, state.contracts]);
 
   return null;
 };

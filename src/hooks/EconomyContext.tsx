@@ -2,8 +2,42 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as E from '../economy/economy';
+import * as O from '../economy/orders';
+import type { EquipmentId } from '../economy/balance';
 import { calculateMaxCondition } from '../utils/priceCalculator';
+import { generateRandomListing, type Rng } from '../utils/marketGenerator';
+import { TIER_UNLOCK_LEVELS, TOTAL_TIERS } from '../data/carModels';
 import type { Car } from '@/types';
+
+/** Классы, открытые на этом уровне игрока */
+export const unlockedTiersFor = (level: number): number[] =>
+  Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).filter((t) => level >= (TIER_UNLOCK_LEVELS[t] ?? 0));
+
+/** Машина для заказа — обычный экземпляр из генератора авторынка */
+const sampleCar = (tier: number, rng: Rng): O.SampleCar => {
+  const { car } = generateRandomListing(tier, 0, [], rng);
+  return {
+    tier,
+    name: car.name,
+    modelId: car.id,
+    emoji: car.emoji,
+    speed: car.speed,
+    year: car.year,
+    mileage: car.mileage,
+    basePrice: car.basePrice ?? 0,
+    condition: car.condition,
+    maxCondition: car.maxCondition ?? calculateMaxCondition(car.year, car.mileage),
+    paintCondition: car.paintCondition ?? car.condition,
+  };
+};
+
+const ordersCtx = (s: E.EconomyState) => ({ unlockedTiers: unlockedTiersFor(s.player.xp.level), sampleCar });
+
+/** Нужен ли пересчёт заказов: проверка доски, истечение предложений или окончательная просрочка */
+const ordersDue = (s: E.EconomyState, now: number): boolean =>
+  s.orders.nextCheckAtMs <= now ||
+  s.orders.board.some((o) => o.offerExpiresAtMs <= now) ||
+  s.orders.active.some((o) => O.isOverdueFinal(o, now));
 
 const ECONOMY_KEY = 'game_economy';
 /** Ключи до финансовой системы и системы прогрессии — читаются один раз для переноса сохранений */
@@ -51,6 +85,27 @@ interface EconomyContextType {
   ensureAssets: (cars: (Car & { maxCondition?: number })[]) => void;
   repayLoan: (cents: number) => boolean;
   closeMonth: (repayCents: number) => E.CloseOutcome;
+  // ─── Расширение: навыки, оборудование, диагностика, покраска, заказы ───
+  skillCourseOffer: (key: E.SkillKey) => E.CourseOffer;
+  buySkillCourse: (key: E.SkillKey) => boolean;
+  buyEquipment: (id: EquipmentId) => boolean;
+  installBooth: (slot: number, garageSlots: number) => boolean;
+  uninstallBooth: () => void;
+  recordInspection: (listingId: string) => void;
+  recordScan: (listingId: string) => boolean;
+  payServiceDiagnostics: (listingId: string, tier: number | undefined) => boolean;
+  /** Затраты на свою машину (покраска) — в её себестоимость */
+  spendOnCar: (carId: string, cents: number, opId: string) => boolean;
+  recordPaintTap: () => void;
+  paintTapMultiplier: number;
+  hirePainter: (painterId: string) => void;
+  acceptOrder: (orderId: string) => boolean;
+  declineOffer: (orderId: string) => void;
+  cancelOrder: (orderId: string) => void;
+  markOrderWorkDone: (orderId: string, atMs?: number) => void;
+  deliverServiceOrder: (orderId: string) => boolean;
+  deliverPickingOrder: (orderId: string, carId: string, candidate: O.PickingCandidate) => boolean;
+  unlockedTiers: number[];
 }
 
 interface GameClockContextType {
@@ -182,6 +237,11 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         commit(E.syncAllWorkers(s, next));
         return;
       }
+      // Заказы: проверка доски раз в 10 дней, истечение предложений, окончательные просрочки
+      if (ordersDue(s, next)) {
+        commit(E.advanceOrders(s, next, ordersCtx(s)));
+        return;
+      }
       // Зарплатный день наступил — фиксируем сразу, чтобы перезагрузка вернула в него же
       if (E.isPaydayPending(s, next) || wall - lastSaveRef.current >= SAVE_EVERY_MS) persist();
     }, TICK_MS);
@@ -223,7 +283,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
           tier: car.tier,
           priceCents: E.toCents(car.price),
           conditionPct: car.condition,
-          maxConditionPct: calculateMaxCondition(car.year, car.mileage),
+          maxConditionPct: car.maxCondition ?? calculateMaxCondition(car.year, car.mileage),
         }),
       ),
     [run],
@@ -336,6 +396,61 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const repayLoan = useCallback((cents: number) => run((s) => E.repayLoan(s, cents)), [run]);
 
+  // ─── Расширение ───────────────────────────────────────────────────
+  const skillCourseOffer = useCallback((key: E.SkillKey) => E.skillCourseOffer(stateRef.current, key, timeRef.current), []);
+  const buySkillCourse = useCallback((key: E.SkillKey) => run((s, now) => E.buySkillCourse(s, key, now)), [run]);
+  const buyEquipment = useCallback((id: EquipmentId) => run((s) => E.buyEquipment(s, id)), [run]);
+  const installBooth = useCallback(
+    (slot: number, garageSlots: number) => run((s) => E.installBooth(s, slot, garageSlots)),
+    [run],
+  );
+  const uninstallBooth = useCallback(() => commit(E.uninstallBooth(stateRef.current)), [commit]);
+  const recordInspection = useCallback(
+    (listingId: string) => commit(E.recordInspection(stateRef.current, listingId)),
+    [commit],
+  );
+  const recordScan = useCallback((listingId: string) => run((s) => E.recordScan(s, listingId)), [run]);
+  const payServiceDiagnostics = useCallback(
+    (listingId: string, tier: number | undefined) => run((s) => E.payServiceDiagnostics(s, listingId, tier)),
+    [run],
+  );
+  const spendOnCar = useCallback(
+    (carId: string, cents: number, opId: string) => run((s) => E.spendOnCar(s, carId, cents, opId)),
+    [run],
+  );
+  const recordPaintTap = useCallback(
+    () => commit(E.recordPaintTap(stateRef.current), { deferSave: true }),
+    [commit],
+  );
+  const hirePainter = useCallback(
+    (painterId: string) => commit(E.startContract(stateRef.current, painterId, timeRef.current, undefined, 'painter')),
+    [commit],
+  );
+  const acceptOrder = useCallback(
+    (orderId: string) =>
+      run((s, now) => E.acceptOrder(s, orderId, now, unlockedTiersFor(s.player.xp.level))),
+    [run],
+  );
+  const declineOffer = useCallback((orderId: string) => commit(E.declineOffer(stateRef.current, orderId)), [commit]);
+  const cancelOrder = useCallback(
+    (orderId: string) => commit(E.cancelOrder(stateRef.current, orderId, timeRef.current)),
+    [commit],
+  );
+  const markOrderWorkDone = useCallback(
+    (orderId: string, atMs?: number) =>
+      commit(E.markOrderWorkDone(stateRef.current, orderId, atMs ?? timeRef.current)),
+    [commit],
+  );
+  const deliverServiceOrder = useCallback(
+    (orderId: string) => run((s, now) => E.deliverServiceOrder(s, orderId, now)),
+    [run],
+  );
+  const deliverPickingOrder = useCallback(
+    (orderId: string, carId: string, candidate: O.PickingCandidate) =>
+      run((s, now) => E.deliverPickingOrder(s, orderId, carId, candidate, now)),
+    [run],
+  );
+
   const closeMonth = useCallback(
     (repayCents: number) => {
       const { state: next, outcome } = E.closeMonth(stateRef.current, timeRef.current, repayCents);
@@ -379,6 +494,25 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ensureAssets,
       repayLoan,
       closeMonth,
+      skillCourseOffer,
+      buySkillCourse,
+      buyEquipment,
+      installBooth,
+      uninstallBooth,
+      recordInspection,
+      recordScan,
+      payServiceDiagnostics,
+      spendOnCar,
+      recordPaintTap,
+      paintTapMultiplier: E.paintTapMultiplier(state),
+      hirePainter,
+      acceptOrder,
+      declineOffer,
+      cancelOrder,
+      markOrderWorkDone,
+      deliverServiceOrder,
+      deliverPickingOrder,
+      unlockedTiers: unlockedTiersFor(state.player.xp.level),
     }),
     [
       isLoaded,
@@ -408,6 +542,23 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ensureAssets,
       repayLoan,
       closeMonth,
+      skillCourseOffer,
+      buySkillCourse,
+      buyEquipment,
+      installBooth,
+      uninstallBooth,
+      recordInspection,
+      recordScan,
+      payServiceDiagnostics,
+      spendOnCar,
+      recordPaintTap,
+      hirePainter,
+      acceptOrder,
+      declineOffer,
+      cancelOrder,
+      markOrderWorkDone,
+      deliverServiceOrder,
+      deliverPickingOrder,
     ],
   );
 

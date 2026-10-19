@@ -7,7 +7,8 @@ import { useSoldCarsContext } from '@hooks/SoldCarsContext';
 import { useMarketContext, type HotOffer } from '@hooks/MarketContext';
 import type { MarketFocus } from '@hooks/useNavigation';
 import { colors } from '@styles/colors';
-import { calculateMaxCondition } from '../utils/priceCalculator';
+import { ListingDiagnostics } from '@components/ListingDiagnostics';
+import { tradePurchaseBonus, tradePurchasePrice } from '../economy/carCondition';
 import type { MarketListing } from '../utils/marketGenerator';
 import { TIER_NAMES, TIER_UNLOCK_LEVELS } from '../data/carModels';
 import { useExperienceContext } from '@hooks/ExperienceContext';
@@ -42,7 +43,10 @@ interface MarketScreenProps {
 }
 
 export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => {
-  const { balance, buyCar } = useEconomy();
+  const { balance, buyCar, state: economy } = useEconomy();
+  const tradeLevel = economy.player.trade.level;
+  /** Цена для игрока: цена объявления (уже с коэффициентом продавца и скидкой горящего) × навык «Торговля» */
+  const priceFor = (car: Car) => tradePurchasePrice(car.price, tradeLevel);
   const { addCar, hasCar } = useGarageContext();
   const { isSold } = useSoldCarsContext();
   const { getListingsForTier, removeListing, getTimeRemaining, hotOffer, getHotListing } = useMarketContext();
@@ -59,16 +63,11 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [focus?.nonce]);
 
-  const getConditionColor = (condition: number) => {
-    if (condition >= 80) return colors.primary;
-    if (condition >= 50) return '#F59E0B';
-    if (condition >= 20) return '#EF4444';
-    return '#991B1B';
-  };
-
+  // В покупку уходит машина с итоговой ценой: скидка навыка применяется один раз, здесь
   const handleBuyCar = (car: Car) => {
-    if (balance >= car.price) {
-      setCarToBuy(car);
+    const finalPrice = priceFor(car);
+    if (balance >= finalPrice) {
+      setCarToBuy({ ...car, price: finalPrice });
     }
   };
 
@@ -90,8 +89,8 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
     const { car } = listing;
     if (hasCar(car.id) || isSold(car.id)) return null;
 
-    const canAfford = balance >= car.price;
-    const maxCondition = calculateMaxCondition(car.year, car.mileage);
+    const finalPrice = priceFor(car);
+    const canAfford = balance >= finalPrice;
     const timeRemaining = getTimeRemaining(car.id);
     const isUrgent = hot ? timeRemaining < DAY_MS : timeRemaining > 0 && timeRemaining < 2 * 60 * 1000; // < 2 мин
 
@@ -125,8 +124,13 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
             />
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={[marketStyles.carPrice, hot && { color: HOT_COLOR }]}>${car.price.toLocaleString()}</Text>
+            <Text style={[marketStyles.carPrice, hot && { color: HOT_COLOR }]}>${finalPrice.toLocaleString()}</Text>
             {hot && <Text style={styles.normalPrice}>${hot.normalPrice.toLocaleString()}</Text>}
+            {tradeLevel > 1 && (
+              <Text style={styles.tradeNote}>
+                Торговля −{(tradePurchaseBonus(tradeLevel) * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%
+              </Text>
+            )}
           </View>
         </View>
 
@@ -136,52 +140,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
           </Text>
         )}
 
-        <View style={marketStyles.conditionContainer}>
-          <View style={marketStyles.conditionBar}>
-            {/* Текущее состояние */}
-            <View
-              style={[
-                marketStyles.conditionFill,
-                {
-                  width: `${car.condition}%`,
-                  backgroundColor: getConditionColor(car.condition),
-                  position: 'absolute',
-                  left: 0,
-                },
-              ]}
-            />
-            {/* Максимально возможное состояние */}
-            <View
-              style={[
-                marketStyles.conditionMaxFill,
-                {
-                  width: `${maxCondition}%`,
-                  backgroundColor: colors.border,
-                  position: 'absolute',
-                  left: 0,
-                },
-              ]}
-            />
-            {/* Недостижимая часть */}
-            <View
-              style={[
-                marketStyles.conditionUnachievableFill,
-                {
-                  width: `${100 - maxCondition}%`,
-                  backgroundColor: '#27272A',
-                  position: 'absolute',
-                  right: 0,
-                },
-              ]}
-            />
-          </View>
-          <View style={marketStyles.conditionLabelContainer}>
-            <Text style={[marketStyles.conditionText, { color: getConditionColor(car.condition) }]}>
-              {car.condition.toFixed(0)}% состояние
-            </Text>
-            <Text style={marketStyles.maxConditionText}>макс {maxCondition.toFixed(1)}%</Text>
-          </View>
-        </View>
+        <ListingDiagnostics listing={listing} />
 
         <Text style={marketStyles.carDescription}>{car.description}</Text>
 
@@ -270,6 +229,11 @@ const styles = StyleSheet.create({
   },
   hotTimerText: {
     color: HOT_COLOR,
+    fontWeight: '700',
+  },
+  tradeNote: {
+    fontSize: 11,
+    color: '#22C55E',
     fontWeight: '700',
   },
   normalPrice: {

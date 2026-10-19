@@ -9,14 +9,17 @@ import { useToast } from '@components/toast/ToastContext';
 import { getMechanicAvatar } from '@img/gameIcons';
 import { salaryForLevel, workerPracticeAt } from '../economy/economy';
 import { SKILL_MAX_LEVEL, skillMultiplier } from '../economy/progression';
+import { PAINTER_SPEED_PER_SEC } from '../economy/balance';
 import { formatMoney } from '../economy/format';
 import type { Mechanic } from '@/types';
 
 /** Базовая скорость ремонта механика, % состояния в секунду (как в useGarage) */
 const BASE_SPEED = 0.05;
 
-const speedText = (level: number) =>
-  `${(BASE_SPEED * skillMultiplier(level)).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}% / сек`;
+const speedText = (level: number, painter: boolean) =>
+  `${((painter ? PAINTER_SPEED_PER_SEC : BASE_SPEED) * skillMultiplier(level)).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}${
+    painter ? ' п. ЛКП' : '%'
+  } / сек`;
 
 interface WorkerTrainingModalProps {
   mechanic: Pick<Mechanic, 'id' | 'name'> | null;
@@ -33,6 +36,9 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
   const contract = mechanic ? state.contracts[mechanic.id] : undefined;
+  // Модалка общая для механиков и маляров: навык, курсы и оклад — по профессии контракта
+  const painter = contract?.profession === 'painter';
+  const profession = contract?.profession ?? 'mechanic';
   const offer = mechanic && contract ? workerCourseOffer(mechanic.id) : null;
 
   const handleBuy = () => {
@@ -42,7 +48,7 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
     showToast({
       title: `${mechanic.name} прошёл курс`,
       message: levelsUp
-        ? `Навык повышен до уровня ${contract.skill.level + 1}: ремонт быстрее, оклад ${formatMoney(salaryForLevel(contract.skill.level + 1))}/мес`
+        ? `Навык повышен до уровня ${contract.skill.level + 1}: работа быстрее, оклад ${formatMoney(salaryForLevel(contract.skill.level + 1, profession))}/мес`
         : `+${granted.toLocaleString('ru-RU')} практики`,
       icon: getMechanicAvatar(mechanic.id),
       tone: 'success',
@@ -56,7 +62,7 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
     <Modal visible={!!mechanic && !!contract} transparent animationType="fade" onRequestClose={onClose}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
-          <Text style={garageStyles.modalTitle}>Навык механика</Text>
+          <Text style={garageStyles.modalTitle}>{painter ? 'Навык маляра' : 'Навык механика'}</Text>
           {mechanic && contract && (
             <ScrollView style={{ flexGrow: 0 }}>
               <SkillCard
@@ -64,19 +70,19 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
                 icon={getMechanicAvatar(mechanic.id)}
                 skill={contract.skill}
                 practice={workerPracticeAt(contract, gameTimeMs)}
-                bonusLabel="Скорость ремонта"
+                bonusLabel={painter ? 'Скорость покраски' : 'Скорость ремонта'}
                 offer={offer}
                 onBuyCourse={handleBuy}
                 extraRows={[
-                  { label: 'Ремонтирует сейчас', value: speedText(level) },
-                  ...(isMax ? [] : [{ label: 'После повышения', value: speedText(level + 1) }]),
+                  { label: painter ? 'Красит сейчас' : 'Ремонтирует сейчас', value: speedText(level, painter) },
+                  ...(isMax ? [] : [{ label: 'После повышения', value: speedText(level + 1, painter) }]),
                   { label: 'Оклад сейчас', value: `${formatMoney(contract.monthlyCents)}/мес` },
-                  ...(isMax ? [] : [{ label: 'Оклад после повышения', value: `${formatMoney(salaryForLevel(level + 1))}/мес` }]),
+                  ...(isMax ? [] : [{ label: 'Оклад после повышения', value: `${formatMoney(salaryForLevel(level + 1, profession))}/мес` }]),
                 ]}
               />
               <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8 }}>
-                Практика копится только во время ремонта: 2 единицы за секунду работы. Оклад — около 40% того,
-                что механик приносит при полной загрузке, и растёт вместе со скоростью.
+                Практика копится только во время {painter ? 'покраски' : 'ремонта'}: 2 единицы за секунду работы. Оклад — около
+                40% того, что сотрудник приносит при полной загрузке, и растёт вместе со скоростью.
               </Text>
             </ScrollView>
           )}

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { useEconomy } from '@hooks/EconomyContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { menuStyles } from '@styles/styles';
 import { GameIcon } from '@components/GameIcon';
@@ -26,6 +27,9 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
   // Горящее предложение на любом авторынке подсвечивает вкладку «Город»
   const { marketHasAlert } = useMarketContext();
   const cityAlert = currentScreen !== 'market' && MARKETS.some((m) => marketHasAlert(m.id));
+  // Заказы: точка, когда есть готовая к сдаче работа
+  const { state } = useEconomy();
+  const ordersAlert = state.orders.active.some((o) => o.kind === 'service' && o.completedAtMs !== undefined);
 
   return (
     <View style={[menuStyles.bottomMenu, { paddingBottom: insets.bottom }]}>
@@ -43,6 +47,17 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
         <View>
           <GameIcon source={ICONS.navCity} size={MENU_ICON_SIZE} style={!isCityActive && menuStyles.menuIconInactive} />
           {cityAlert && <RedDot />}
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[menuStyles.menuButton, currentScreen === 'orders' && menuStyles.menuButtonActive]}
+        onPress={() => onScreenChange('orders')}
+        accessibilityLabel="Заказы"
+      >
+        <View>
+          <Text style={{ fontSize: 30, opacity: currentScreen === 'orders' ? 1 : 0.55 }}>📋</Text>
+          {ordersAlert && currentScreen !== 'orders' && <RedDot />}
         </View>
       </TouchableOpacity>
 

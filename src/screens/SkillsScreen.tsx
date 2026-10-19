@@ -6,97 +6,150 @@ import { SkillCard } from '@components/SkillCard';
 import { useToast } from '@components/toast/ToastContext';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { ICONS } from '@img/gameIcons';
-import { HOT_OFFER_NOTIFY_LEVEL, hotOfferChance, requiredManagementPractice } from '../economy/progression';
+import { HOT_OFFER_NOTIFY_LEVEL, hotOfferChance, skillMultiplier } from '../economy/progression';
+import { SKILL_CURVES, hasEquipment, playerSkill, type SkillKey } from '../economy/economy';
+import { pickerAccuracyFactor, scannerAccuracy, tradePurchaseBonus, tradeSaleBonus } from '../economy/carCondition';
+import * as B from '../economy/balance';
 
 const noteStyle = { color: '#94A3B8', fontSize: 12, lineHeight: 17, marginBottom: 16 };
 
+const pct = (v: number, digits = 1) => `${(Math.round(v * 10 ** (digits + 2)) / 10 ** digits).toLocaleString('ru-RU')}%`;
+
 /** «22%», «23,1%» */
-const chanceText = (level: number) =>
-  `${(Math.round(hotOfferChance(level) * 1000) / 10).toLocaleString('ru-RU')}%`;
+const chanceText = (level: number) => pct(hotOfferChance(level));
+const bonusText = (level: number) => `+${Math.round((skillMultiplier(level) - 1) * 100)}%`;
+const pickerText = (level: number) => `−${Math.round((1 - pickerAccuracyFactor(level)) * 100)}% погрешности`;
+const tradeText = (level: number) => `−${pct(tradePurchaseBonus(level))} / +${pct(tradeSaleBonus(level), 2)}`;
+
+const NAMES: Record<SkillKey, string> = {
+  mechanic: 'Механик',
+  painter: 'Маляр',
+  picker: 'Подборщик',
+  trade: 'Торговля',
+  management: 'Менеджмент',
+};
 
 /**
- * Навыки игрока. «Механик» растёт от ручных тапов ремонта и курсов, усиливает каждый тап.
- * «Менеджмент» растёт от прибыльных сделок и месяцев, повышает шанс горящих предложений на авторынке.
+ * Пять навыков игрока на общей инфраструктуре практики и курсов: у каждого свой источник практики,
+ * свой порог и своя перезарядка курса.
  */
 export const SkillsScreen = () => {
-  const { state, playerCourseOffer, buyPlayerCourse, managementCourseOffer, buyManagementCourse } = useEconomy();
-  useGameClock(); // перезарядка курса идёт по игровому времени
+  const { state, skillCourseOffer, buySkillCourse } = useEconomy();
+  useGameClock(); // перезарядка курсов идёт по игровому времени
   const { showToast } = useToast();
-  const skill = state.player.skill;
+  const hasScanner = hasEquipment(state, 'scanner');
+  const hasBooth = hasEquipment(state, 'paint_booth');
   const management = state.player.management;
-  const offer = playerCourseOffer();
-  const managementOffer = managementCourseOffer();
+  const notifyOn = management.level >= HOT_OFFER_NOTIFY_LEVEL;
 
-  const courseToast = (name: string, level: number, granted: number, levelsUp: boolean) =>
+  const handleBuy = (key: SkillKey) => {
+    const skill = playerSkill(state, key);
+    const { granted, levelsUp } = skillCourseOffer(key).preview;
+    if (!buySkillCourse(key)) return;
     showToast({
       title: 'Курс пройден',
       message: levelsUp
-        ? `Навык «${name}» повышен до уровня ${level + 1}`
-        : `+${granted.toLocaleString('ru-RU')} практики навыка «${name}»`,
+        ? `Навык «${NAMES[key]}» повышен до уровня ${skill.level + 1}`
+        : `+${granted.toLocaleString('ru-RU')} практики навыка «${NAMES[key]}»`,
       icon: ICONS.upgradeSkill,
       tone: 'success',
     });
-
-  const handleBuyCourse = () => {
-    const { granted, levelsUp } = offer.preview;
-    if (!buyPlayerCourse()) return;
-    courseToast('Механик', skill.level, granted, levelsUp);
   };
 
-  const handleBuyManagementCourse = () => {
-    const { granted, levelsUp } = managementOffer.preview;
-    if (!buyManagementCourse()) return;
-    courseToast('Менеджмент', management.level, granted, levelsUp);
+  const card = (key: SkillKey, props: Partial<React.ComponentProps<typeof SkillCard>>, note: string) => {
+    const skill = playerSkill(state, key);
+    return (
+      <View key={key}>
+        <SkillCard
+          title={NAMES[key]}
+          skill={skill}
+          practice={skill.practice}
+          curve={SKILL_CURVES[key]}
+          bonusLabel=""
+          offer={skillCourseOffer(key)}
+          onBuyCourse={() => handleBuy(key)}
+          {...props}
+        />
+        <Text style={noteStyle}>{note}</Text>
+      </View>
+    );
   };
 
-  const notifyOn = management.level >= HOT_OFFER_NOTIFY_LEVEL;
+  const scan = scannerAccuracy(state.player.picker.level);
 
   return (
     <View style={{ flex: 1 }}>
       <LocationHeader title="Навыки" icon={ICONS.skills} />
       <ScrollView style={[skillsStyles.container, { paddingTop: 8 }]}>
-        <SkillCard
-          title="Механик"
-          icon={ICONS.repair}
-          skill={skill}
-          practice={skill.practice}
-          bonusLabel="Эффективность ручного ремонта"
-          offer={offer}
-          onBuyCourse={handleBuyCourse}
-          extraRows={[{ label: 'Ручных ремонтов всего', value: state.player.manualTaps.toLocaleString('ru-RU') }]}
-        />
-        <Text style={noteStyle}>
-          Каждый успешный тап «Ремонт» в гараже даёт 1 практику. Навык не влияет на общий уровень игрока —
-          уровень растёт от опыта за прибыльные продажи, полное восстановление машин и прибыльные месяцы.
-        </Text>
+        {card(
+          'mechanic',
+          {
+            icon: ICONS.repair,
+            bonusLabel: 'Эффективность ручного ремонта',
+            bonusValue: bonusText,
+            extraRows: [{ label: 'Ручных ремонтов всего', value: state.player.manualTaps.toLocaleString('ru-RU') }],
+          },
+          'Практика: 1 за каждый успешный тап «Ремонт» в гараже. Навык не влияет на общий уровень игрока.',
+        )}
 
-        <SkillCard
-          title="Менеджмент"
-          icon={ICONS.money}
-          skill={management}
-          practice={management.practice}
-          curve={requiredManagementPractice}
-          bonusLabel="Шанс горящего предложения"
-          bonusValue={chanceText}
-          note={
-            notifyOn
-              ? undefined
-              : 'На уровне 2 открываются уведомления о выгодных предложениях и индикатор авторынка'
-          }
-          offer={managementOffer}
-          onBuyCourse={handleBuyManagementCourse}
-          extraRows={[
-            {
-              label: 'Уведомления и индикатор авторынка',
-              value: notifyOn ? 'включены' : `с ${HOT_OFFER_NOTIFY_LEVEL} уровня`,
-            },
-          ]}
-        />
-        <Text style={noteStyle}>
-          Практика: +80 за продажу с доходностью от 10%, +20 — с меньшей прибылью, +160 за прибыльный месяц.
-          Раз в 10 игровых дней на авторынке может появиться горящее предложение — машина на 15–30% дешевле
-          обычной цены, всего на 2–4 игровых дня. Если предложений не было 90 дней, следующее гарантировано.
-        </Text>
+        {card(
+          'painter',
+          {
+            bonusLabel: 'Эффективность ручной покраски',
+            bonusValue: bonusText,
+            extraRows: [
+              {
+                label: 'Тап покраски',
+                value: `+${(B.PLAYER_PAINT_PER_TAP * skillMultiplier(state.player.painter.level)).toLocaleString('ru-RU', { maximumFractionDigits: 3 })} п. ЛКП`,
+              },
+              { label: 'Покрасочная камера', value: hasBooth ? 'есть' : `с ${B.EQUIPMENT.find((e) => e.id === 'paint_booth')!.requiredLevel} уровня` },
+            ],
+          },
+          'Практика: 1 за каждый успешный тап покраски в своей камере. Нанятый маляр прокачивает свой навык сам — 2 практики за секунду работы.',
+        )}
+
+        {card(
+          'picker',
+          {
+            bonusLabel: 'Точность своего сканера',
+            bonusValue: pickerText,
+            extraRows: [
+              {
+                label: 'Сканер: тех. / максимум / ЛКП',
+                value: `±${scan.tech.toFixed(1)} / ±${scan.max.toFixed(1)} / ±${scan.paint.toFixed(1)}`,
+              },
+              { label: 'Компьютерный сканер', value: hasScanner ? 'есть' : 'не куплен (с 3 уровня)' },
+              {
+                label: 'Практика за осмотры в этом месяце',
+                value: `${state.ledger.inspectPractice} / ${B.PICKER_INSPECT_MONTHLY_CAP}`,
+              },
+            ],
+          },
+          'Практика: +5 за первый осмотр объявления (до 30 в месяц), +40 за первую диагностику объявления своим сканером. Сторонняя диагностика практики не даёт. Навык не влияет на бесплатный осмотр, скидок и цен не меняет.',
+        )}
+
+        {card(
+          'trade',
+          {
+            bonusLabel: 'Скидка при покупке / прибавка к продаже',
+            bonusValue: tradeText,
+          },
+          'Практика: +80 за продажу с доходностью от 10%, +20 — с меньшей прибылью, +40 за выполненный заказ на подбор. Бонусы применяются к реальным сделкам один раз; ползунок цены продажи по-прежнему ±10%.',
+        )}
+
+        {card(
+          'management',
+          {
+            icon: ICONS.money,
+            bonusLabel: 'Шанс горящего предложения',
+            bonusValue: chanceText,
+            note: notifyOn ? undefined : 'На уровне 2 открываются уведомления о выгодных предложениях и индикатор авторынка',
+            extraRows: [
+              { label: 'Уведомления и индикатор авторынка', value: notifyOn ? 'включены' : `с ${HOT_OFFER_NOTIFY_LEVEL} уровня` },
+            ],
+          },
+          'Практика: +80 за продажу с доходностью от 10%, +20 — с меньшей прибылью, +160 за прибыльный месяц, +200 за выполненный заказ клиента. Раз в 10 игровых дней на авторынке может появиться горящее предложение — машина на 15–30% дешевле, всего на 2–4 игровых дня.',
+        )}
       </ScrollView>
     </View>
   );
