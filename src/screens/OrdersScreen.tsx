@@ -43,7 +43,6 @@ export const OrdersScreen = () => {
             </Text>
             <Text style={styles.repValue}>{rep} / 100</Text>
           </View>
-          <Text style={styles.repCategory}>{B.reputationCategory(rep)}</Text>
           <View style={styles.track}>
             <View style={[styles.fill, { width: `${rep}%` }]} />
           </View>
@@ -287,7 +286,6 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   repTitle: { flexShrink: 1, fontSize: 15, fontWeight: '800', color: colors.textPrimary },
   repValue: { fontSize: 15, fontWeight: '800', color: '#FBBF24', fontVariant: ['tabular-nums'] },
-  repCategory: { fontSize: 12, fontWeight: '700', color: '#FBBF24', marginTop: -4 },
   track: { height: 8, borderRadius: 4, backgroundColor: colors.border, overflow: 'hidden' },
   fill: { height: '100%', backgroundColor: '#FBBF24' },
   muted: { fontSize: 12, color: colors.textTertiary, lineHeight: 17 },

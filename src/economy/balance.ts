@@ -275,12 +275,3 @@ export const REPUTATION_HISTORY = 20;
 export const orderSpawnChance = (reputation: number): number => 0.45 + 0.004 * reputation;
 export const extraOrderChance = (reputation: number): number => (0.6 * reputation) / 100;
 export const premiumOrderChance = (reputation: number): number => 0.1 + (0.35 * reputation) / 100;
-
-export const reputationCategory = (reputation: number): string => {
-  if (reputation >= 85) return 'Легендарная';
-  if (reputation >= 70) return 'Отличная';
-  if (reputation >= 50) return 'Хорошая';
-  if (reputation >= 30) return 'Средняя';
-  if (reputation >= 15) return 'Плохая';
-  return 'Ужасная';
-};
