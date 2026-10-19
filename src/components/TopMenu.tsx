@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, Animated, Easing, Platform } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { headerStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
@@ -57,6 +57,65 @@ const CircularProgressBar = ({ percentage, level }: { percentage: number; level:
   );
 };
 
+/** Интервал игровых часов (EconomyContext) — анимация тянется ровно до следующего тика */
+const CLOCK_TICK_MS = 250;
+
+/**
+ * Полоска текущего дня. Часы обновляются 4 раза в секунду, поэтому между тиками полоска
+ * плавно доезжает до нового значения; на новом дне начинается с нуля. На паузе стоит на месте.
+ */
+const DayBar = ({ progress }: { progress: number }) =>
+  Platform.OS === 'web' ? <DayBarWeb progress={progress} /> : <DayBarNative progress={progress} />;
+
+/** Веб: CSS-переход ширины — значение ставится сразу, плавность рисует браузер */
+const DayBarWeb = ({ progress }: { progress: number }) => {
+  const last = useRef(progress);
+  const wrapped = progress < last.current;
+  last.current = progress;
+  const transition = {
+    transitionProperty: 'width',
+    transitionDuration: wrapped ? '0ms' : `${CLOCK_TICK_MS}ms`,
+    transitionTimingFunction: 'linear',
+  } as object;
+  return (
+    <View style={[headerStyles.calendarTrack, headerStyles.dayTrack]}>
+      <View style={[headerStyles.calendarFill, headerStyles.dayFill, { width: `${progress * 100}%` }, transition]} />
+    </View>
+  );
+};
+
+/** Телефон: Animated доезжает до нового значения за время между тиками часов */
+const DayBarNative = ({ progress }: { progress: number }) => {
+  const value = useRef(new Animated.Value(progress)).current;
+  const last = useRef(progress);
+
+  useEffect(() => {
+    // Новый день — сбрасываем без анимации назад
+    if (progress < last.current) value.setValue(0);
+    last.current = progress;
+    const anim = Animated.timing(value, {
+      toValue: progress,
+      duration: CLOCK_TICK_MS,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [progress, value]);
+
+  return (
+    <View style={[headerStyles.calendarTrack, headerStyles.dayTrack]}>
+      <Animated.View
+        style={[
+          headerStyles.calendarFill,
+          headerStyles.dayFill,
+          { width: value.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
+        ]}
+      />
+    </View>
+  );
+};
+
 export const TopMenu = ({ insets, onPressBalance }: TopMenuProps) => {
   const { level, getProgress } = useExperienceContext();
   const { current, required, percentage } = getProgress();
@@ -78,15 +137,7 @@ export const TopMenu = ({ insets, onPressBalance }: TopMenuProps) => {
           {calendar.weekday} День {calendar.day}
         </Text>
         {/* Текущий день: 10 секунд активной игры */}
-        <View style={[headerStyles.calendarTrack, headerStyles.dayTrack]}>
-          <View
-            style={[
-              headerStyles.calendarFill,
-              headerStyles.dayFill,
-              { width: `${calendar.msToPayday <= 0 ? 100 : ((calendar.msIntoMonth % DAY_MS) / DAY_MS) * 100}%` },
-            ]}
-          />
-        </View>
+        <DayBar progress={calendar.msToPayday <= 0 ? 1 : (calendar.msIntoMonth % DAY_MS) / DAY_MS} />
         {/* Месяц: 30 дней до зарплатного дня */}
         <View style={headerStyles.calendarTrack}>
           <View style={[headerStyles.calendarFill, { width: `${calendar.monthProgress * 100}%` }]} />
