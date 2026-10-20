@@ -24,6 +24,9 @@ export const OrdersScreen = () => {
   const { state } = useEconomy();
   const { gameTimeMs } = useGameClock();
   const [tab, setTab] = useState<Tab>('service');
+  const level = state.player.xp.level;
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const mult = (v: number) => `×${v.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}`;
   const orders = state.orders;
   const rep = orders.reputation;
   const lastChange = orders.repHistory[0];
@@ -42,10 +45,12 @@ export const OrdersScreen = () => {
             <Text style={styles.repTitle} numberOfLines={1}>
               ⭐ Репутация
             </Text>
-            <Text style={styles.repValue}>{rep} / 100</Text>
+            <Text style={styles.repValue}>
+              {rep} / {B.REPUTATION_MAX}
+            </Text>
           </View>
           <View style={styles.track}>
-            <View style={[styles.fill, { width: `${rep}%` }]} />
+            <View style={[styles.fill, { width: `${(rep / B.REPUTATION_MAX) * 100}%` }]} />
           </View>
           {lastChange && (
             <Text style={styles.muted}>
@@ -54,10 +59,14 @@ export const OrdersScreen = () => {
             </Text>
           )}
           <Text style={styles.muted}>
-            Новые заказы: шанс {Math.round(B.orderSpawnChance(rep) * 100)}% раз в 10 дней (следующая проверка через{' '}
-            {formatGameDays(nextCheck, DAY_MS)}), второй заказ — {Math.round(B.extraOrderChance(rep) * 100)}%, повышенная оплата —{' '}
-            {Math.round(B.premiumOrderChance(rep) * 100)}%.
-            {rep < B.LOW_REPUTATION ? ' При такой репутации доверяют только простые работы.' : ''}
+            Каждый день: новый заказ — {pct(B.orderSpawnChance(rep))}, второй — {pct(B.extraOrderChance(rep))}, выгодный —{' '}
+            {pct(B.premiumOrderChance(rep))}; не реже раза в {B.ORDER_GUARANTEE_DAYS} дня. Следующая проверка через{' '}
+            {formatGameDays(nextCheck, DAY_MS)}. Мест на доске: {B.maxBoardService(rep)} ремонт, {B.maxBoardPicking(rep)} подбор.
+            {rep < B.LOW_REPUTATION ? ` До ${B.LOW_REPUTATION} репутации доверяют только простые работы.` : ''}
+          </Text>
+          <Text style={styles.muted}>
+            Оплата работы {mult(B.orderRewardMultiplier(level, rep))}: репутация {mult(B.orderReputationFactor(rep))} × уровень{' '}
+            {level} {mult(B.orderLevelFactor(level))}. Частоту заказов определяет только репутация.
           </Text>
         </View>
 

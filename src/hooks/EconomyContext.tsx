@@ -31,7 +31,11 @@ const sampleCar = (tier: number, rng: Rng): O.SampleCar => {
   };
 };
 
-const ordersCtx = (s: E.EconomyState) => ({ unlockedTiers: unlockedTiersFor(s.player.xp.level), sampleCar });
+const ordersCtx = (s: E.EconomyState) => ({
+  unlockedTiers: unlockedTiersFor(s.player.xp.level),
+  playerLevel: s.player.xp.level,
+  sampleCar,
+});
 
 /** Нужен ли пересчёт заказов: проверка доски, истечение предложений или окончательная просрочка */
 const ordersDue = (s: E.EconomyState, now: number): boolean =>

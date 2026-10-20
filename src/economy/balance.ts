@@ -216,8 +216,9 @@ export const SERVICE_ORDER_TYPES: ServiceOrderDef[] = [
 ];
 
 /**
- * Работа клиента платится чуть ниже ремонта на перепродажу: 85% от того, сколько тот же
- * пункт состояния добавил бы к цене типичной подержанной машины класса. Детали клиент возмещает.
+ * Базовая оплата работы: 85% того, сколько тот же пункт состояния добавил бы к цене типичной
+ * подержанной машины класса. Дальше её умножает orderRewardMultiplier (уровень и репутация).
+ * Детали клиент возмещает отдельно.
  */
 export const ORDER_LABOR_SHARE = 0.85;
 /** Типичная доля стоимости подержанной машины от базы (пробег × возраст) */
@@ -243,17 +244,17 @@ export const ORDER_LATE_PAY_SHARE = 0.7;
 /** «Значительно раньше срока»: осталось не меньше этой доли срока */
 export const ORDER_EARLY_SHARE = 0.4;
 /** Сколько дней предложение висит на доске */
-export const ORDER_OFFER_DAYS = 10;
+export const ORDER_OFFER_DAYS = 5;
 export const MAX_ACTIVE_SERVICE_ORDERS = 2;
 export const MAX_ACTIVE_PICKING_ORDERS = 1;
-export const MAX_BOARD_SERVICE = 4;
-export const MAX_BOARD_PICKING = 2;
-/** Проверка новых заказов — раз в 10 игровых дней */
-export const ORDER_CHECK_DAYS = 10;
+/** Проверка новых заказов — каждый игровой день */
+export const ORDER_CHECK_DAYS = 1;
+/** Если столько дней не было ни одного нового заказа — следующая проверка гарантированно его приносит */
+export const ORDER_GUARANTEE_DAYS = 3;
 /** Доля сгенерированных заказов, которые игрок может выполнить имеющимся оборудованием */
 export const ORDER_AVAILABLE_TYPE_WEIGHT = 0.75;
 /** Ниже этой репутации приходят только простые заказы */
-export const LOW_REPUTATION = 20;
+export const LOW_REPUTATION = 200;
 
 /** Подбор: срок, игровых дней */
 export const PICKING_MIN_DAYS = 20;
@@ -266,15 +267,40 @@ export const PICKING_LATE_PRICE_SHARE = 0.9;
 
 // ─── Репутация ─────────────────────────────────────────────────────────────
 
-export const REPUTATION_START = 50;
-export const REP_SIMPLE_ON_TIME = 2;
-export const REP_COMPLEX_ON_TIME = 4;
-export const REP_EARLY_BONUS = 1;
-export const REP_LATE = -3;
-export const REP_CANCEL = -5;
-export const REP_FAILED = -8;
+/** Шкала репутации 0–1000. Новый автосервис начинает со 100 */
+export const REPUTATION_MAX = 1000;
+export const REPUTATION_START = 100;
+export const REP_SIMPLE_ON_TIME = 20;
+export const REP_COMPLEX_ON_TIME = 40;
+export const REP_EARLY_BONUS = 10;
+export const REP_LATE = -30;
+export const REP_CANCEL = -50;
+export const REP_FAILED = -80;
 export const REPUTATION_HISTORY = 20;
 
-export const orderSpawnChance = (reputation: number): number => 0.45 + 0.004 * reputation;
-export const extraOrderChance = (reputation: number): number => (0.6 * reputation) / 100;
-export const premiumOrderChance = (reputation: number): number => 0.1 + (0.35 * reputation) / 100;
+const repShare = (reputation: number) => Math.min(1, Math.max(0, reputation / REPUTATION_MAX));
+
+/**
+ * Частота заказов зависит только от репутации: шанс нового заказа в день 20% → 60%,
+ * шанс второго заказа в тот же день 0% → 35%. Плюс гарантия — не реже раза в 3 дня.
+ */
+export const orderSpawnChance = (reputation: number): number => 0.2 + 0.4 * repShare(reputation);
+export const extraOrderChance = (reputation: number): number => 0.35 * repShare(reputation);
+/** Шанс выгодного заказа (×1,35): 10% → 45% */
+export const premiumOrderChance = (reputation: number): number => 0.1 + 0.35 * repShare(reputation);
+
+/** Сколько предложений помещается на доску: с ростом репутации клиентов больше */
+export const maxBoardService = (reputation: number): number => 3 + Math.floor(repShare(reputation) * 4);
+export const maxBoardPicking = (reputation: number): number => 1 + Math.floor(repShare(reputation) * 2);
+
+/**
+ * Оплата работы по заказу растёт с репутацией сервиса и общим уровнем игрока:
+ *   множитель = (0,75 + 0,35 × репутация/1000) × (1 + 0,015 × min(уровень − 1, 20))
+ * Репутация: ×0,75 у нового сервиса → ×1,10 у лучшего. Уровень: +1,5% за уровень, до +30% к 21-му.
+ * Новичок (уровень 1, репутация 100): ×0,79; середина (10, 500): ×1,05; максимум: ×1,43.
+ * Применяется к работе, детали клиент возмещает по себестоимости.
+ */
+export const orderReputationFactor = (reputation: number): number => 0.75 + 0.35 * repShare(reputation);
+export const orderLevelFactor = (playerLevel: number): number => 1 + 0.015 * Math.min(Math.max(0, playerLevel - 1), 20);
+export const orderRewardMultiplier = (playerLevel: number, reputation: number): number =>
+  orderReputationFactor(reputation) * orderLevelFactor(playerLevel);

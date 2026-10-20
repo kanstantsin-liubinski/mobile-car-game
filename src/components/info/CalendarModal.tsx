@@ -4,7 +4,6 @@ import { useMarketContext } from '@hooks/MarketContext';
 import { InfoBar, InfoRow, InfoSection, InfoSheet, InfoText } from './InfoSheet';
 import { DAY_MS, DAYS_IN_MONTH, LOAN_TERM_MONTHS, MONTH_MS } from '../../economy/economy';
 import { COURSE_COOLDOWN_MS } from '../../economy/progression';
-import { ORDER_CHECK_DAYS } from '../../economy/balance';
 import { HOT_CHECK_INTERVAL_MS, HOT_MAX_DURATION_MS, HOT_MIN_DURATION_MS } from '../../economy/hotOffers';
 import { formatGameDays } from '../../economy/format';
 
@@ -68,7 +67,8 @@ export const CalendarModal = ({ visible, onClose }: { visible: boolean; onClose:
           {HOT_MIN_DURATION_MS / DAY_MS}–{HOT_MAX_DURATION_MS / DAY_MS} дня). Шанс растёт с навыком «Менеджмент».
         </InfoText>
         <InfoText>
-          • Раз в {ORDER_CHECK_DAYS} дней клиенты приносят новые заказы. Шанс и выгода зависят от репутации.
+          • Каждый игровой день клиенты могут принести новый заказ, и не реже раза в 3 дня — обязательно. Шанс зависит
+          от репутации, оплата — от репутации и вашего уровня.
         </InfoText>
         <InfoText>• Объявления на авторынке живут 30–120 дней, продажа машины занимает 0–30 дней в зависимости от цены.</InfoText>
       </InfoSection>

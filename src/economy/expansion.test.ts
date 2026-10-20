@@ -330,54 +330,105 @@ const sampleCar = (tier: number, rng: () => number): O.SampleCar => ({
   maxCondition: 70,
   paintCondition: 60,
 });
-const ctx = (owned: B.EquipmentId[] = ['basic_tools']): O.OrdersContext => ({ unlockedTiers: [1], owned, sampleCar });
+const ctx = (owned: B.EquipmentId[] = ['basic_tools'], playerLevel = 1): O.OrdersContext => ({ unlockedTiers: [1], owned, playerLevel, sampleCar });
 
 describe('доска заказов и репутация', () => {
-  it('первая проверка сразу, затем раз в 10 дней; доска не переполняется', () => {
+  it('первая проверка сразу, дальше каждый день; доска не переполняется', () => {
     let s = O.createOrdersState(7, 0);
     s = O.advanceOrders(s, 0, ctx());
     assert.equal(s.checksDone, 1);
     s = O.advanceOrders(s, 200 * DAY_MS, ctx());
-    assert.equal(s.checksDone, 21);
-    assert.ok(s.board.filter((o) => o.kind === 'service').length <= B.MAX_BOARD_SERVICE);
-    assert.ok(s.board.filter((o) => o.kind === 'picking').length <= B.MAX_BOARD_PICKING);
+    assert.equal(s.checksDone, 201);
+    assert.ok(s.board.filter((o) => o.kind === 'service').length <= B.maxBoardService(s.reputation));
+    assert.ok(s.board.filter((o) => o.kind === 'picking').length <= B.maxBoardPicking(s.reputation));
   });
 
-  it('репутация влияет на частоту и качество', () => {
-    assert.equal(B.orderSpawnChance(0), 0.45);
-    assert.ok(Math.abs(B.orderSpawnChance(100) - 0.85) < 1e-12);
-    assert.equal(B.extraOrderChance(100), 0.6);
-    assert.ok(Math.abs(B.premiumOrderChance(100) - 0.45) < 1e-12);
-    const count = (rep: number) => {
+  it('новый заказ появляется не реже раза в 3 дня даже при нулевой репутации', () => {
+    for (let seed = 1; seed <= 100; seed++) {
+      let s: O.OrdersState = { ...O.createOrdersState(seed, 0), reputation: 0 };
+      let lastSpawn = 0;
+      let prevCount = 0;
+      for (let day = 0; day <= 60; day++) {
+        s = O.advanceOrders(s, day * DAY_MS, ctx());
+        // Принимаем всё с доски, чтобы она не заполнялась и не мешала проверке
+        const fresh = s.board.length;
+        if (fresh > 0 || s.lastOrderAtMs === day * DAY_MS) lastSpawn = day;
+        assert.ok(day - lastSpawn <= B.ORDER_GUARANTEE_DAYS, `seed ${seed}: ${day - lastSpawn} дней без заказов`);
+        s = { ...s, board: [] };
+        prevCount = fresh;
+      }
+      void prevCount;
+    }
+  });
+
+  it('шанс заказа зависит только от репутации, растёт с ней', () => {
+    assert.ok(Math.abs(B.orderSpawnChance(0) - 0.2) < 1e-12);
+    assert.ok(Math.abs(B.orderSpawnChance(1000) - 0.6) < 1e-12);
+    assert.equal(B.extraOrderChance(0), 0);
+    assert.ok(Math.abs(B.extraOrderChance(1000) - 0.35) < 1e-12);
+    assert.ok(Math.abs(B.premiumOrderChance(1000) - 0.45) < 1e-12);
+    assert.equal(B.maxBoardService(0), 3);
+    assert.equal(B.maxBoardService(1000), 7);
+    const count = (rep: number, level = 1) => {
       let total = 0;
       let premium = 0;
-      for (let seed = 1; seed <= 300; seed++) {
-        const s = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: rep }, 0, ctx());
-        total += s.board.length;
-        premium += s.board.filter((o) => o.premium).length;
+      for (let seed = 1; seed <= 200; seed++) {
+        let st: O.OrdersState = { ...O.createOrdersState(seed, 0), reputation: rep };
+        for (let day = 0; day < 10; day++) {
+          st = O.advanceOrders(st, day * DAY_MS, ctx(['basic_tools'], level));
+          total += st.board.length;
+          premium += st.board.filter((o) => o.premium).length;
+          st = { ...st, board: [] };
+        }
       }
       return { total, premium };
     };
     const low = count(0);
-    const high = count(100);
-    assert.ok(high.total > low.total * 1.4, `${low.total} → ${high.total}`);
-    assert.ok(high.premium > low.premium * 2, `${low.premium} → ${high.premium}`);
-    assert.ok(low.total > 0, 'при нулевой репутации заказы всё равно приходят');
+    const high = count(1000);
+    assert.ok(high.total > low.total * 1.8, `${low.total} → ${high.total}`);
+    assert.ok(high.premium > low.premium * 3, `${low.premium} → ${high.premium}`);
+    // Уровень игрока на частоту не влияет
+    assert.deepEqual(count(500, 1).total, count(500, 30).total);
+  });
+
+  it('оплата растёт с репутацией и уровнем по формуле', () => {
+    assert.ok(Math.abs(B.orderRewardMultiplier(1, 0) - 0.75) < 1e-12);
+    assert.ok(Math.abs(B.orderRewardMultiplier(1, 1000) - 1.1) < 1e-12);
+    assert.ok(Math.abs(B.orderRewardMultiplier(21, 1000) - 1.1 * 1.3) < 1e-12);
+    assert.equal(B.orderRewardMultiplier(50, 1000), B.orderRewardMultiplier(21, 1000), 'уровень даёт не больше +30%');
+    // Тот же заказ (seed) у сильного сервиса стоит дороже
+    const first = (rep: number, level: number) => {
+      const st = O.advanceOrders({ ...O.createOrdersState(11, 0), reputation: rep, lastOrderAtMs: -10 * DAY_MS }, 0, ctx(['basic_tools'], level));
+      return st.board.find((o) => o.kind === 'service') as O.ServiceOrder | undefined;
+    };
+    const cheap = first(300, 1);
+    const rich = first(300, 21);
+    assert.ok(cheap && rich);
+    assert.ok(rich.rewardCents - rich.partsCents > (cheap.rewardCents - cheap.partsCents) * 1.25);
   });
 
   it('при низкой репутации — только простые заказы', () => {
     for (let seed = 1; seed <= 200; seed++) {
-      const s = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 5 }, 0, ctx());
+      const s = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 50 }, 0, ctx());
       for (const o of s.board) if (o.kind === 'service') assert.ok(!O.serviceDef(o.type).complex);
     }
   });
 
-  it('репутация ограничена 0–100 и ведёт историю', () => {
-    let s = O.changeReputation(O.createOrdersState(1, 0), 80, 'тест', 0);
-    assert.equal(s.reputation, 100);
-    s = O.changeReputation(s, -150, 'тест', 1);
+  it('репутация ограничена 0–1000 и ведёт историю', () => {
+    let s = O.changeReputation(O.createOrdersState(1, 0), 2000, 'тест', 0);
+    assert.equal(s.reputation, 1000);
+    s = O.changeReputation(s, -1500, 'тест', 1);
     assert.equal(s.reputation, 0);
-    assert.equal(s.repHistory[0].delta, -100);
+    assert.equal(s.repHistory[0].delta, -1000);
+  });
+
+  it('старое сохранение: репутация 0–100 переводится в 0–1000, проверки становятся ежедневными', () => {
+    const old = { ...O.createOrdersState(5, 0), reputation: 63, repMax: undefined, nextCheckAtMs: 90 * DAY_MS, repHistory: [{ atMs: 0, delta: 4, reason: 'x' }] };
+    const restored = O.restoreOrdersState(old, 1, 50 * DAY_MS);
+    assert.equal(restored.reputation, 630);
+    assert.equal(restored.repHistory[0].delta, 40);
+    assert.equal(restored.nextCheckAtMs, 51 * DAY_MS);
+    assert.deepEqual(O.restoreOrdersState(restored, 1, 50 * DAY_MS), restored, 'повторно не масштабируется');
   });
 });
 
@@ -386,7 +437,7 @@ const withServiceOrder = (type: B.ServiceOrderType = 'maintenance', balance = 10
   let s = E.createEconomy($(balance), true, true, 1);
   let orders = s.orders;
   for (let seed = 1; seed < 2000; seed++) {
-    orders = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 60 }, 0, ctx(['basic_tools', 'engine', 'transmission', 'paint_booth']));
+    orders = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 600 }, 0, ctx(['basic_tools', 'engine', 'transmission', 'paint_booth']));
     if (orders.board.some((o) => o.kind === 'service' && o.type === type)) break;
   }
   s = { ...s, orders };
@@ -440,7 +491,7 @@ describe('ремонтные заказы', () => {
     assert.equal(paidLate.balanceCents - late.balanceCents, Math.round(order.rewardCents * 0.7));
     assert.equal(paidLate.orders.reputation - late.orders.reputation, B.REP_LATE);
 
-    const failed = E.advanceOrders(accepted, (order.deadlineDays + B.ORDER_GRACE_DAYS) * DAY_MS + 1, { unlockedTiers: [1], sampleCar });
+    const failed = E.advanceOrders(accepted, (order.deadlineDays + B.ORDER_GRACE_DAYS) * DAY_MS + 1, { unlockedTiers: [1], playerLevel: 1, sampleCar });
     assert.equal(failed.orders.active.length, 0);
     assert.equal(failed.orders.closed[0].status, 'failed');
     assert.equal(failed.orders.reputation - accepted.orders.reputation, B.REP_FAILED);
@@ -461,7 +512,7 @@ describe('ремонтные заказы', () => {
     let s = E.createEconomy($(100_000), true, true, 1);
     let orders = s.orders;
     for (let seed = 1; seed < 2000; seed++) {
-      orders = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 100 }, 5 * DAY_MS, ctx());
+      orders = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 1000 }, 5 * DAY_MS, ctx());
       orders = O.advanceOrders(orders, 9 * DAY_MS, ctx());
       orders = O.advanceOrders(orders, 10 * DAY_MS, ctx());
       if (orders.board.filter((o) => o.kind === 'service').length >= 3 || seed > 500) break;
@@ -486,7 +537,7 @@ describe('заказы на подбор', () => {
     let s = E.createEconomy($(50_000), true, true, 1);
     let orders = s.orders;
     for (let seed = 1; seed < 2000; seed++) {
-      orders = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 60 }, 0, ctx());
+      orders = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 600 }, 0, ctx());
       if (orders.board.some((o) => o.kind === 'picking')) break;
     }
     s = { ...s, orders };
@@ -524,7 +575,7 @@ describe('заказы на подбор', () => {
     const { s, order } = pickingSetup();
     let st = E.acceptOrder(s, order.id, 0, [1]).state;
     st = E.buyCar(st, { carId: 'car', name: 'X', tier: 1, priceCents: $(3_000) }).state;
-    const failed = E.advanceOrders(st, (order.deadlineDays + B.ORDER_GRACE_DAYS) * DAY_MS + 1, { unlockedTiers: [1], sampleCar });
+    const failed = E.advanceOrders(st, (order.deadlineDays + B.ORDER_GRACE_DAYS) * DAY_MS + 1, { unlockedTiers: [1], playerLevel: 1, sampleCar });
     assert.equal(failed.orders.reputation - st.orders.reputation, B.REP_FAILED);
     assert.ok(failed.assets.car);
     assert.equal(failed.balanceCents, st.balanceCents);

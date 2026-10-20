@@ -90,6 +90,10 @@ export interface OrdersState {
   seed: number;
   checksDone: number;
   nextCheckAtMs: number;
+  /** Когда появился последний новый заказ — для гарантии «не реже раза в 3 дня» */
+  lastOrderAtMs: number;
+  /** Шкала репутации сохранения (старые сохранения — 100, теперь 1000) */
+  repMax: number;
   /** Предложения на доске */
   board: Order[];
   /** Принятые и ещё не закрытые */
@@ -107,6 +111,8 @@ export const createOrdersState = (seed: number, now: number): OrdersState => ({
   checksDone: 0,
   // Первая проверка — сразу, чтобы раздел не был пустым
   nextCheckAtMs: now,
+  lastOrderAtMs: now,
+  repMax: B.REPUTATION_MAX,
   board: [],
   active: [],
   closed: [],
@@ -134,8 +140,10 @@ export interface SampleCar extends ClientCar {
 }
 
 export interface OrdersContext {
-  /** Общий уровень игрока: открытые классы и требования */
+  /** Классы машин, открытые общим уровнем игрока */
   unlockedTiers: number[];
+  /** Общий уровень игрока — влияет на оплату заказов (не на их частоту) */
+  playerLevel: number;
   owned: B.EquipmentId[];
   /** Обычная машина класса из генератора авторынка (использует только переданный rng) */
   sampleCar: (tier: number, rng: Rng) => SampleCar;
@@ -172,7 +180,14 @@ const makeServiceOrder = (id: string, now: number, reputation: number, ctx: Orde
   const paintCondition = isPaint ? Math.round(Math.max(0, 100 - workPoints) * 10) / 10 : sample.paintCondition;
 
   const weight = isPaint ? B.PAINT_WEIGHT : B.TECH_WEIGHT;
-  const labor = workPoints * weight * tierPointValue(tier) * B.ORDER_LABOR_SHARE * def.laborMult * (premium ? B.PREMIUM_REWARD_MULT : 1);
+  const labor =
+    workPoints *
+    weight *
+    tierPointValue(tier) *
+    B.ORDER_LABOR_SHARE *
+    B.orderRewardMultiplier(ctx.playerLevel, reputation) *
+    def.laborMult *
+    (premium ? B.PREMIUM_REWARD_MULT : 1);
   const parts = labor * def.partsShare;
   return {
     id,
@@ -205,7 +220,11 @@ const makePickingOrder = (id: string, now: number, reputation: number, ctx: Orde
   const minOverall = Math.max(25, Math.floor(reachable - between(4, 12, rng)));
   const minPaint = rng() < 0.4 ? Math.round(between(60, 85, rng)) : null;
   const value = calculateCarPrice(sample.basePrice, { year: sample.year, mileage: sample.mileage, condition: minOverall });
-  const mult = between(B.PICKING_PRICE_MIN, B.PICKING_PRICE_MAX, rng) * (premium ? 1.08 : 1);
+  // Наценка клиента за подбор тоже растёт с репутацией и уровнем — на 20% от прироста множителя
+  const mult =
+    between(B.PICKING_PRICE_MIN, B.PICKING_PRICE_MAX, rng) *
+    (premium ? 1.08 : 1) *
+    (1 + 0.2 * (B.orderRewardMultiplier(ctx.playerLevel, reputation) - 1));
   return {
     id,
     kind: 'picking',
@@ -232,25 +251,25 @@ const PICKING_PHRASES = [
 
 const countKind = (orders: Order[], kind: Order['kind']) => orders.filter((o) => o.kind === kind).length;
 
-/** Одна проверка доски: шанс от репутации, при высокой — шанс второго предложения */
+/**
+ * Одна ежедневная проверка доски. Шанс нового заказа и второго заказа зависят только от репутации;
+ * если 3 дня не было ни одного нового заказа — заказ приходит гарантированно.
+ */
 const runCheck = (s: OrdersState, t: number, ctx: OrdersContext): OrdersState => {
   const index = s.checksDone;
   const next: OrdersState = { ...s, checksDone: index + 1, nextCheckAtMs: t + B.ORDER_CHECK_DAYS * DAY_MS };
   if (ctx.unlockedTiers.length === 0) return next;
   const rng = rngForCheck(s.seed ^ 0x5bd1e995, index);
   const board = [...next.board];
+  const maxService = B.maxBoardService(s.reputation);
+  const maxPicking = B.maxBoardPicking(s.reputation);
+  let spawned = 0;
   const spawn = (n: number) => {
-    // Подбор — примерно каждый третий заказ
-    const wantPicking = rng() < 0.3;
-    const kind: Order['kind'] =
-      wantPicking && countKind(board, 'picking') < B.MAX_BOARD_PICKING
-        ? 'picking'
-        : countKind(board, 'service') < B.MAX_BOARD_SERVICE
-          ? 'service'
-          : countKind(board, 'picking') < B.MAX_BOARD_PICKING
-            ? 'picking'
-            : 'service';
-    if (kind === 'service' && countKind(board, 'service') >= B.MAX_BOARD_SERVICE) return;
+    // Подбор — примерно каждый третий заказ; если нужная доска заполнена — берём другую
+    const servicePlace = countKind(board, 'service') < maxService;
+    const pickingPlace = countKind(board, 'picking') < maxPicking;
+    if (!servicePlace && !pickingPlace) return;
+    const kind: Order['kind'] = (rng() < 0.3 && pickingPlace) || !servicePlace ? 'picking' : 'service';
     const id = `ord-${s.seed.toString(36)}-${index}-${n}`;
     const orderRng = mulberry32(Math.floor(rng() * 0xffffffff));
     board.push(
@@ -258,12 +277,14 @@ const runCheck = (s: OrdersState, t: number, ctx: OrdersContext): OrdersState =>
         ? makePickingOrder(id, t, s.reputation, ctx, orderRng)
         : makeServiceOrder(id, t, s.reputation, ctx, orderRng),
     );
+    spawned += 1;
   };
-  if (rng() < B.orderSpawnChance(s.reputation)) {
+  const guaranteed = t - s.lastOrderAtMs >= B.ORDER_GUARANTEE_DAYS * DAY_MS;
+  if (guaranteed || rng() < B.orderSpawnChance(s.reputation)) {
     spawn(0);
     if (rng() < B.extraOrderChance(s.reputation)) spawn(1);
   }
-  return { ...next, board };
+  return { ...next, board, lastOrderAtMs: spawned > 0 ? t : s.lastOrderAtMs };
 };
 
 const closeOrder = (s: OrdersState, order: Order): OrdersState => ({
@@ -275,7 +296,7 @@ const closeOrder = (s: OrdersState, order: Order): OrdersState => ({
 
 export const changeReputation = (s: OrdersState, delta: number, reason: string, now: number): OrdersState => {
   if (delta === 0) return s;
-  const reputation = Math.min(100, Math.max(0, s.reputation + delta));
+  const reputation = Math.min(B.REPUTATION_MAX, Math.max(0, s.reputation + delta));
   return {
     ...s,
     reputation,
@@ -421,18 +442,26 @@ export const pickingMismatch = (o: PickingOrder, car: PickingCandidate): string[
   return problems;
 };
 
-/** Восстановление из сохранения */
+/**
+ * Восстановление из сохранения. Старая шкала репутации 0–100 переводится в 0–1000 (×10 —
+ * вместе с историей), а редкие проверки раз в 10 дней — в ежедневные с текущего момента.
+ */
 export const restoreOrdersState = (raw: unknown, seed: number, now: number): OrdersState => {
   const r = raw as Partial<OrdersState> | null | undefined;
   if (!r || typeof r.seed !== 'number') return createOrdersState(seed, now);
+  const scale = r.repMax === B.REPUTATION_MAX ? 1 : B.REPUTATION_MAX / 100;
+  const nextCheckAtMs = Math.min(r.nextCheckAtMs ?? now, now + B.ORDER_CHECK_DAYS * DAY_MS);
+  const rescale = (o: Order): Order => (scale === 1 || o.repDelta === undefined ? o : { ...o, repDelta: o.repDelta * scale });
   return {
     seed: r.seed >>> 0,
     checksDone: r.checksDone ?? 0,
-    nextCheckAtMs: r.nextCheckAtMs ?? now,
+    nextCheckAtMs,
+    lastOrderAtMs: typeof r.lastOrderAtMs === 'number' ? r.lastOrderAtMs : now,
+    repMax: B.REPUTATION_MAX,
     board: r.board ?? [],
     active: r.active ?? [],
-    closed: r.closed ?? [],
-    reputation: typeof r.reputation === 'number' ? r.reputation : B.REPUTATION_START,
-    repHistory: r.repHistory ?? [],
+    closed: (r.closed ?? []).map(rescale),
+    reputation: typeof r.reputation === 'number' ? Math.min(B.REPUTATION_MAX, r.reputation * scale) : B.REPUTATION_START,
+    repHistory: (r.repHistory ?? []).map((h) => ({ ...h, delta: h.delta * scale })),
   };
 };
