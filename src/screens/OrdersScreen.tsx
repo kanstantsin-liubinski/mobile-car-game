@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 import { LocationHeader } from '@components/LocationHeader';
+import { ReputationInfo } from '@components/orders/ReputationInfo';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useToast } from '@components/toast/ToastContext';
@@ -68,6 +69,7 @@ export const OrdersScreen = () => {
             Оплата работы {mult(B.orderRewardMultiplier(level, rep))}: репутация {mult(B.orderReputationFactor(rep))} × уровень{' '}
             {level} {mult(B.orderLevelFactor(level))}. Частоту заказов определяет только репутация.
           </Text>
+          <ReputationInfo reputation={rep} />
         </View>
 
         <View style={styles.tabs}>
