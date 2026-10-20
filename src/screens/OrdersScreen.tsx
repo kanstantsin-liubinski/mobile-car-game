@@ -93,7 +93,9 @@ export const OrdersScreen = () => {
 
         <Text style={styles.section}>Предложения клиентов</Text>
         {board.length === 0 && (
-          <Text style={styles.empty}>Пока нет предложений. Новые появляются при проверке раз в 10 игровых дней.</Text>
+          <Text style={styles.empty}>
+            Пока нет предложений. Клиенты приходят каждый день, и не реже раза в {B.ORDER_GUARANTEE_DAYS} дня — обязательно.
+          </Text>
         )}
         {board.map((o) => (
           <OrderCard key={o.id} order={o} />

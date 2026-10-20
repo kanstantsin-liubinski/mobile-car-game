@@ -393,9 +393,9 @@ describe('доска заказов и репутация', () => {
 
   it('оплата растёт с репутацией и уровнем по формуле', () => {
     assert.equal(B.orderRewardMultiplier(1, B.REPUTATION_START), 1, 'на старте — ×1');
-    assert.equal(B.orderReputationFactor(1000), 2, 'на 1000 репутации — ×2');
-    assert.ok(Math.abs(B.orderReputationFactor(550) - 1.5) < 1e-12);
-    assert.ok(Math.abs(B.orderRewardMultiplier(21, 1000) - 2 * 1.3) < 1e-12);
+    const steps: [number, number][] = [[0, 1], [249, 1], [250, 1.25], [499, 1.25], [500, 1.75], [749, 1.75], [750, 2], [999, 2], [1000, 2.5]];
+    for (const [rep, m] of steps) assert.equal(B.orderReputationFactor(rep), m, `репутация ${rep}`);
+    assert.ok(Math.abs(B.orderRewardMultiplier(21, 1000) - 2.5 * 1.3) < 1e-12);
     assert.equal(B.orderRewardMultiplier(50, 1000), B.orderRewardMultiplier(21, 1000), 'уровень даёт не больше +30%');
     // Тот же заказ (seed) у сильного сервиса стоит дороже
     const first = (rep: number, level: number) => {
@@ -534,7 +534,7 @@ describe('ремонтные заказы', () => {
     assert.equal(E.acceptOrder(s, ids[2], 0, [1]).ok, false);
   });
 
-  it('на старте (×1) работа по заказу оплачивается ниже ремонта под перепродажу, на 1000 — вдвое дороже старта', () => {
+  it('на старте (×1) работа по заказу оплачивается ниже ремонта под перепродажу, на 1000 — в 2,5 раза дороже', () => {
     const at = (reputation: number) => {
       for (let seed = 1; seed < 2000; seed++) {
         const st = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation, lastOrderAtMs: -10 * DAY_MS }, 0, ctx());
@@ -547,7 +547,7 @@ describe('ремонтные заказы', () => {
     const start = at(B.REPUTATION_START);
     const resalePerPoint = B.TECH_WEIGHT * O.tierPointValue(start.tier) * 100;
     assert.ok(perPoint(start) < resalePerPoint);
-    assert.ok(Math.abs(perPoint(at(1000)) / perPoint(start) - 2) < 0.05);
+    assert.ok(Math.abs(perPoint(at(1000)) / perPoint(start) - 2.5) < 0.05);
   });
 });
 

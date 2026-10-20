@@ -241,7 +241,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         commit(E.syncAllWorkers(s, next));
         return;
       }
-      // Заказы: проверка доски раз в 10 дней, истечение предложений, окончательные просрочки
+      // Заказы: ежедневная проверка доски, истечение предложений, окончательные просрочки
       if (ordersDue(s, next)) {
         commit(E.advanceOrders(s, next, ordersCtx(s)));
         return;
