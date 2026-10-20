@@ -301,12 +301,14 @@ export const maxBoardPicking = (reputation: number): number => 1 + Math.floor(re
 
 /**
  * Оплата работы по заказу растёт с репутацией сервиса и общим уровнем игрока:
- *   множитель = (0,75 + 0,35 × репутация/1000) × (1 + 0,015 × min(уровень − 1, 20))
- * Репутация: ×0,75 у нового сервиса → ×1,10 у лучшего. Уровень: +1,5% за уровень, до +30% к 21-му.
- * Новичок (уровень 1, репутация 100): ×0,79; середина (10, 500): ×1,05; максимум: ×1,43.
+ *   множитель = (1 + (репутация − 100) / 900) × (1 + 0,015 × min(уровень − 1, 20))
+ * Репутация: ×1 на старте (100) → ×2 на максимуме (1000), линейно; ниже стартовой — меньше ×1
+ * (плохая репутация — дешевле работа, на нуле ×0,89). Уровень: +1,5% за уровень, до +30% к 21-му.
+ * Новичок (уровень 1, репутация 100): ×1; середина (10, 550): ×1,62; максимум: ×2,6.
  * Применяется к работе, детали клиент возмещает по себестоимости.
  */
-export const orderReputationFactor = (reputation: number): number => 0.75 + 0.35 * repShare(reputation);
+export const orderReputationFactor = (reputation: number): number =>
+  1 + (Math.min(REPUTATION_MAX, Math.max(0, reputation)) - REPUTATION_START) / (REPUTATION_MAX - REPUTATION_START);
 export const orderLevelFactor = (playerLevel: number): number => 1 + 0.015 * Math.min(Math.max(0, playerLevel - 1), 20);
 export const orderRewardMultiplier = (playerLevel: number, reputation: number): number =>
   orderReputationFactor(reputation) * orderLevelFactor(playerLevel);

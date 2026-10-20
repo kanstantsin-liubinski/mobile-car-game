@@ -392,9 +392,10 @@ describe('доска заказов и репутация', () => {
   });
 
   it('оплата растёт с репутацией и уровнем по формуле', () => {
-    assert.ok(Math.abs(B.orderRewardMultiplier(1, 0) - 0.75) < 1e-12);
-    assert.ok(Math.abs(B.orderRewardMultiplier(1, 1000) - 1.1) < 1e-12);
-    assert.ok(Math.abs(B.orderRewardMultiplier(21, 1000) - 1.1 * 1.3) < 1e-12);
+    assert.equal(B.orderRewardMultiplier(1, B.REPUTATION_START), 1, 'на старте — ×1');
+    assert.equal(B.orderReputationFactor(1000), 2, 'на 1000 репутации — ×2');
+    assert.ok(Math.abs(B.orderReputationFactor(550) - 1.5) < 1e-12);
+    assert.ok(Math.abs(B.orderRewardMultiplier(21, 1000) - 2 * 1.3) < 1e-12);
     assert.equal(B.orderRewardMultiplier(50, 1000), B.orderRewardMultiplier(21, 1000), 'уровень даёт не больше +30%');
     // Тот же заказ (seed) у сильного сервиса стоит дороже
     const first = (rep: number, level: number) => {
@@ -533,11 +534,20 @@ describe('ремонтные заказы', () => {
     assert.equal(E.acceptOrder(s, ids[2], 0, [1]).ok, false);
   });
 
-  it('оплата заказа ниже ремонта под перепродажу того же объёма', () => {
-    const { order } = withServiceOrder('suspension');
-    const labor = order.rewardCents - order.partsCents;
-    const resaleValue = order.workPoints * B.TECH_WEIGHT * O.tierPointValue(order.tier) * 100 * (order.premium ? B.PREMIUM_REWARD_MULT : 1);
-    assert.ok(labor < resaleValue);
+  it('на старте (×1) работа по заказу оплачивается ниже ремонта под перепродажу, на 1000 — вдвое дороже старта', () => {
+    const at = (reputation: number) => {
+      for (let seed = 1; seed < 2000; seed++) {
+        const st = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation, lastOrderAtMs: -10 * DAY_MS }, 0, ctx());
+        const o = st.board.find((x) => x.kind === 'service' && x.type === 'suspension' && !x.premium) as O.ServiceOrder | undefined;
+        if (o) return o;
+      }
+      throw new Error('нет заказа');
+    };
+    const perPoint = (o: O.ServiceOrder) => (o.rewardCents - o.partsCents) / o.workPoints;
+    const start = at(B.REPUTATION_START);
+    const resalePerPoint = B.TECH_WEIGHT * O.tierPointValue(start.tier) * 100;
+    assert.ok(perPoint(start) < resalePerPoint);
+    assert.ok(Math.abs(perPoint(at(1000)) / perPoint(start) - 2) < 0.05);
   });
 });
 
