@@ -1,5 +1,6 @@
 import React from 'react';
-import { Image, type ImageSourcePropType, type ImageStyle, type StyleProp } from 'react-native';
+import { type ImageSourcePropType, type ImageStyle, type StyleProp } from 'react-native';
+import { Image } from 'expo-image';
 
 interface GameIconProps {
   source: ImageSourcePropType;
@@ -8,8 +9,20 @@ interface GameIconProps {
   style?: StyleProp<ImageStyle>;
 }
 
-/** Картинка-иконка из assets/icons, вписанная в квадрат size×size */
+/**
+ * Картинка-иконка из assets/icons, вписанная в квадрат size×size.
+ * expo-image держит картинки в памяти: после предзагрузки при запуске иконка рисуется сразу,
+ * в том числе при каждом новом открытии экрана (обычный Image на iOS грузил её заново).
+ */
 export const GameIcon = ({ source, size, style }: GameIconProps) => (
-  // Без проявления (Android): картинки уже в памяти после предзагрузки и должны рисоваться сразу
-  <Image source={source} style={[{ width: size, height: size }, style]} resizeMode="contain" fadeDuration={0} />
+  <Image
+    source={source as number}
+    style={[{ width: size, height: size }, style]}
+    contentFit="contain"
+    cachePolicy="memory-disk"
+    transition={0}
+    // В браузере — без «ленивой» загрузки: иконка нужна сразу, а не когда долистают
+    loading="eager"
+    priority="high"
+  />
 );

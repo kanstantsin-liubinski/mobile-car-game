@@ -22,6 +22,7 @@ import { useEconomy } from '@hooks/EconomyContext';
 import { useExperienceContext } from '@hooks/ExperienceContext';
 import { useMarketContext } from '@hooks/MarketContext';
 import { RedDot } from '@components/RedDot';
+import { Image as ExpoImage } from 'expo-image';
 import { LocationHeader } from '@components/LocationHeader';
 import { SheetHeader } from '@components/SheetHeader';
 import { GameIcon } from '@components/GameIcon';
@@ -312,7 +313,8 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
         {...panResponder.panHandlers}
       >
         <Animated.View style={[styles.map, { transform: pan.getTranslateTransform() }]}>
-          <Image source={CITY_BACKGROUND} style={styles.background} resizeMode="stretch" fadeDuration={0} />
+          {/* expo-image: карта из памяти рисуется сразу, без повторной загрузки */}
+          <ExpoImage source={CITY_BACKGROUND} style={styles.background} contentFit="fill" cachePolicy="memory-disk" transition={0} loading="eager" priority="high" />
 
           {CITY_BUILDINGS.map((building) => {
             const garageState = building.type === 'garage' ? getGarageState(building) : null;

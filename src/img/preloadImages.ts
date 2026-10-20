@@ -1,4 +1,5 @@
 import { Image, Platform, type ImageSourcePropType } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { BUILDING_ICONS, ICONS, MECHANIC_AVATARS, TIER_ICONS } from './gameIcons';
 import { CITY_BACKGROUND } from '../data/cityBuildings';
 
@@ -27,11 +28,12 @@ const uriOf = (source: ImageSourcePropType): string | null => {
 };
 
 /**
- * Одна картинка: в кэш React Native (тогда Image рисует её сразу, без пустого кадра) и,
- * в браузере, ещё и полное декодирование — чтобы при показе не было мигания.
+ * Одна картинка: в кэш expo-image в памяти и на диске (тогда GameIcon рисует её сразу,
+ * без пустого кадра, на любом экране и при каждом новом показе) и, в браузере,
+ * ещё и полное декодирование — чтобы при показе не было мигания.
  */
 const loadOne = async (uri: string): Promise<void> => {
-  const prefetch = Image.prefetch(uri).catch(() => false);
+  const prefetch = ExpoImage.prefetch(uri, 'memory-disk').catch(() => false);
   if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Image' in window) {
     const img = new window.Image();
     img.src = uri;
