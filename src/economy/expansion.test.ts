@@ -363,7 +363,7 @@ describe('доска заказов и репутация', () => {
 
   it('шанс заказа зависит только от репутации, растёт с ней', () => {
     assert.ok(Math.abs(B.orderSpawnChance(0) - 0.2) < 1e-12);
-    assert.ok(Math.abs(B.orderSpawnChance(1000) - 0.6) < 1e-12);
+    assert.equal(B.orderSpawnChance(1000), 1, 'на максимальной репутации заказ приходит каждый день');
     assert.equal(B.extraOrderChance(0), 0);
     assert.ok(Math.abs(B.extraOrderChance(1000) - 0.35) < 1e-12);
     assert.ok(Math.abs(B.premiumOrderChance(1000) - 0.45) < 1e-12);
@@ -670,5 +670,18 @@ describe('журнал опыта', () => {
     assert.ok(s.xpLog[0].reason.includes('Car 24'));
     const restored = must(E.deserializeEconomy(E.serializeEconomy(s, 0))).state;
     assert.deepEqual(restored.xpLog, s.xpLog);
+  });
+});
+
+describe('максимальная репутация', () => {
+  it('на 1000 новый заказ приходит каждый день', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      let s: O.OrdersState = { ...O.createOrdersState(seed, 0), reputation: 1000 };
+      for (let day = 0; day < 30; day++) {
+        const before = s.lastOrderAtMs;
+        s = O.advanceOrders({ ...s, board: [] }, day * DAY_MS, ctx());
+        assert.equal(s.lastOrderAtMs, day * DAY_MS, `seed ${seed}, день ${day}: заказа не было (был ${before})`);
+      }
+    }
   });
 });

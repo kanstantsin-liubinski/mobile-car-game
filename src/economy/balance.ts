@@ -286,10 +286,11 @@ export const REPUTATION_HISTORY = 20;
 const repShare = (reputation: number) => Math.min(1, Math.max(0, reputation / REPUTATION_MAX));
 
 /**
- * Частота заказов зависит только от репутации: шанс нового заказа в день 20% → 60%,
+ * Частота заказов зависит только от репутации: шанс нового заказа в день 20% → 100% (на 1000 —
+ * заказ приходит каждый день),
  * шанс второго заказа в тот же день 0% → 35%. Плюс гарантия — не реже раза в 3 дня.
  */
-export const orderSpawnChance = (reputation: number): number => 0.2 + 0.4 * repShare(reputation);
+export const orderSpawnChance = (reputation: number): number => 0.2 + 0.8 * repShare(reputation);
 export const extraOrderChance = (reputation: number): number => 0.35 * repShare(reputation);
 /** Шанс выгодного заказа (×1,35): 10% → 45% */
 export const premiumOrderChance = (reputation: number): number => 0.1 + 0.35 * repShare(reputation);
