@@ -10,5 +10,6 @@ interface GameIconProps {
 
 /** Картинка-иконка из assets/icons, вписанная в квадрат size×size */
 export const GameIcon = ({ source, size, style }: GameIconProps) => (
-  <Image source={source} style={[{ width: size, height: size }, style]} resizeMode="contain" />
+  // Без проявления (Android): картинки уже в памяти после предзагрузки и должны рисоваться сразу
+  <Image source={source} style={[{ width: size, height: size }, style]} resizeMode="contain" fadeDuration={0} />
 );

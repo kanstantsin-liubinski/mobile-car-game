@@ -312,7 +312,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
         {...panResponder.panHandlers}
       >
         <Animated.View style={[styles.map, { transform: pan.getTranslateTransform() }]}>
-          <Image source={CITY_BACKGROUND} style={styles.background} resizeMode="stretch" />
+          <Image source={CITY_BACKGROUND} style={styles.background} resizeMode="stretch" fadeDuration={0} />
 
           {CITY_BUILDINGS.map((building) => {
             const garageState = building.type === 'garage' ? getGarageState(building) : null;

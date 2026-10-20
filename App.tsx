@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
-import { View, Platform, Image } from 'react-native';
-import { CITY_BACKGROUND } from './src/data/cityBuildings';
+import { View, Text, Platform } from 'react-native';
+import { preloadAllImages } from './src/img/preloadImages';
+import { colors } from '@styles/colors';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 
@@ -95,6 +96,16 @@ function GameContent() {
 
 function AppWrapper() {
   const { currentScreen, setCurrentScreen, hasSaveData, resetGameData, isLoading, gameResetTrigger } = useGameState();
+  // Все картинки игры грузим и декодируем один раз при запуске — дальше они рисуются сразу
+  const [imagesReady, setImagesReady] = useState(false);
+  const [imagesProgress, setImagesProgress] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    preloadAllImages((p) => alive && setImagesProgress(p)).then(() => alive && setImagesReady(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Сохраняем маркер при входе в игру
   useEffect(() => {
@@ -125,9 +136,14 @@ function AppWrapper() {
     console.log('Exit pressed');
   };
 
-  if (isLoading) {
+  if (isLoading || !imagesReady) {
     return (
-      <View style={commonStyles.container}>
+      <View style={[commonStyles.container, { alignItems: 'center', justifyContent: 'center', gap: 14 }]}>
+        <Text style={{ fontSize: 30, fontWeight: '800', color: colors.primary }}>CAR GAME</Text>
+        <View style={{ width: 180, height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: 'hidden' }}>
+          <View style={{ width: `${Math.round(imagesProgress * 100)}%`, height: '100%', backgroundColor: colors.primary }} />
+        </View>
+        <Text style={{ fontSize: 12, color: colors.textTertiary }}>Загрузка… {Math.round(imagesProgress * 100)}%</Text>
         <StatusBar style="auto" />
       </View>
     );
@@ -155,17 +171,6 @@ function AppWrapper() {
     </EconomyProvider>
   );
 }
-
-/** Карта города — самая тяжёлая картинка: начинаем грузить её сразу при запуске, ещё в главном меню */
-const preloadCityMap = () => {
-  try {
-    const uri = Image.resolveAssetSource(CITY_BACKGROUND)?.uri;
-    if (uri) Image.prefetch(uri).catch(() => {});
-  } catch {
-    // Предзагрузка — только ускорение, без неё карта просто загрузится при первом показе
-  }
-};
-preloadCityMap();
 
 export default function App() {
   return (
