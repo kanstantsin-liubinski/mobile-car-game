@@ -408,11 +408,13 @@ describe('доска заказов и репутация', () => {
     assert.ok(rich.rewardCents - rich.partsCents > (cheap.rewardCents - cheap.partsCents) * 1.25);
   });
 
-  it('при низкой репутации — только простые заказы', () => {
+  it('сложные заказы приходят при любой репутации, даже нулевой', () => {
+    let complex = 0;
     for (let seed = 1; seed <= 200; seed++) {
-      const s = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 50 }, 0, ctx());
-      for (const o of s.board) if (o.kind === 'service') assert.ok(!O.serviceDef(o.type).complex);
+      const st = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 0, lastOrderAtMs: -10 * DAY_MS }, 0, ctx());
+      complex += st.board.filter((o) => o.kind === 'service' && O.serviceDef(o.type).complex).length;
     }
+    assert.ok(complex > 0);
   });
 
   it('репутация ограничена 0–1000 и ведёт историю', () => {

@@ -162,8 +162,8 @@ export const canPerform = (type: B.ServiceOrderType, owned: B.EquipmentId[]): bo
 const makeServiceOrder = (id: string, now: number, reputation: number, ctx: OrdersContext, rng: Rng): ServiceOrder => {
   const tier = pick(ctx.unlockedTiers, rng);
   const premium = rng() < B.premiumOrderChance(reputation);
-  // При низкой репутации — только простые заказы; иначе чаще те, что игрок может выполнить
-  const allowed = B.SERVICE_ORDER_TYPES.filter((d) => reputation >= B.LOW_REPUTATION || !d.complex);
+  // Любые типы работ при любой репутации; чаще те, что игрок может выполнить имеющимся оборудованием
+  const allowed = B.SERVICE_ORDER_TYPES;
   const doable = allowed.filter((d) => canPerform(d.type, ctx.owned));
   const locked = allowed.filter((d) => !canPerform(d.type, ctx.owned));
   const pool = locked.length === 0 || (doable.length > 0 && rng() < B.ORDER_AVAILABLE_TYPE_WEIGHT) ? doable : locked;

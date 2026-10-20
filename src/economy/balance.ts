@@ -253,8 +253,6 @@ export const ORDER_CHECK_DAYS = 1;
 export const ORDER_GUARANTEE_DAYS = 3;
 /** Доля сгенерированных заказов, которые игрок может выполнить имеющимся оборудованием */
 export const ORDER_AVAILABLE_TYPE_WEIGHT = 0.75;
-/** Ниже этой репутации приходят только простые заказы (≈30 простых заказов от старта) */
-export const LOW_REPUTATION = 130;
 
 /** Подбор: срок, игровых дней */
 export const PICKING_MIN_DAYS = 20;

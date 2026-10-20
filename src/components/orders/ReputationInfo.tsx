@@ -12,15 +12,16 @@ interface Milestone {
   title: string;
 }
 
-/** Ступени репутации: что меняется на каждой (пороги берутся из формул баланса) */
-const MILESTONES: Milestone[] = [
-  { rep: B.REPUTATION_START, title: 'Старт: простые заказы — ТО и подвеска' },
-  { rep: B.LOW_REPUTATION, title: 'Сложные заказы: кузов, двигатель, АКПП, покраска' },
-  { rep: 250, title: 'Ещё одно место на доске ремонтов' },
-  { rep: 500, title: 'Ещё места: ремонт и подбор авто' },
-  { rep: 750, title: 'Ещё одно место на доске ремонтов' },
-  { rep: B.REPUTATION_MAX, title: 'Максимум: больше всего заказов и лучшая оплата' },
-];
+/** Ступени репутации — те же, что у множителя оплаты: 0, 250, 500, 750, 1000 */
+const MILESTONES: Milestone[] = B.REPUTATION_PAY_STEPS.map((step, i) => ({
+  rep: step.from,
+  title:
+    i === 0
+      ? `Начало: оплата ${mult(step.mult)}`
+      : step.from >= B.REPUTATION_MAX
+        ? `Максимум: оплата ${mult(step.mult)}, заказ каждый день`
+        : `Оплата ${mult(step.mult)}, больше мест на доске`,
+}));
 
 /** Раскрывающийся блок «Что даёт репутация»: как растёт, что открывается и на какой ступени */
 export const ReputationInfo = ({ reputation }: { reputation: number }) => {

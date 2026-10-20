@@ -63,7 +63,6 @@ export const OrdersScreen = () => {
             Каждый день: новый заказ — {pct(B.orderSpawnChance(rep))}, второй — {pct(B.extraOrderChance(rep))}, выгодный —{' '}
             {pct(B.premiumOrderChance(rep))}; не реже раза в {B.ORDER_GUARANTEE_DAYS} дня. Следующая проверка через{' '}
             {formatGameDays(nextCheck, DAY_MS)}. Мест на доске: {B.maxBoardService(rep)} ремонт, {B.maxBoardPicking(rep)} подбор.
-            {rep < B.LOW_REPUTATION ? ` До ${B.LOW_REPUTATION} репутации доверяют только простые работы.` : ''}
           </Text>
           <Text style={styles.muted}>
             Оплата работы {mult(B.orderRewardMultiplier(level, rep))}: репутация {mult(B.orderReputationFactor(rep))} × уровень{' '}
