@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
+import { Modal, View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
@@ -8,7 +9,8 @@ import { useEconomy } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useToast } from '@components/toast/ToastContext';
 import { GameIcon } from '@components/GameIcon';
-import { SheetHeader } from '@components/SheetHeader';
+import { SheetFooter, SheetHeader, SheetScroll } from '@components/SheetHeader';
+import { ActionTiles } from '@components/ActionTiles';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { EQUIPMENT, PAINTER_MONTHLY_SALARY_CENTS, type EquipmentId } from '../../economy/balance';
 import { equipmentBlock, hasEquipment } from '../../economy/economy';
@@ -46,7 +48,7 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
           <SheetHeader title="Оборудование" onClose={onClose} />
-          <ScrollView style={{ flexShrink: 1, marginBottom: 12 }}>
+          <SheetScroll>
             {EQUIPMENT.map((eq) => {
               const owned = hasEquipment(state, eq.id);
               const block = equipmentBlock(state, eq.id);
@@ -123,10 +125,12 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
                 </View>
               );
             })}
-          </ScrollView>
-          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton, { flex: 0 }]} onPress={onClose}>
-            <Text style={garageStyles.modalButtonText}>Закрыть</Text>
-          </TouchableOpacity>
+          </SheetScroll>
+          <SheetFooter>
+            <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton]} onPress={onClose}>
+              <Text style={garageStyles.modalButtonText}>Закрыть</Text>
+            </TouchableOpacity>
+          </SheetFooter>
         </View>
       </View>
     </Modal>
@@ -179,32 +183,56 @@ export const PainterModal = ({
                     )}
                   </View>
                 </View>
-                {!p.hired ? (
-                  <TouchableOpacity
-                    style={[styles.buy, boothSlot === null && styles.disabled]}
-                    disabled={boothSlot === null}
-                    onPress={() => hirePainter(p.id)}
-                  >
-                    <Text style={styles.buyText}>
-                      {boothSlot === null ? 'Сначала установите покрасочную камеру' : `Нанять · ${formatMoney(PAINTER_MONTHLY_SALARY_CENTS)}/мес`}
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={{ gap: 8 }}>
-                    <TouchableOpacity style={styles.buy} onPress={() => onTraining(p)}>
-                      <Text style={styles.buyText}>Навык и обучение</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondary} onPress={() => onFire(p)}>
-                      <Text style={[styles.secondaryText, { color: '#EF4444' }]}>Уволить</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                <ActionTiles
+                  tiles={
+                    p.hired
+                      ? [
+                          {
+                            key: 'skill',
+                            icon: ICONS.upgradeSkill,
+                            title: 'Навык',
+                            subtitle: 'и обучение',
+                            state: 'ready',
+                            accent: colors.primary,
+                            info: 'Уровень, практика и платный курс маляра. Практика копится только во время покраски; с уровнем растут скорость и оклад.',
+                            onPress: () => onTraining(p),
+                          },
+                          {
+                            key: 'fire',
+                            emoji: '✕',
+                            title: 'Уволить',
+                            subtitle: 'расчёт + оклад',
+                            state: 'ready',
+                            accent: '#EF4444',
+                            info: 'Выплачивается начисленная зарплата и компенсация в один оклад. Прокачка сбрасывается.',
+                            onPress: () => onFire(p),
+                          },
+                        ]
+                      : [
+                          {
+                            key: 'hire',
+                            emoji: '🎨',
+                            title: 'Нанять',
+                            subtitle: boothSlot === null ? 'нужна камера' : `${formatMoney(PAINTER_MONTHLY_SALARY_CENTS)}/мес`,
+                            state: boothSlot === null ? 'locked' : 'ready',
+                            accent: '#0EA5E9',
+                            info:
+                              boothSlot === null
+                                ? 'Маляр работает только в покрасочной камере: купите и установите её (гараж → «Оборудование»).'
+                                : 'Маляр сам красит машины в камере. Оклад начисляется с найма и платится и в простое.',
+                            onPress: () => hirePainter(p.id),
+                          },
+                        ]
+                  }
+                />
               </View>
             );
           })}
-          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton, { flex: 0 }]} onPress={onClose}>
-            <Text style={garageStyles.modalButtonText}>Закрыть</Text>
-          </TouchableOpacity>
+          <SheetFooter>
+            <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton]} onPress={onClose}>
+              <Text style={garageStyles.modalButtonText}>Закрыть</Text>
+            </TouchableOpacity>
+          </SheetFooter>
         </View>
         {children}
       </View>

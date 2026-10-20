@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react-native';
+import { View, Text, ScrollView, Modal, Platform } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { colors } from '@styles/colors';

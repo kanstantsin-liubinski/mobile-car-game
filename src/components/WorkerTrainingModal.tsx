@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, Text, ScrollView, Platform } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { InnerOverlay } from '@components/InnerOverlay';
-import { SheetHeader } from '@components/SheetHeader';
+import { SheetFooter, SheetHeader, SheetScroll } from '@components/SheetHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
@@ -67,7 +68,7 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
           <SheetHeader title={painter ? 'Навык маляра' : 'Навык механика'} onClose={onClose} />
           {mechanic && contract && (
-            <ScrollView style={{ flexShrink: 1 }}>
+            <SheetScroll>
               <SkillCard
                 title={mechanic.name}
                 icon={getMechanicAvatar(mechanic.id)}
@@ -87,11 +88,13 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
                 Практика копится только во время {painter ? 'покраски' : 'ремонта'}: 20 единиц за игровой день работы. Оклад — около
                 40% того, что сотрудник приносит при полной загрузке, и растёт вместе со скоростью.
               </Text>
-            </ScrollView>
+            </SheetScroll>
           )}
-          <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton, { flex: 0 }]} onPress={onClose}>
-            <Text style={garageStyles.modalButtonText}>Закрыть</Text>
-          </TouchableOpacity>
+          <SheetFooter>
+            <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton]} onPress={onClose}>
+              <Text style={garageStyles.modalButtonText}>Закрыть</Text>
+            </TouchableOpacity>
+          </SheetFooter>
         </View>
       </View>
     </InnerOverlay>

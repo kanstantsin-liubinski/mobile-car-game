@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, Platform } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { InnerOverlay } from '@components/InnerOverlay';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';

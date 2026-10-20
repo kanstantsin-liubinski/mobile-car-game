@@ -39,13 +39,16 @@ export const headerStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  // Три равные зоны: деньги слева, календарь строго по центру экрана, опыт справа
   balanceContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   balanceValue: {
-    fontSize: 20,
+    flexShrink: 1,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.primary,
   },
@@ -61,7 +64,6 @@ export const headerStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   calendar: {
-    flexShrink: 1,
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
@@ -82,10 +84,7 @@ export const headerStyles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.primary,
   },
-  dayTrack: {
-    height: 3,
-    marginBottom: 2,
-  },
+  dayTrack: {},
   dayFill: {
     backgroundColor: '#FBBF24',
   },
@@ -95,9 +94,11 @@ export const headerStyles = StyleSheet.create({
     color: colors.textTertiary,
   },
   levelIndicatorContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'flex-end',
+    gap: 6,
   },
   levelCircleContainer: {
     position: 'relative',
@@ -344,7 +345,7 @@ export const marketStyles = StyleSheet.create({
   buyButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.darkBg,
+    color: "#FFFFFF",
   },
   // ─── Empty state ───────────────────────────────────────────────────
   emptyContainer: {
@@ -555,10 +556,16 @@ export const garageStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  // Футер окна с кнопками: серая линия сверху на всю ширину окна (как нижнее меню игры)
   modalButtonsContainer: {
     flexDirection: 'row',
     gap: 10,
     marginTop: 16,
+    marginHorizontal: -14,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   modalButton: {
     flex: 1,

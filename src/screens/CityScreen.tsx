@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   Modal,
   Pressable,
   Image,
@@ -13,6 +12,7 @@ import {
   Easing,
   type LayoutChangeEvent,
 } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
@@ -23,6 +23,7 @@ import { useExperienceContext } from '@hooks/ExperienceContext';
 import { useMarketContext } from '@hooks/MarketContext';
 import { RedDot } from '@components/RedDot';
 import { LocationHeader } from '@components/LocationHeader';
+import { SheetHeader } from '@components/SheetHeader';
 import { GameIcon } from '@components/GameIcon';
 import { ICONS, BUILDING_ICONS } from '@img/gameIcons';
 import {
@@ -169,6 +170,8 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
 
   const handleViewportLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
+    // Пока город скрыт (смонтирован заранее), размер нулевой — центрируем при первом настоящем показе
+    if (width <= 0 || height <= 0) return;
     const isFirstLayout = viewport.current === null;
     viewport.current = { width, height };
     // Первый раз стартуем с центра карты, дальше просто не даём уехать за края
@@ -377,7 +380,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
                 {BUILDING_ICONS[garageToBuy.id] && (
                   <GameIcon source={BUILDING_ICONS[garageToBuy.id]} size={140} style={styles.modalImage} />
                 )}
-                <Text style={garageStyles.modalTitle}>{garageToBuy.name}</Text>
+                <SheetHeader title={garageToBuy.name} onClose={() => setGarageToBuy(null)} />
 
                 <View style={styles.infoRow}>
                   <View style={styles.infoCell}>

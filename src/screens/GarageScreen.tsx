@@ -3,11 +3,11 @@ import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
   Modal,
   Pressable,
   Platform,
 } from "react-native";
+import { TouchableOpacity } from "@components/Touchable";
 import Slider from "@react-native-community/slider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { garageStyles } from "@styles/styles";
@@ -27,6 +27,7 @@ import { colors } from "@styles/colors";
 import { carValue, tradeSaleBonus, tradeSalePrice } from "../economy/carCondition";
 import { ACTION_COLORS, CarActions, CarStatusPanels, PaintBars } from "@components/garage/CarWorkPanels";
 import { EquipmentModal, PainterModal } from "@components/garage/EquipmentModal";
+import { MechanicsModal } from "@components/garage/MechanicsModal";
 import { assetCostCents, hasEquipment } from "../economy/economy";
 import type { Mechanic } from "@/types";
 import { getGarageById } from "../data/cityBuildings";
@@ -128,6 +129,9 @@ export const GarageScreen: React.FC = () => {
       setModalOpenCount((prev) => prev + 1);
     }
   }, [selectedCarForSale?.id]);
+
+  /** Прибыль: минус — красный, плюс — зелёный, ноль — белый */
+  const profitColor = (v: number) => (v > 0 ? "#22C55E" : v < 0 ? "#EF4444" : colors.textPrimary);
 
   const getConditionColor = (condition: number) => {
     if (condition >= 80) return colors.primary;
@@ -585,6 +589,7 @@ export const GarageScreen: React.FC = () => {
                         style={[
                           garageStyles.conditionText,
                           {
+                            fontVariant: ["tabular-nums"],
                             color: getConditionColor(
                               mechanicRepairs[car.id]
                                 ? mechanicRepairsCondition[car.id] ?? car.condition
@@ -609,18 +614,20 @@ export const GarageScreen: React.FC = () => {
                   {!isClient && (
                   <View style={garageStyles.priceContainer}>
                     <Text style={garageStyles.priceLabel}>Текущая цена:</Text>
-                    <Text style={garageStyles.currentPrice}>
+                    <Text style={[garageStyles.currentPrice, { fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
                       ${currentPrice.toLocaleString()}
                     </Text>
                     <Text
                       style={[
                         garageStyles.priceChange,
                         {
-                          color: priceChange >= 0 ? colors.primary : "#EF4444",
+                          color: profitColor(priceChange),
+                          fontVariant: ["tabular-nums"],
                         },
                       ]}
+                      numberOfLines={1}
                     >
-                      {priceChange >= 0 ? "+" : ""}
+                      {priceChange > 0 ? "+" : ""}
                       {priceChange.toLocaleString()}$ ({priceChangePercent}%)
                     </Text>
                   </View>
@@ -660,7 +667,13 @@ export const GarageScreen: React.FC = () => {
               { paddingBottom: insets.bottom + 12 },
             ]}
           >
-            <Text style={garageStyles.modalTitle}>Продажа машины</Text>
+            <SheetHeader
+              title="Продажа машины"
+              onClose={() => {
+                setSelectedCarForSale(null);
+                setPriceAdjustment(10);
+              }}
+            />
 
             <View style={garageStyles.modalInfoBlock}>
               <Text style={garageStyles.modalLabel}>Машина:</Text>
@@ -768,15 +781,12 @@ export const GarageScreen: React.FC = () => {
                 style={[
                   garageStyles.modalProfit,
                   {
-                    color:
-                      (selectedCarForSale?.profit ?? 0) >= 0
-                        ? colors.primary
-                        : "#EF4444",
+                    color: profitColor(selectedCarForSale?.profit ?? 0),
                   },
                 ]}
               >
-                {(selectedCarForSale?.profit ?? 0) >= 0 ? "+" : ""}$
-                {selectedCarForSale?.profit.toLocaleString()} (
+                {(selectedCarForSale?.profit ?? 0) > 0 ? "+" : (selectedCarForSale?.profit ?? 0) < 0 ? "−" : ""}$
+                {Math.abs(selectedCarForSale?.profit ?? 0).toLocaleString()} (
                 {selectedCarForSale?.profitPercent}%)
               </Text>
             </View>
@@ -805,386 +815,7 @@ export const GarageScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Hire Mechanic Modal */}
-      <Modal
-        visible={showMechanicsModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowMechanicsModal(false)}
-      >
-        <View style={garageStyles.modalOverlay}>
-          <View
-            style={[
-              garageStyles.modalContent,
-              { paddingBottom: insets.bottom + 12 },
-            ]}
-          >
-            <SheetHeader title="Механики" onClose={() => setShowMechanicsModal(false)} />
-
-            <ScrollView style={{ maxHeight: 400, marginBottom: 20 }}>
-              {Array.isArray(mechanics) &&
-                mechanics.map((mechanic) => (
-                  <View
-                    key={mechanic.id}
-                    style={{
-                      backgroundColor: colors.cardBg,
-                      borderRadius: 12,
-                      padding: 16,
-                      marginBottom: 12,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    {/* Mechanic Header */}
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: 12,
-                      }}
-                    >
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                        <GameIcon source={getMechanicAvatar(mechanic.id)} size={44} />
-                        <Text
-                          style={{
-                            color: colors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: "700",
-                          }}
-                        >
-                          {mechanic.name}
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: "flex-end" }}>
-                        <Text
-                          style={{
-                            color: colors.primary,
-                            fontSize: 18,
-                            fontWeight: "700",
-                          }}
-                        >
-                          Уровень {mechanic.skillLevel}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Status Badge */}
-                    <View
-                      style={{
-                        backgroundColor: mechanic.hired
-                          ? getMechanicColor(
-                              Array.isArray(mechanics)
-                                ? mechanics.indexOf(mechanic)
-                                : 0,
-                            )
-                          : "rgba(107, 114, 128, 0.1)",
-                        borderRadius: 8,
-                        paddingVertical: 10,
-                        paddingHorizontal: 12,
-                        marginBottom: 12,
-                        borderWidth: 1,
-                        borderColor: mechanic.hired
-                          ? getMechanicColor(
-                              Array.isArray(mechanics)
-                                ? mechanics.indexOf(mechanic)
-                                : 0,
-                            )
-                          : "#D1D5DB",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: mechanic.hired ? "#FFF" : "#6B7280",
-                          fontSize: 12,
-                          fontWeight: "700",
-                          letterSpacing: 0.2,
-                        }}
-                      >
-                        {!mechanic.hired
-                          ? "○ СВОБОДЕН"
-                          : mechanic.slotIndex === -1
-                            ? "⚙️ НЕ НАЗНАЧЕН"
-                            : `✓ НАЗНАЧЕН НА СЛОТ #${mechanic.slotIndex + 1}`}
-                      </Text>
-                    </View>
-
-                    {/* Slot Selector - only show if hired */}
-                    {mechanic.hired && (
-                      <View style={{ marginBottom: 12 }}>
-                        <Text
-                          style={{
-                            color: colors.textTertiary,
-                            fontSize: 11,
-                            fontWeight: "600",
-                            marginBottom: 8,
-                            marginLeft: 4,
-                          }}
-                        >
-                          Выберите слот
-                        </Text>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            gap: 8,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          {Array.from({ length: garageSlots }).map(
-                            (_, index) => {
-                              const mechanicAtSlot = getMechanicAtSlot(index);
-                              const isCurrentSlot =
-                                mechanic.slotIndex === index;
-                              const mechanicIndex = Array.isArray(mechanics)
-                                ? mechanics.indexOf(mechanic)
-                                : 0;
-                              const mechanicColor =
-                                getMechanicColor(mechanicIndex);
-                              const occupiedByOtherMechanic =
-                                (mechanicAtSlot &&
-                                mechanicAtSlot.id !== mechanic.id) || index === boothSlot;
-
-                              return (
-                                <TouchableOpacity
-                                  key={index}
-                                  style={{
-                                    width: 48,
-                                    height: 48,
-                                    borderRadius: 10,
-                                    backgroundColor: isCurrentSlot
-                                      ? mechanicColor
-                                      : occupiedByOtherMechanic
-                                        ? getMechanicColor(
-                                            Array.isArray(mechanics)
-                                              ? mechanics.indexOf(
-                                                  mechanicAtSlot!,
-                                                )
-                                              : 0,
-                                          )
-                                        : "rgba(99, 102, 241, 0.08)",
-                                    borderWidth: 1.5,
-                                    borderColor: isCurrentSlot
-                                      ? mechanicColor
-                                      : occupiedByOtherMechanic
-                                        ? getMechanicColor(
-                                            Array.isArray(mechanics)
-                                              ? mechanics.indexOf(
-                                                  mechanicAtSlot!,
-                                                )
-                                              : 0,
-                                          )
-                                        : "rgba(99, 102, 241, 0.2)",
-                                    justifyContent: "center",
-                                    alignItems: "center",
-                                    shadowColor: isCurrentSlot
-                                      ? mechanicColor
-                                      : "transparent",
-                                    shadowOffset: { width: 0, height: 2 },
-                                    shadowOpacity: 0.2,
-                                    shadowRadius: 3,
-                                    elevation: isCurrentSlot ? 3 : 0,
-                                    opacity:
-                                      occupiedByOtherMechanic && !isCurrentSlot
-                                        ? 0.6
-                                        : 1,
-                                  }}
-                                  onPress={() => {
-                                    if (
-                                      !occupiedByOtherMechanic ||
-                                      isCurrentSlot
-                                    ) {
-                                      changeMechanicSlot(mechanic.id, index);
-                                    }
-                                  }}
-                                  disabled={
-                                    occupiedByOtherMechanic && !isCurrentSlot
-                                  }
-                                >
-                                  <Text
-                                    style={{
-                                      fontSize: 18,
-                                      fontWeight: "800",
-                                      color: isCurrentSlot
-                                        ? "#FFF"
-                                        : occupiedByOtherMechanic
-                                          ? "#FFF"
-                                          : colors.primary,
-                                    }}
-                                  >
-                                    {index + 1}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            },
-                          )}
-                        </View>
-                        <TouchableOpacity
-                          style={{
-                            backgroundColor: "rgba(239, 68, 68, 0.1)",
-                            borderRadius: 8,
-                            paddingVertical: 8,
-                            paddingHorizontal: 12,
-                            marginTop: 8,
-                            borderWidth: 1,
-                            borderColor: "rgba(239, 68, 68, 0.2)",
-                          }}
-                          onPress={() => {
-                            changeMechanicSlot(mechanic.id, -1);
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: "#EF4444",
-                              fontSize: 12,
-                              fontWeight: "700",
-                              textAlign: "center",
-                            }}
-                          >
-                            ✕ Открепить от слота
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-
-                    {mechanic.hired && (
-                      <View
-                        style={{
-                          backgroundColor:
-                            getMechanicColor(
-                              Array.isArray(mechanics)
-                                ? mechanics.indexOf(mechanic)
-                                : 0,
-                            ) + "15",
-                          borderRadius: 8,
-                          paddingVertical: 8,
-                          paddingHorizontal: 12,
-                          marginBottom: 12,
-                          borderWidth: 1,
-                          borderColor:
-                            getMechanicColor(
-                              Array.isArray(mechanics)
-                                ? mechanics.indexOf(mechanic)
-                                : 0,
-                            ) + "30",
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: getMechanicColor(
-                              Array.isArray(mechanics)
-                                ? mechanics.indexOf(mechanic)
-                                : 0,
-                            ),
-                            fontSize: 11,
-                            fontWeight: "600",
-                          }}
-                        >
-                          Скорость ремонта +{Math.round((skillMultiplier(mechanic.skillLevel) - 1) * 100)}% ·{" "}
-                          оклад {formatMoney(economyState.contracts[mechanic.id]?.monthlyCents ?? MECHANIC_MONTHLY_SALARY_CENTS)}/мес
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* Action Button */}
-                    {!mechanic.hired ? (
-                      <TouchableOpacity
-                        style={{
-                          backgroundColor: "#22C55E",
-                          borderRadius: 10,
-                          paddingVertical: 8,
-                          alignItems: "center",
-                          flexDirection: "row",
-                          justifyContent: "center",
-                          gap: 8,
-                        }}
-                        onPress={() => {
-                          hireMechanic(mechanic.id);
-                        }}
-                      >
-                        <GameIcon source={ICONS.hireMechanic} size={28} />
-                        <Text
-                          style={{
-                            color: "#FFF",
-                            fontSize: 14,
-                            fontWeight: "700",
-                          }}
-                        >
-                          Нанять ({formatMoney(MECHANIC_MONTHLY_SALARY_CENTS)}/мес)
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={{
-                          backgroundColor: colors.primary,
-                          borderRadius: 10,
-                          paddingVertical: 8,
-                          alignItems: "center",
-                          flexDirection: "row",
-                          justifyContent: "center",
-                          gap: 8,
-                        }}
-                        onPress={() => setMechanicForTraining(mechanic.id)}
-                      >
-                        <GameIcon source={ICONS.upgradeSkill} size={26} />
-                        <Text
-                          style={{
-                            color: "#FFF",
-                            fontSize: 14,
-                            fontWeight: "700",
-                          }}
-                        >
-                          Навык и обучение
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {mechanic.hired && (
-                      <TouchableOpacity
-                        style={{
-                          marginTop: 8,
-                          borderRadius: 10,
-                          paddingVertical: 10,
-                          alignItems: "center",
-                          borderWidth: 1,
-                          borderColor: "#EF4444",
-                          backgroundColor: "rgba(220, 38, 38, 0.1)",
-                        }}
-                        onPress={() => setMechanicToFire(mechanic.id)}
-                      >
-                        <Text style={{ color: "#EF4444", fontSize: 14, fontWeight: "700" }}>
-                          Уволить
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
-            </ScrollView>
-
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <TouchableOpacity
-                style={[garageStyles.modalButton, garageStyles.cancelButton]}
-                onPress={() => setShowMechanicsModal(false)}
-              >
-                <Text style={garageStyles.modalButtonText}>Закрыть</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Навык и увольнение — слоями внутри окна механиков: на iOS второй Modal рядом не откроется */}
-          <WorkerTrainingModal
-            mechanic={mechanics.find((m) => m.id === mechanicForTraining) ?? null}
-            onClose={() => setMechanicForTraining(null)}
-          />
-          <FireMechanicModal
-            mechanic={mechanics.find((m) => m.id === mechanicToFire) ?? null}
-            onCancel={() => setMechanicToFire(null)}
-            onConfirm={(mechanicId) => {
-              fireMechanic(mechanicId);
-              setMechanicToFire(null);
-            }}
-          />
-        </View>
-      </Modal>
+      <MechanicsModal visible={showMechanicsModal} onClose={() => setShowMechanicsModal(false)} />
 
       <EquipmentModal visible={showEquipment} onClose={() => setShowEquipment(false)} />
       <PainterModal

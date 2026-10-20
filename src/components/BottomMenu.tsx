@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, Platform } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { useEconomy } from '@hooks/EconomyContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { menuStyles } from '@styles/styles';
@@ -12,6 +13,8 @@ import { MARKETS } from '../data/cityBuildings';
 import type { Screen } from '@/types/index';
 
 const MENU_ICON_SIZE = 40;
+/** Точка-индикатор: одинаково от верхнего и правого края кнопки */
+const DOT = { top: 5, right: 5 };
 
 interface BottomMenuProps {
   currentScreen: Screen;
@@ -44,10 +47,8 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
         style={[menuStyles.menuButton, isCityActive && menuStyles.menuButtonActive]}
         onPress={() => onScreenChange('city')}
       >
-        <View>
-          <GameIcon source={ICONS.navCity} size={MENU_ICON_SIZE} style={!isCityActive && menuStyles.menuIconInactive} />
-          {cityAlert && <RedDot />}
-        </View>
+        <GameIcon source={ICONS.navCity} size={MENU_ICON_SIZE} style={!isCityActive && menuStyles.menuIconInactive} />
+        {cityAlert && <RedDot style={DOT} />}
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -55,10 +56,8 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
         onPress={() => onScreenChange('orders')}
         accessibilityLabel="Заказы"
       >
-        <View>
-          <Text style={{ fontSize: 30, opacity: currentScreen === 'orders' ? 1 : 0.55 }}>📋</Text>
-          {ordersAlert && currentScreen !== 'orders' && <RedDot />}
-        </View>
+        <Text style={{ fontSize: 30, opacity: currentScreen === 'orders' ? 1 : 0.55 }}>📋</Text>
+        {ordersAlert && currentScreen !== 'orders' && <RedDot style={DOT} />}
       </TouchableOpacity>
 
       <TouchableOpacity

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, Platform, StyleSheet } from 'react-native';
+import { Modal, View, Text, ScrollView, Platform, StyleSheet } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@styles/colors';
@@ -61,7 +62,7 @@ export const FinancePanel = ({ visible, onClose }: FinancePanelProps) => {
           </ScrollView>
 
           {visible && (
-            <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 8 }}>
+            <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 8, paddingHorizontal: 14 }}>
               {tab === 'overview' && <OverviewTab />}
               {tab === 'pnl' && <PnlTab />}
               {tab === 'assets' && <AssetsTab />}
@@ -385,11 +386,17 @@ const styles = StyleSheet.create({
     // Фиксированная высота: при переключении вкладок панель не прыгает
     height: '75%',
   },
+  // Шапка окна отделена серой линией на всю ширину
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+    marginHorizontal: -14,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 22,
@@ -424,8 +431,10 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#FFF',
   },
+  // Прокрутка на всю ширину окна: полоса идёт по краю, а не по карточкам
   body: {
     flex: 1,
+    marginHorizontal: -14,
   },
   hint: {
     fontSize: 12,

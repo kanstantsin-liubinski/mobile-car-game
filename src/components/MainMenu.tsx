@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, BackHandler, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Modal, BackHandler, Platform } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 
 interface MainMenuProps {

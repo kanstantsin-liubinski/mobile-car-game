@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 import { ActionTiles } from '@components/ActionTiles';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';

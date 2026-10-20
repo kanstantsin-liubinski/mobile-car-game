@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
-import { View, Platform } from 'react-native';
+import { View, Platform, Image } from 'react-native';
+import { CITY_BACKGROUND } from './src/data/cityBuildings';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 
@@ -14,6 +15,8 @@ import { GameStateProvider, useGameState } from '@hooks/GameStateContext';
 import { MarketProvider } from '@hooks/MarketContext';
 import { PaydayModal } from '@components/finance/PaydayModal';
 import { FinancePanel } from '@components/finance/FinancePanel';
+import { ExperienceModal } from '@components/info/ExperienceModal';
+import { CalendarModal } from '@components/info/CalendarModal';
 import { BankruptcyScreen } from '@components/finance/BankruptcyScreen';
 import { ToastProvider } from '@components/toast/ToastContext';
 import { ProgressionToasts } from '@components/toast/ProgressionToasts';
@@ -24,9 +27,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 function GameContent() {
   const { currentScreen, goToScreen, activeMarketId, marketFocus, openMarket } = useNavigation();
   const [financeOpen, setFinanceOpen] = useState(false);
+  const [xpOpen, setXpOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const { paydayPending } = useGameClock();
   useEffect(() => {
-    if (paydayPending) setFinanceOpen(false);
+    if (paydayPending) {
+      setFinanceOpen(false);
+      setXpOpen(false);
+      setCalendarOpen(false);
+    }
   }, [paydayPending]);
 
   // Используем нативные insets на мобильных, веб-версию на браузере
@@ -39,19 +48,25 @@ function GameContent() {
     <MarketProvider>
       <GarageProvider>
         <View style={commonStyles.container}>
-          <TopMenu insets={insets} onPressBalance={() => setFinanceOpen(true)} />
+          <TopMenu
+            insets={insets}
+            onPressBalance={() => setFinanceOpen(true)}
+            onPressCalendar={() => setCalendarOpen(true)}
+            onPressXp={() => setXpOpen(true)}
+          />
           
           <View style={commonStyles.content}>
             {currentScreen === 'garage' && (
               <GarageScreen />
             )}
-            {currentScreen === 'city' && (
+            {/* Город всегда смонтирован (скрыт на других экранах): большая карта не грузится заново при каждом переходе */}
+            <View style={[{ flex: 1 }, currentScreen !== 'city' && { display: 'none' }]}>
               <CityScreen
                 onOpenMarket={openMarket}
                 onOpenDealership={() => goToScreen('dealership')}
                 onOpenGarage={() => goToScreen('garage')}
               />
-            )}
+            </View>
             {currentScreen === 'market' && <MarketScreen marketId={activeMarketId} focus={marketFocus} onBack={() => goToScreen('city')} />}
             {currentScreen === 'dealership' && <DealershipScreen onBack={() => goToScreen('city')} />}
             {currentScreen === 'skills' && <SkillsScreen />}
@@ -63,6 +78,8 @@ function GameContent() {
           {/* Финансы: панель по нажатию на баланс, обязательный отчёт в зарплатный день, банкротство */}
           {/* В зарплатный день панель закрывается: отчёт — поверх всей игры */}
           <FinancePanel visible={financeOpen && !paydayPending} onClose={() => setFinanceOpen(false)} />
+          <ExperienceModal visible={xpOpen && !paydayPending} onClose={() => setXpOpen(false)} />
+          <CalendarModal visible={calendarOpen && !paydayPending} onClose={() => setCalendarOpen(false)} />
           <PaydayModal />
           <BankruptcyScreen />
           <ProgressionToasts />
@@ -138,6 +155,17 @@ function AppWrapper() {
     </EconomyProvider>
   );
 }
+
+/** Карта города — самая тяжёлая картинка: начинаем грузить её сразу при запуске, ещё в главном меню */
+const preloadCityMap = () => {
+  try {
+    const uri = Image.resolveAssetSource(CITY_BACKGROUND)?.uri;
+    if (uri) Image.prefetch(uri).catch(() => {});
+  } catch {
+    // Предзагрузка — только ускорение, без неё карта просто загрузится при первом показе
+  }
+};
+preloadCityMap();
 
 export default function App() {
   return (

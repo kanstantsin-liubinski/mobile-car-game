@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Animated, Easing, Platform } from 'react-native';
+import { View, Text, Animated, Easing, Platform } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import Svg, { Circle } from 'react-native-svg';
 import { headerStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
@@ -14,6 +15,10 @@ interface TopMenuProps {
   insets?: { top: number; right: number; bottom: number; left: number };
   /** Нажатие на баланс открывает финансовую панель */
   onPressBalance: () => void;
+  /** Нажатие на календарь — окно «Календарь» */
+  onPressCalendar: () => void;
+  /** Нажатие на опыт — окно «Опыт» */
+  onPressXp: () => void;
 }
 
 const CircularProgressBar = ({ percentage, level }: { percentage: number; level: number }) => {
@@ -116,7 +121,7 @@ const DayBarNative = ({ progress }: { progress: number }) => {
   );
 };
 
-export const TopMenu = ({ insets, onPressBalance }: TopMenuProps) => {
+export const TopMenu = ({ insets, onPressBalance, onPressCalendar, onPressXp }: TopMenuProps) => {
   const { level, getProgress } = useExperienceContext();
   const { current, required, percentage } = getProgress();
   const { state } = useEconomy();
@@ -126,13 +131,13 @@ export const TopMenu = ({ insets, onPressBalance }: TopMenuProps) => {
     <View style={[headerStyles.topMenu, insets && { paddingTop: insets.top }]}>
       {/* Баланс — только свободные деньги; по нажатию открываются финансы */}
       <TouchableOpacity style={headerStyles.balanceContainer} onPress={onPressBalance} activeOpacity={0.7}>
-        <GameIcon source={ICONS.money} size={30} />
-        <Text style={headerStyles.balanceValue}>{formatMoney(state.balanceCents)}</Text>
+        <GameIcon source={ICONS.money} size={24} />
+        <Text style={headerStyles.balanceValue} numberOfLines={1} adjustsFontSizeToFit>{formatMoney(state.balanceCents)}</Text>
         {state.loan && <Text style={headerStyles.loanBadge}>долг</Text>}
       </TouchableOpacity>
 
       {/* Календарь и время до зарплатного дня */}
-      <TouchableOpacity style={headerStyles.calendar} onPress={onPressBalance} activeOpacity={0.7}>
+      <TouchableOpacity style={headerStyles.calendar} onPress={onPressCalendar} activeOpacity={0.7}>
         <Text style={headerStyles.calendarText}>
           {calendar.weekday} День {calendar.day}
         </Text>
@@ -145,7 +150,7 @@ export const TopMenu = ({ insets, onPressBalance }: TopMenuProps) => {
         <Text style={headerStyles.calendarMonth}>Месяц {calendar.month}</Text>
       </TouchableOpacity>
 
-      <View style={headerStyles.levelIndicatorContainer}>
+      <TouchableOpacity style={headerStyles.levelIndicatorContainer} onPress={onPressXp} activeOpacity={0.7}>
         <GameIcon source={ICONS.xp} size={24} />
         {/* Circular Progress Bar */}
         <CircularProgressBar 
@@ -158,7 +163,7 @@ export const TopMenu = ({ insets, onPressBalance }: TopMenuProps) => {
           <Text style={{ fontWeight: '700', color: colors.primary }}>{current}</Text>
           <Text>/{required}</Text>
         </Text>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 };

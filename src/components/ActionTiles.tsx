@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, type ImageSourcePropType } from 'react-native';
+import { View, Text, StyleSheet, type ImageSourcePropType } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 import { GameIcon } from '@components/GameIcon';
 
@@ -96,9 +97,10 @@ const styles = StyleSheet.create({
   wrap: { gap: 6, marginTop: 4 },
   row: { flexDirection: 'row', gap: 6 },
   spacer: { flex: 1 },
+  // Фиксированная высота: подпись в одну или две строки, статус «готово/замок» — плитка не меняет размер
   tile: {
     flex: 1,
-    minHeight: 74,
+    height: 88,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,
@@ -108,10 +110,10 @@ const styles = StyleSheet.create({
   tileLocked: { opacity: 0.55 },
   tilePending: { borderColor: '#F59E0B' },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 4, gap: 2 },
-  emoji: { fontSize: 18, color: colors.textPrimary, fontWeight: '800' },
+  emoji: { fontSize: 18, lineHeight: 22, height: 22, color: colors.textPrimary, fontWeight: '800' },
   check: { color: '#22C55E' },
-  title: { fontSize: 12, fontWeight: '800', color: colors.textPrimary },
-  sub: { fontSize: 10, color: colors.textTertiary, textAlign: 'center' },
+  title: { fontSize: 12, lineHeight: 16, fontWeight: '800', color: colors.textPrimary },
+  sub: { fontSize: 10, lineHeight: 13, height: 26, color: colors.textTertiary, textAlign: 'center' },
   info: {
     position: 'absolute',
     top: 4,

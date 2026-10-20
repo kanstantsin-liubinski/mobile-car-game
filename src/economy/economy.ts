@@ -191,7 +191,19 @@ export interface EconomyState {
   equipment: EquipmentState;
   /** Заказы клиентов и репутация */
   orders: O.OrdersState;
+  /** Последние начисления опыта (новые первыми) */
+  xpLog: XpEntry[];
 }
+
+export interface XpEntry {
+  month: number;
+  amount: number;
+  reason: string;
+  /** Уровень после начисления */
+  level: number;
+}
+
+export const XP_LOG_LIMIT = 20;
 
 export interface EquipmentState {
   owned: B.EquipmentId[];
@@ -272,6 +284,7 @@ export const createEconomy = (
   playerMigrated,
   equipment: createEquipment(),
   orders: O.createOrdersState(seed, 0),
+  xpLog: [],
 });
 
 // ─── Календарь ─────────────────────────────────────────────────────────────
@@ -491,8 +504,13 @@ export interface OpResult {
   ok: boolean;
 }
 
-const awardXp = (s: EconomyState, amount: number): EconomyState =>
-  amount > 0 ? { ...s, player: { ...s.player, xp: P.addXp(s.player.xp, amount) } } : s;
+/** Начисление опыта с записью в журнал: за что и сколько */
+const awardXp = (s: EconomyState, amount: number, reason = 'Опыт'): EconomyState => {
+  if (!(amount > 0)) return s;
+  const xp = P.addXp(s.player.xp, amount);
+  const entry: XpEntry = { month: currentMonth(s), amount: Math.floor(amount), reason, level: xp.level };
+  return { ...s, player: { ...s.player, xp }, xpLog: [entry, ...(s.xpLog ?? [])].slice(0, XP_LOG_LIMIT) };
+};
 
 // ─── Навыки игрока: единая инфраструктура ─────────────────────────────────
 
@@ -613,7 +631,7 @@ export const sellCar = (s: EconomyState, sale: CarSale): EconomyState => {
       carsSold: s.totals.carsSold + 1,
       revenueCents: s.totals.revenueCents + sale.priceCents,
     },
-  }, xp);
+  }, xp, `Продажа: ${asset?.name ?? 'машина'} (доходность ${purchase > 0 ? Math.round(((sale.priceCents - cost) / purchase) * 100) : 0}%)`);
   return withProcessed(awardSkill(awardManagement(withXp, practice), 'trade', practice), opId);
 };
 
@@ -627,7 +645,7 @@ export const awardFullRepair = (s: EconomyState, carId: string): EconomyState =>
     assets: { ...s.assets, [carId]: { ...asset, fullRepairAwarded: true } },
     ledger: { ...s.ledger, repairXp: s.ledger.repairXp + xp },
   };
-  return awardXp(marked, xp);
+  return awardXp(marked, xp, `Полное восстановление: ${asset.name}`);
 };
 
 /** Машины из сохранений до финансовой системы попадают в активы по цене покупки */
@@ -996,7 +1014,7 @@ export const closeMonth = (
 
   // Бонус за прибыльный месяц: от XP продаж этого месяца, ремонт в базу не входит
   const bonusXp = P.monthXp(result.netProfitCents, s.ledger.salesXp);
-  state = awardXp(state, bonusXp);
+  state = awardXp(state, bonusXp, `Прибыльный месяц ${preview.month}`);
   // Практика менеджмента за прибыльный месяц — тоже ровно один раз, вместе с закрытием
   const managementPractice = P.managementMonthPractice(result.netProfitCents);
   state = awardManagement(state, managementPractice);
@@ -1410,6 +1428,7 @@ export const deserializeEconomy = (raw: string): EconomySave | null => {
       equipment: loaded.equipment
         ? { owned: Array.from(new Set<B.EquipmentId>(['basic_tools', ...loaded.equipment.owned])), boothSlot: loaded.equipment.boothSlot ?? null }
         : createEquipment(),
+      xpLog: loaded.xpLog ?? [],
       orders: O.restoreOrdersState(loaded.orders, randomSeed(), Math.max(0, save.gameTimeMs || 0)),
       playerMigrated: loaded.player ? (loaded.playerMigrated ?? true) : false,
       history: (loaded.history ?? []).map((m) => ({ ...m, monthXp: m.monthXp ?? 0, managementPractice: m.managementPractice ?? 0, salesXp: m.salesXp ?? 0, repairXp: m.repairXp ?? 0 })),

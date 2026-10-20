@@ -4,10 +4,10 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
   type ImageSourcePropType,
 } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@styles/colors';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';

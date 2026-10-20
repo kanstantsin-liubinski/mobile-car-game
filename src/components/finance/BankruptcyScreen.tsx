@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 import { useEconomy } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';

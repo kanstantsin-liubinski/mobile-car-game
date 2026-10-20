@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { View, Text, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { marketStyles } from '@styles/styles';
 import { useExperienceContext } from '@hooks/ExperienceContext';
 import { TIER_NAMES, TOTAL_TIERS, TIER_UNLOCK_LEVELS } from '../data/carModels';

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Platform, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Platform, StyleSheet } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@styles/colors';
@@ -51,7 +52,7 @@ export const PaydayModal = () => {
         <View style={[styles.sheet, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 }]}>
           <Text style={styles.title}>Финансовый отчёт — Месяц {preview.month}</Text>
 
-          <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 4 }}>
+          <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 4, paddingHorizontal: 14 }}>
             {preview.isLoanDeadline && (
               <Notice level={preview.canContinue ? 'warning' : 'danger'}>
                 Это последний месяц кредита: долг {formatMoney(loan?.principalCents ?? 0)} нужно вернуть полностью.
@@ -144,6 +145,7 @@ export const PaydayModal = () => {
             )}
           </ScrollView>
 
+          <View style={styles.footer}>
           <TouchableOpacity
             style={[ui.primaryButton, !preview.canContinue && ui.dangerButton, styles.payButton]}
             onPress={handlePay}
@@ -151,6 +153,7 @@ export const PaydayModal = () => {
           >
             <Text style={ui.primaryButtonText}>{preview.canContinue ? 'Продолжить' : 'Подвести итоги'}</Text>
           </TouchableOpacity>
+          </View>
         </View>
     </View>
   );
@@ -178,12 +181,24 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     textAlign: 'center',
     marginBottom: 12,
+    marginHorizontal: -14,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   scroll: {
     flex: 1,
+    marginHorizontal: -14,
+  },
+  // Футер с кнопкой отделён серой линией на всю ширину
+  footer: {
+    marginHorizontal: -14,
+    paddingHorizontal: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   payButton: {
-    marginTop: 10,
+    marginTop: 12,
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 10,

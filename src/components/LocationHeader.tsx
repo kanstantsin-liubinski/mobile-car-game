@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, type ImageSourcePropType } from 'react-native';
+import { View, Text, StyleSheet, type ImageSourcePropType } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@styles/colors';
 import { GameIcon } from '@components/GameIcon';

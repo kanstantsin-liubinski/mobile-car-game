@@ -50,6 +50,8 @@ interface MarketContextType {
   currentTime: number;
   /** Активное горящее предложение (не больше одного) */
   hotOffer: HotOffer | null;
+  /** Когда следующая проверка горящего предложения (игровое время) */
+  hotNextCheckAtMs: number | null;
   /** Горящее предложение как объявление этого рынка и класса, если оно там есть */
   getHotListing: (marketId: string, tier: number) => MarketListing | null;
   /** Красная точка авторынка: менеджмент от 2 уровня и есть активное предложение */
@@ -370,6 +372,7 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         getTimeRemaining,
         currentTime,
         hotOffer,
+        hotNextCheckAtMs: hot?.nextCheckAtMs ?? null,
         getHotListing,
         marketHasAlert,
         markHotNotified,

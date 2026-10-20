@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 import { LocationHeader } from '@components/LocationHeader';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';

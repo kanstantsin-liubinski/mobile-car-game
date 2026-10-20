@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Platform, type ImageSourcePropType } from 'react-native';
+import { View, Text, StyleSheet, Modal, Platform, type ImageSourcePropType } from 'react-native';
+import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@styles/colors';
 import { garageStyles } from '@styles/styles';
@@ -36,14 +37,22 @@ export const PaintBars = ({ car }: { car: GarageCar }) => {
     <View style={styles.bars}>
       <View style={styles.barHead}>
         <Text style={styles.barLabel}>ЛКП</Text>
-        <Text style={[styles.barValue, { color: PAINT }]}>
+        <Text style={[styles.barValue, styles.nums, { color: PAINT }]} numberOfLines={1}>
           {paint.toFixed(1)}%{car.paintTarget ? ` → ${car.paintTarget}%` : ''}
         </Text>
       </View>
       <View style={styles.track}>
         <View style={[styles.fill, { width: `${paint}%`, backgroundColor: PAINT }]} />
       </View>
-      <Text style={styles.overall}>Общее состояние: {overall.toFixed(1)}% (80% техника + 20% ЛКП)</Text>
+      {/* Одна строка с цифрами фиксированной ширины: при тапах ничего не переносится и не скачет */}
+      <View style={styles.barHead}>
+        <Text style={styles.overall} numberOfLines={1}>
+          Общее состояние
+        </Text>
+        <Text style={[styles.overall, styles.nums]} numberOfLines={1}>
+          {overall.toFixed(1)}%
+        </Text>
+      </View>
     </View>
   );
 };
@@ -488,6 +497,7 @@ const styles = StyleSheet.create({
   track: { height: 6, borderRadius: 3, backgroundColor: '#27272A', overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 3 },
   overall: { fontSize: 12, color: colors.textPrimary, fontWeight: '700' },
+  nums: { fontVariant: ['tabular-nums'] },
   panel: {
     marginTop: 10,
     borderRadius: 12,

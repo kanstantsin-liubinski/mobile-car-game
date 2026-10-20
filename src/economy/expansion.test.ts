@@ -588,3 +588,27 @@ describe('миграция сохранений', () => {
     assert.deepEqual(restored.orders, st.orders);
   });
 });
+
+describe('журнал опыта', () => {
+  it('каждое начисление XP записывается с причиной; без XP — без записи', () => {
+    let s = E.buyCar(E.createEconomy($(10_000), true, true, 1), { carId: 'c', name: 'Golf', tier: 1, priceCents: $(1000) }).state;
+    s = E.sellCar(s, { carId: 'c', priceCents: $(1250), fallbackCostCents: 0 });
+    assert.equal(s.xpLog.length, 1);
+    assert.equal(s.xpLog[0].amount, s.player.xp.totalXp);
+    assert.ok(s.xpLog[0].reason.startsWith('Продажа: Golf'));
+    const loss = E.sellCar(E.buyCar(E.createEconomy($(10_000), true, true, 1), { carId: 'd', name: 'X', tier: 1, priceCents: $(1000) }).state, { carId: 'd', priceCents: $(900), fallbackCostCents: 0 });
+    assert.equal(loss.xpLog.length, 0);
+  });
+
+  it('хранит не больше 20 последних записей и переживает сохранение', () => {
+    let s = E.createEconomy($(100_000), true, true, 1);
+    for (let i = 0; i < 25; i++) {
+      s = E.buyCar(s, { carId: `c${i}`, name: `Car ${i}`, tier: 1, priceCents: $(1000) }).state;
+      s = E.sellCar(s, { carId: `c${i}`, priceCents: $(1500), fallbackCostCents: 0 });
+    }
+    assert.equal(s.xpLog.length, E.XP_LOG_LIMIT);
+    assert.ok(s.xpLog[0].reason.includes('Car 24'));
+    const restored = must(E.deserializeEconomy(E.serializeEconomy(s, 0))).state;
+    assert.deepEqual(restored.xpLog, s.xpLog);
+  });
+});
