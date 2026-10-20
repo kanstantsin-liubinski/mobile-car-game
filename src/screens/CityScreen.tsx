@@ -12,6 +12,7 @@ import {
   Easing,
   type LayoutChangeEvent,
 } from 'react-native';
+import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
@@ -369,13 +370,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
       <LocationHeader title="Город" icon={ICONS.navCity} overlay />
 
       {/* Garage Purchase Modal */}
-      <Modal
-        visible={garageToBuy !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setGarageToBuy(null)}
-      >
-        <View style={garageStyles.modalOverlay}>
+      <SheetModal visible={garageToBuy !== null} onRequestClose={() => setGarageToBuy(null)}>
           <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 14 }]}>
             {garageToBuy && (
               <>
@@ -439,8 +434,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
               </>
             )}
           </View>
-        </View>
-      </Modal>
+      </SheetModal>
     </View>
   );
 };

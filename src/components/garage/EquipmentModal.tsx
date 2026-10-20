@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
+import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
@@ -44,8 +45,7 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={garageStyles.modalOverlay}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
           <SheetHeader title="Оборудование" onClose={onClose} flush />
           <SheetScroll>
@@ -132,8 +132,7 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
             </TouchableOpacity>
           </SheetFooter>
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 };
 
@@ -159,8 +158,7 @@ export const PainterModal = ({
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={garageStyles.modalOverlay}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12 }]}>
           <SheetHeader title="Маляр" onClose={onClose} />
           {painters.map((p) => {
@@ -235,8 +233,7 @@ export const PainterModal = ({
           </SheetFooter>
         </View>
         {children}
-      </View>
-    </Modal>
+    </SheetModal>
   );
 };
 

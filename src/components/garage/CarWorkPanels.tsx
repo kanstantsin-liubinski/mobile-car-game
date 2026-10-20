@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, Platform, type ImageSourcePropType } from 'react-native';
+import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@styles/colors';
@@ -451,8 +452,7 @@ const PaintConfirmModal = ({ car, confirm, onClose }: { car: GarageCar; confirm:
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={garageStyles.modalOverlay}>
+    <SheetModal visible onRequestClose={onClose}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12 }]}>
           <SheetHeader title={service ? 'Покраска в сервисе' : 'Покраска в камере'} onClose={onClose} />
           <View style={styles.confirmBox}>
@@ -484,8 +484,7 @@ const PaintConfirmModal = ({ car, confirm, onClose }: { car: GarageCar; confirm:
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 };
 

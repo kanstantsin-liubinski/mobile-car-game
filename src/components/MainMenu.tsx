@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Modal, BackHandler, Platform } from 'react-native';
+import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 
@@ -95,13 +96,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
       </ScrollView>
 
       {/* Settings Modal */}
-      <Modal
-        visible={showSettings}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowSettings(false)}
-      >
-        <View style={styles.modalOverlay}>
+      <SheetModal visible={showSettings} onRequestClose={() => setShowSettings(false)}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Настройки</Text>
@@ -148,17 +143,11 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               <Text style={styles.closeSettingsButtonText}>Готово</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+      </SheetModal>
 
       {/* Confirm New Game Modal */}
-      <Modal
-        visible={showConfirmNewGame}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowConfirmNewGame(false)}
-      >
-        <View style={styles.confirmModalOverlay}>
+      <SheetModal visible={showConfirmNewGame} onRequestClose={() => setShowConfirmNewGame(false)} align="center" backdropColor="rgba(0, 0, 0, 0.8)">
+        <View style={{ alignItems: 'center', paddingHorizontal: 24 }}>
           <View style={styles.confirmModalContent}>
             <Text style={styles.confirmModalTitle}>Начать новую игру?</Text>
             <Text style={styles.confirmModalMessage}>
@@ -182,7 +171,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             </View>
           </View>
         </View>
-      </Modal>
+      </SheetModal>
     </View>
   );
 };

@@ -7,6 +7,7 @@ import {
   Pressable,
   Platform,
 } from "react-native";
+import { SheetModal } from "@components/SheetModal";
 import { TouchableOpacity } from "@components/Touchable";
 import Slider from "@react-native-community/slider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -651,16 +652,10 @@ export const GarageScreen: React.FC = () => {
         </View>
       )}
 
-      <Modal
-        visible={selectedCarForSale !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
+      <SheetModal visible={selectedCarForSale !== null} onRequestClose={() => {
           setSelectedCarForSale(null);
           setPriceAdjustment(10);
-        }}
-      >
-        <View style={garageStyles.modalOverlay}>
+        }}>
           <View
             style={[
               garageStyles.modalContent,
@@ -812,8 +807,7 @@ export const GarageScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
+      </SheetModal>
 
       <MechanicsModal visible={showMechanicsModal} onClose={() => setShowMechanicsModal(false)} />
 

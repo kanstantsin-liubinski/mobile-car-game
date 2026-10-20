@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Modal, Platform } from 'react-native';
+import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
@@ -36,14 +37,7 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
   );
 
   return (
-    <Modal visible={car !== null} transparent animationType="slide" onRequestClose={onCancel}>
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          justifyContent: 'flex-end',
-        }}
-      >
+    <SheetModal visible={car !== null} onRequestClose={onCancel}>
         <View
           style={{
             backgroundColor: colors.cardBg,
@@ -156,7 +150,6 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 };

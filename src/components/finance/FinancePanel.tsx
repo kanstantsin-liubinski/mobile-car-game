@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, View, Text, ScrollView, Platform, StyleSheet } from 'react-native';
+import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,8 +40,7 @@ export const FinancePanel = ({ visible, onClose }: FinancePanelProps) => {
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
           <View style={styles.header}>
             <Text style={styles.title}>Финансы</Text>
@@ -72,8 +72,7 @@ export const FinancePanel = ({ visible, onClose }: FinancePanelProps) => {
             </ScrollView>
           )}
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 };
 

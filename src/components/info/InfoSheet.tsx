@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, StyleSheet, Platform } from 'react-native';
+import { SheetModal } from '@components/SheetModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
@@ -22,14 +23,12 @@ export const InfoSheet = ({
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={garageStyles.modalOverlay}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
         <View style={[garageStyles.modalContent, styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
           <SheetHeader title={title} onClose={onClose} flush />
           {visible && <SheetScroll>{children}</SheetScroll>}
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 };
 

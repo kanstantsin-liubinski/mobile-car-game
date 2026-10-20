@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, StyleSheet, Platform } from 'react-native';
+import { SheetModal } from '@components/SheetModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@components/Touchable';
 import { garageStyles } from '@styles/styles';
@@ -41,8 +42,7 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={garageStyles.modalOverlay}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
           <SheetHeader title="Механики" onClose={onClose} flush />
           <SheetScroll>
@@ -169,8 +169,7 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
             setFireId(null);
           }}
         />
-      </View>
-    </Modal>
+    </SheetModal>
   );
 };
 
