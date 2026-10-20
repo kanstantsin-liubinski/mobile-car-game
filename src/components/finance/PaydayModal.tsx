@@ -52,7 +52,7 @@ export const PaydayModal = () => {
         <View style={[styles.sheet, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 }]}>
           <Text style={styles.title}>Финансовый отчёт — Месяц {preview.month}</Text>
 
-          <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 4, paddingHorizontal: 14 }}>
+          <ScrollView style={styles.scroll} contentContainerStyle={{ paddingTop: 12, paddingBottom: 12, paddingHorizontal: 14 }}>
             {preview.isLoanDeadline && (
               <Notice level={preview.canContinue ? 'warning' : 'danger'}>
                 Это последний месяц кредита: долг {formatMoney(loan?.principalCents ?? 0)} нужно вернуть полностью.
@@ -180,7 +180,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 12,
     marginHorizontal: -14,
     paddingBottom: 12,
     borderBottomWidth: 1,

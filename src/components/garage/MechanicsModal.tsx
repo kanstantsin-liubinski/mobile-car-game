@@ -44,7 +44,7 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
-          <SheetHeader title="Механики" onClose={onClose} />
+          <SheetHeader title="Механики" onClose={onClose} flush />
           <SheetScroll>
             {mechanics.map((m) => {
               const contract = state.contracts[m.id];

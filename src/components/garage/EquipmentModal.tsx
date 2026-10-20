@@ -47,7 +47,7 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
-          <SheetHeader title="Оборудование" onClose={onClose} />
+          <SheetHeader title="Оборудование" onClose={onClose} flush />
           <SheetScroll>
             {EQUIPMENT.map((eq) => {
               const owned = hasEquipment(state, eq.id);

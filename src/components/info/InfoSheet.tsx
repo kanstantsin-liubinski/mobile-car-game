@@ -25,7 +25,7 @@ export const InfoSheet = ({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
-          <SheetHeader title={title} onClose={onClose} />
+          <SheetHeader title={title} onClose={onClose} flush />
           {visible && <SheetScroll>{children}</SheetScroll>}
         </View>
       </View>

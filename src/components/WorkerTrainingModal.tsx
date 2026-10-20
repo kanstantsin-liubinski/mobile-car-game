@@ -66,7 +66,7 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
     <InnerOverlay visible={!!mechanic && !!contract}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
-          <SheetHeader title={painter ? 'Навык маляра' : 'Навык механика'} onClose={onClose} />
+          <SheetHeader title={painter ? 'Навык маляра' : 'Навык механика'} onClose={onClose} flush />
           {mechanic && contract && (
             <SheetScroll>
               <SkillCard

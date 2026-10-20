@@ -49,7 +49,7 @@ export const FinancePanel = ({ visible, onClose }: FinancePanelProps) => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={{ gap: 8 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs} contentContainerStyle={{ gap: 8, paddingHorizontal: 14 }}>
             {TABS.map((t) => (
               <TouchableOpacity
                 key={t.id}
@@ -62,7 +62,7 @@ export const FinancePanel = ({ visible, onClose }: FinancePanelProps) => {
           </ScrollView>
 
           {visible && (
-            <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 8, paddingHorizontal: 14 }}>
+            <ScrollView style={styles.body} contentContainerStyle={{ paddingTop: 12, paddingBottom: 12, paddingHorizontal: 14 }}>
               {tab === 'overview' && <OverviewTab />}
               {tab === 'pnl' && <PnlTab />}
               {tab === 'assets' && <AssetsTab />}
@@ -392,11 +392,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
-    marginHorizontal: -14,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 22,
@@ -407,9 +402,13 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: colors.textTertiary,
   },
+  // Вкладки — часть шапки: серая линия под ними, прокрутка содержимого начинается вплотную к ней
   tabs: {
     flexGrow: 0,
-    marginBottom: 10,
+    marginHorizontal: -14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   tab: {
     paddingHorizontal: 12,

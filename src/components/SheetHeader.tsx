@@ -6,9 +6,12 @@ import { colors } from '@styles/colors';
 /** Внутренний отступ нижних окон (garageStyles.modalContent) — хедер, футер и прокрутка выходят на всю ширину */
 export const SHEET_PADDING = 14;
 
-/** Заголовок нижнего окна с крестиком закрытия и серой линией снизу, как у шапки игры */
-export const SheetHeader = ({ title, onClose }: { title: string; onClose?: () => void }) => (
-  <View style={styles.header}>
+/**
+ * Заголовок нижнего окна с крестиком закрытия и серой линией снизу, как у шапки игры.
+ * flush — сразу под ним прокрутка (SheetScroll): без отступа, чтобы содержимое уходило под линию.
+ */
+export const SheetHeader = ({ title, onClose, flush }: { title: string; onClose?: () => void; flush?: boolean }) => (
+  <View style={[styles.header, flush && { marginBottom: 0 }]}>
     <View style={styles.side} />
     <Text style={styles.title} numberOfLines={1}>
       {title}
@@ -23,14 +26,14 @@ export const SheetHeader = ({ title, onClose }: { title: string; onClose?: () =>
   </View>
 );
 
-/** Футер окна с кнопками — отделён серой линией сверху, как нижнее меню игры */
+/** Футер окна с кнопками — отделён серой линией сверху, как нижнее меню игры; прокрутка над ним — вплотную к линии */
 export const SheetFooter = ({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) => (
   <View style={[styles.footer, style]}>{children}</View>
 );
 
 /**
- * Прокрутка содержимого окна на всю ширину: отступ — внутри, поэтому полоса прокрутки
- * идёт по краю окна, а не поверх карточек.
+ * Прокрутка содержимого окна на всю ширину и вплотную к линиям шапки и футера: все отступы —
+ * внутри прокрутки, поэтому содержимое уходит под линию, а полоса прокрутки идёт по краю окна.
  */
 export const SheetScroll = ({
   children,
@@ -83,10 +86,9 @@ const styles = StyleSheet.create({
     marginHorizontal: -SHEET_PADDING,
     paddingHorizontal: SHEET_PADDING,
     paddingTop: 12,
-    marginTop: 4,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   scroll: { flexShrink: 1, marginHorizontal: -SHEET_PADDING },
-  scrollContent: { paddingHorizontal: SHEET_PADDING, paddingBottom: 8 },
+  scrollContent: { paddingHorizontal: SHEET_PADDING, paddingTop: 12, paddingBottom: 12 },
 });
