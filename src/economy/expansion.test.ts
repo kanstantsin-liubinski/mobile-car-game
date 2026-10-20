@@ -475,6 +475,15 @@ describe('ремонтные заказы', () => {
     assert.equal(result.serviceProfitCents, order.rewardCents - order.partsCents);
   });
 
+  it('за один заказ — не больше 2 очков репутации, даже сложный и досрочно', () => {
+    const { s, order } = withServiceOrder('body');
+    let st = E.acceptOrder(s, order.id, 0, [1]).state;
+    st = E.markOrderWorkDone(st, order.id, DAY_MS);
+    const res = E.deliverServiceOrder(st, order.id, DAY_MS).state;
+    assert.equal(res.orders.reputation - st.orders.reputation, B.REP_MAX_PER_ORDER);
+    assert.equal(B.REP_MAX_PER_ORDER, 2);
+  });
+
   it('досрочно: дополнительный +1', () => {
     const { s, order } = withServiceOrder('maintenance');
     let st = E.acceptOrder(s, order.id, 0, [1]).state;

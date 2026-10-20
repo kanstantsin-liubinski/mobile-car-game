@@ -198,7 +198,8 @@ const OrderCard = ({ order }: { order: Order }) => {
               : '')}
       </Text>
       <Text style={styles.line}>
-        ⭐ Репутация: +{def?.complex ? B.REP_COMPLEX_ON_TIME : B.REP_SIMPLE_ON_TIME} вовремя (+{B.REP_EARLY_BONUS} досрочно),{' '}
+        ⭐ Репутация: +{def?.complex ? B.REP_COMPLEX_ON_TIME : B.REP_SIMPLE_ON_TIME} вовремя
+        {!def?.complex ? ` (+${B.REP_EARLY_BONUS} досрочно)` : ''},{' '}
         {B.REP_LATE} с опозданием, {B.REP_FAILED} провал, {B.REP_CANCEL} отказ
       </Text>
 

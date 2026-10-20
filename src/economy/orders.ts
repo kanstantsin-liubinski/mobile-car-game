@@ -398,7 +398,7 @@ export const deliveryOutcome = (o: Order, doneAt: number): DeliveryOutcome => {
   const total = deadline - (o.acceptedAtMs ?? deadline);
   const early = total > 0 && (deadline - doneAt) / total >= B.ORDER_EARLY_SHARE;
   const base = isComplex(o) ? B.REP_COMPLEX_ON_TIME : B.REP_SIMPLE_ON_TIME;
-  return { payShare: 1, repDelta: base + (early ? B.REP_EARLY_BONUS : 0), early, late: false };
+  return { payShare: 1, repDelta: Math.min(B.REP_MAX_PER_ORDER, base + (early ? B.REP_EARLY_BONUS : 0)), early, late: false };
 };
 
 /** Закрыть заказ как выполненный (деньги начисляет экономика) */

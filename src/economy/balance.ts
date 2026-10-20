@@ -253,8 +253,8 @@ export const ORDER_CHECK_DAYS = 1;
 export const ORDER_GUARANTEE_DAYS = 3;
 /** Доля сгенерированных заказов, которые игрок может выполнить имеющимся оборудованием */
 export const ORDER_AVAILABLE_TYPE_WEIGHT = 0.75;
-/** Ниже этой репутации приходят только простые заказы */
-export const LOW_REPUTATION = 200;
+/** Ниже этой репутации приходят только простые заказы (≈30 простых заказов от старта) */
+export const LOW_REPUTATION = 130;
 
 /** Подбор: срок, игровых дней */
 export const PICKING_MIN_DAYS = 20;
@@ -267,15 +267,20 @@ export const PICKING_LATE_PRICE_SHARE = 0.9;
 
 // ─── Репутация ─────────────────────────────────────────────────────────────
 
-/** Шкала репутации 0–1000. Новый автосервис начинает со 100 */
+/**
+ * Шкала репутации 0–1000, новый автосервис начинает со 100. Репутация копится медленно:
+ * 1–2 очка за выполненный заказ, поэтому до 1000 — сотни заказов. Штрафы — в несколько заказов.
+ */
 export const REPUTATION_MAX = 1000;
 export const REPUTATION_START = 100;
-export const REP_SIMPLE_ON_TIME = 20;
-export const REP_COMPLEX_ON_TIME = 40;
-export const REP_EARLY_BONUS = 10;
-export const REP_LATE = -30;
-export const REP_CANCEL = -50;
-export const REP_FAILED = -80;
+export const REP_SIMPLE_ON_TIME = 1;
+export const REP_COMPLEX_ON_TIME = 2;
+/** Досрочно — +1, но за один заказ не больше REP_MAX_PER_ORDER */
+export const REP_EARLY_BONUS = 1;
+export const REP_MAX_PER_ORDER = 2;
+export const REP_LATE = -2;
+export const REP_CANCEL = -3;
+export const REP_FAILED = -5;
 export const REPUTATION_HISTORY = 20;
 
 const repShare = (reputation: number) => Math.min(1, Math.max(0, reputation / REPUTATION_MAX));
