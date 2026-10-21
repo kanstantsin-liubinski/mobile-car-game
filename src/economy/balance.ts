@@ -340,11 +340,118 @@ export const NO_CLEARANCE_SPEED = 0.5;
 
 export const PAINTER_MONTHLY_SALARY_CENTS = painterBaseSalaryCents(1);
 
-/** Управляющий филиалом: базовый оклад и прибавка за уровень (уточняется симулятором) */
-export const MANAGER_BASE_SALARY_CENTS = 26_000;
+/** Управляющий филиалом: базовый оклад и прибавка за уровень (подобраны симулятором) */
+export const MANAGER_BASE_SALARY_CENTS = 25_000;
 export const MANAGER_SALARY_STEP = 0.03;
 
 // ─── Детали при ремонте своих машин ────────────────────────────────────────
 
 /** Детали стоят 30% прироста рыночной стоимости от технического ремонта; платятся за фактически сделанную работу */
 export const OWN_REPAIR_PARTS_SHARE = 0.3;
+
+// ─── Сеть филиалов и управляющий ───────────────────────────────────────────
+
+/** Всего объектов бизнеса (основной гараж + филиалы) — по числу гаражей на карте */
+export const MAX_BUSINESS_OBJECTS = 4;
+/** Первый филиал (старый гараж с автоматизированным слотом) */
+export const BRANCH_FIRST_LEVEL = 12;
+/** Следующие филиалы и автоматизация дополнительных слотов */
+export const BRANCH_NETWORK_LEVEL = 25;
+/** Расширенная автоматизация: управляющий берёт и кузовной ремонт, слотов — сколько есть в гараже */
+export const EXTENDED_AUTOMATION_LEVEL = 90;
+/** Без расширенной автоматизации в филиале автоматизируется не больше этого числа слотов */
+export const BRANCH_MAX_AUTO_SLOTS = 4;
+
+/** Повторное открытие старого гаража как филиала, $ (ремонт помещения, вывеска, касса) */
+export const BRANCH_OPEN_COST: Record<string, number> = {
+  garage_1: 4_000,
+  garage_2: 40_000,
+  garage_3: 250_000,
+};
+/** Автоматизация ещё одного слота филиала, $: k-й слот стоит k × базу */
+export const BRANCH_SLOT_COST = 12_000;
+export const branchSlotCost = (slotNumber: number): number => BRANCH_SLOT_COST * slotNumber;
+/** Уровень управляющего, нужный для k автоматизированных слотов (1 слот — любой) */
+export const branchSlotManagerLevel = (slots: number): number => Math.min(20, Math.round(1 + 2.5 * (slots - 1)));
+
+/** Резерв по умолчанию: управляющий не тратит деньги, если после покупки деталей останется меньше */
+export const BRANCH_DEFAULT_RESERVE = 2_000;
+export const BRANCH_RESERVE_OPTIONS = [0, 1_000, 2_000, 5_000, 10_000, 25_000, 100_000];
+
+/** Какие заказы управляющий берёт сам */
+export const MANAGER_SIMPLE_TYPES: ServiceOrderType[] = ['maintenance', 'suspension'];
+export const MANAGER_EXTENDED_TYPES: ServiceOrderType[] = ['maintenance', 'suspension', 'body'];
+
+/**
+ * Реакция и ошибки управляющего по уровню (между строками — плавная интерполяция):
+ * уровень → задержка решения (игровых дней), шанс ошибки.
+ */
+export const MANAGER_LEVEL_TABLE: [level: number, delayDays: number, error: number][] = [
+  [1, 1, 0.15],
+  [5, 0.5, 0.12],
+  [10, 0.25, 0.09],
+  [15, 0.1, 0.05],
+  [20, 0.1, 0.02],
+];
+const interpolateManager = (level: number, column: 1 | 2): number => {
+  const t = MANAGER_LEVEL_TABLE;
+  if (level <= t[0][0]) return t[0][column];
+  for (let i = 1; i < t.length; i++) {
+    if (level === t[i][0]) return t[i][column];
+    if (level < t[i][0]) {
+      const [l0, l1] = [t[i - 1][0], t[i][0]];
+      return t[i - 1][column] + ((t[i][column] - t[i - 1][column]) * (level - l0)) / (l1 - l0);
+    }
+  }
+  return t[t.length - 1][column];
+};
+export const managerDelayDays = (level: number): number => interpolateManager(level, 1);
+export const managerErrorChance = (level: number): number => interpolateManager(level, 2);
+/** Практика управляющего за каждый выполненный заказ филиала */
+export const MANAGER_ORDER_PRACTICE = 20;
+
+export type ManagerStrategy = 'careful' | 'balanced' | 'aggressive';
+
+export interface ManagerStrategyDef {
+  id: ManagerStrategy;
+  name: string;
+  description: string;
+  /** Заказ берётся, если оценка работы укладывается в эту долю срока */
+  deadlineShare: number;
+  /** Минимальная ожидаемая прибыль (после деталей и оклада механика за дни работы) как доля оплаты */
+  minMarginShare: number;
+  /** Брать ли машины класса выше допуска механика (он работает вдвое медленнее) */
+  allowNoClearance: boolean;
+}
+
+export const MANAGER_STRATEGIES: ManagerStrategyDef[] = [
+  {
+    id: 'careful',
+    name: 'Осторожный',
+    description: 'Только заказы с запасом по сроку (60%) и прибылью от 15% оплаты, только машины по допуску механика.',
+    deadlineShare: 0.6,
+    minMarginShare: 0.15,
+    allowNoClearance: false,
+  },
+  {
+    id: 'balanced',
+    name: 'Сбалансированный',
+    description: 'Заказы без ожидаемого убытка, укладывающиеся в 85% срока. Машины выше допуска — если всё равно выгодно.',
+    deadlineShare: 0.85,
+    minMarginShare: 0,
+    allowNoClearance: true,
+  },
+  {
+    id: 'aggressive',
+    name: 'Агрессивный',
+    description: 'Максимальная загрузка: берёт и впритык к сроку, и с небольшим риском убытка (до −10% оплаты).',
+    deadlineShare: 1,
+    minMarginShare: -0.1,
+    allowNoClearance: true,
+  },
+];
+export const managerStrategy = (id: ManagerStrategy | undefined): ManagerStrategyDef =>
+  MANAGER_STRATEGIES.find((d) => d.id === id) ?? MANAGER_STRATEGIES[1];
+
+/** Скорость механика: 0,05 п. техники в секунду = 0,5 п. в игровой день (× навык × допуск) */
+export const MECHANIC_POINTS_PER_DAY = 0.5;

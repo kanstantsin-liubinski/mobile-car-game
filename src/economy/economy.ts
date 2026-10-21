@@ -21,6 +21,7 @@ import * as B from './balance.ts';
 import * as O from './orders.ts';
 import { randomSeed } from './hotOffers.ts';
 import { pluralDays } from './format.ts';
+import { rollBranchMonths, type BranchState } from './branchModel.ts';
 
 // ─── Константы ─────────────────────────────────────────────────────────────
 
@@ -211,6 +212,8 @@ export interface EconomyState {
   orders: O.OrdersState;
   /** Последние начисления опыта (новые первыми) */
   xpLog: XpEntry[];
+  /** Филиалы по id гаража (основной гараж сюда не входит) */
+  branches: Record<string, BranchState>;
 }
 
 export interface XpEntry {
@@ -303,6 +306,7 @@ export const createEconomy = (
   equipment: createEquipment(),
   orders: O.createOrdersState(seed, 0),
   xpLog: [],
+  branches: {},
 });
 
 // ─── Календарь ─────────────────────────────────────────────────────────────
@@ -458,8 +462,21 @@ export const syncWorkerSkill = (s: EconomyState, mechanicId: string, until: numb
 /** Есть механик, который уже набрал практику на новый уровень, но это ещё не зафиксировано */
 export const hasPendingWorkerLevelUp = (s: EconomyState, now: number): boolean =>
   Object.values(s.contracts).some(
-    (c) => c.skill.level < P.SKILL_MAX_LEVEL && workerPracticeAt(c, now) >= P.requiredPractice(c.skill.level),
+    (c) => c.profession !== 'manager' && c.skill.level < P.SKILL_MAX_LEVEL && workerPracticeAt(c, now) >= P.requiredPractice(c.skill.level),
   );
+
+/** Практика управляющего за событие (заказ): уровень растёт сразу, новый оклад — с этого момента */
+export const addWorkerPractice = (s: EconomyState, id: string, amount: number, now: number): EconomyState => {
+  const c = s.contracts[id];
+  if (!c || amount <= 0) return s;
+  const skill = P.addPractice(c.skill, amount, workerCurve(c));
+  let state: EconomyState = {
+    ...s,
+    contracts: { ...s.contracts, [id]: { ...c, skill, levelChangedAtMs: skill.level !== c.skill.level ? now : c.levelChangedAtMs } },
+  };
+  if (skill.level !== c.skill.level) state = changeSalary(state, id, salaryForLevel(skill.level, c.profession, c.clearance ?? 1), now);
+  return state;
+};
 
 export const syncAllWorkers = (s: EconomyState, until: number): EconomyState =>
   Object.keys(s.contracts).reduce((state, id) => syncWorkerSkill(state, id, until), s);
@@ -537,9 +554,9 @@ export const getMechanicActivity = (s: EconomyState, c: Contract, now: number): 
 
 // ─── Денежные операции ─────────────────────────────────────────────────────
 
-const isProcessed = (s: EconomyState, opId?: string) => !!opId && s.processedOps.includes(opId);
+export const isProcessed = (s: EconomyState, opId?: string) => !!opId && s.processedOps.includes(opId);
 
-const withProcessed = (s: EconomyState, opId?: string): EconomyState =>
+export const withProcessed = (s: EconomyState, opId?: string): EconomyState =>
   opId ? { ...s, processedOps: [...s.processedOps, opId].slice(-PROCESSED_OPS_LIMIT) } : s;
 
 export interface OpResult {
@@ -580,7 +597,7 @@ export const awardSkill = (s: EconomyState, key: SkillKey, amount: number): Econ
 const awardManagement = (s: EconomyState, amount: number): EconomyState => awardSkill(s, 'management', amount);
 
 /** Списание свободных денег. Кредит здесь не используется — только реальный баланс. */
-const spend = (s: EconomyState, cents: number, apply: (l: MonthLedger) => MonthLedger, opId?: string): OpResult => {
+export const spend = (s: EconomyState, cents: number, apply: (l: MonthLedger) => MonthLedger, opId?: string): OpResult => {
   if (isProcessed(s, opId)) return { state: s, ok: true };
   if (cents < 0 || cents > s.balanceCents || s.bankruptcy) return { state: s, ok: false };
   const state = withProcessed({ ...s, balanceCents: s.balanceCents - cents, ledger: apply(s.ledger) }, opId);
@@ -805,13 +822,17 @@ export const buyManagementCourse = (s: EconomyState, now: number): OpResult => {
   return { ok: true, state: { ...paid.state, player: { ...paid.state.player, management } } };
 };
 
+/** Кривая практики сотрудника: у управляющего своя (практика за заказы), у механика и маляра — общая */
+export const workerCurve = (c: Pick<Contract, 'profession'>): P.PracticeCurve =>
+  c.profession === 'manager' ? P.requiredManagerPractice : P.requiredPractice;
+
 export const workerCourseOffer = (s: EconomyState, mechanicId: string, now: number): CourseOffer | null => {
   const synced = syncWorkerSkill(s, mechanicId, now);
   const c = synced.contracts[mechanicId];
   if (!c) return null;
   const costCents = toCents(P.workerCourseCost(c.monthlyCents, c.skill.level));
   const skill = { ...c.skill, practice: workerPracticeAt(c, now) };
-  return { costCents, preview: P.previewCourse(skill, now), affordable: canAfford(s, costCents) };
+  return { costCents, preview: P.previewCourse(skill, now, workerCurve(c)), affordable: canAfford(s, costCents) };
 };
 
 /** Курс механика: при переходе уровня новая скорость и оклад действуют с этого момента */
@@ -820,7 +841,7 @@ export const buyWorkerCourse = (s: EconomyState, mechanicId: string, now: number
   if (!offer || !offer.preview.available) return { state: s, ok: false };
   const synced = syncWorkerSkill(s, mechanicId, now);
   const c = synced.contracts[mechanicId];
-  const skill = P.applyCourse(c.skill, now);
+  const skill = P.applyCourse(c.skill, now, workerCurve(c));
   if (!skill) return { state: s, ok: false };
   const paid = spendOtherExpense(synced, offer.costCents);
   if (!paid.ok) return { state: s, ok: false };
@@ -1095,6 +1116,13 @@ export const closeMonth = (
     managementPractice,
   };
 
+  // Филиалы: оклады их сотрудников за месяц, загрузка слотов, история отчётов
+  const branchSalaries: Record<string, number> = {};
+  for (const c of Object.values(s.contracts)) {
+    if (c.branchId) branchSalaries[c.branchId] = (branchSalaries[c.branchId] ?? 0) + accruedSalaryCents(c, end);
+  }
+  const branches = rollBranchMonths(s.branches ?? {}, branchSalaries, monthStartMs(s), end, preview.month + 1);
+
   // Новый период: начисления начинаются заново с конца месяца по текущей ставке
   const contracts: Record<string, Contract> = {};
   for (const c of Object.values(state.contracts)) {
@@ -1109,6 +1137,7 @@ export const closeMonth = (
   state = {
     ...state,
     contracts,
+    branches,
     completedMonths: s.completedMonths + 1,
     monthStartBalanceCents: state.balanceCents,
     ledger: emptyLedger(),
@@ -1158,6 +1187,7 @@ export const buildAdvice = (s: EconomyState, input: AdviceInput): Advice[] => {
   }
 
   for (const c of Object.values(s.contracts)) {
+    if (c.profession === 'manager') continue;
     const activity = getMechanicActivity(s, c, now);
     if (activity.staffMs < ADVICE_MIN_OBSERVATION_MS || activity.loadPct === null) continue;
     if (activity.loadPct < 0.5) {
@@ -1180,7 +1210,10 @@ export const buildAdvice = (s: EconomyState, input: AdviceInput): Advice[] => {
     });
   }
 
-  if (input.carsAwaitingRepair > 0 && Object.values(s.contracts).some((c) => c.busySinceMs === null)) {
+  if (
+    input.carsAwaitingRepair > 0 &&
+    Object.values(s.contracts).some((c) => !c.branchId && c.profession !== 'manager' && c.busySinceMs === null)
+  ) {
     advice.push({
       id: 'idle-capacity',
       level: 'info',
@@ -1489,6 +1522,12 @@ export const deserializeEconomy = (raw: string): EconomySave | null => {
         ? { owned: Array.from(new Set<B.EquipmentId>(['basic_tools', ...loaded.equipment.owned])), boothSlot: loaded.equipment.boothSlot ?? null }
         : createEquipment(),
       xpLog: loaded.xpLog ?? [],
+      branches: Object.fromEntries(
+        Object.entries(loaded.branches ?? {}).map(([id, b]) => [
+          id,
+          { ...b, jobs: (b.jobs ?? []).map((j) => ({ ...j, busyFromMs: j.busyFromMs ?? j.startAtMs })) },
+        ]),
+      ),
       orders: O.restoreOrdersState(loaded.orders, randomSeed(), Math.max(0, save.gameTimeMs || 0)),
       playerMigrated: loaded.player ? (loaded.playerMigrated ?? true) : false,
       history: (loaded.history ?? []).map((m) => ({ ...m, monthXp: m.monthXp ?? 0, managementPractice: m.managementPractice ?? 0, salesXp: m.salesXp ?? 0, repairXp: m.repairXp ?? 0 })),

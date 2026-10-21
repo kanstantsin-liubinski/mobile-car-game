@@ -16,7 +16,9 @@ import * as P from '../src/economy/progression.ts';
 import { carValue, paintValueGain } from '../src/economy/carCondition.ts';
 import { generateRandomListing } from '../src/utils/marketGenerator.ts';
 import { mulberry32 } from '../src/economy/hotOffers.ts';
-import { DAY_MS } from '../src/economy/time.ts';
+import * as E from '../src/economy/economy.ts';
+import * as Br from '../src/economy/branches.ts';
+import { DAY_MS, MONTH_MS } from '../src/economy/time.ts';
 import { TIER_NAMES, TIER_UNLOCK_LEVELS } from '../src/data/carModels.ts';
 import { GARAGES } from '../src/data/cityBuildings.ts';
 
@@ -409,10 +411,106 @@ careerRow('Новый конфиг, только механики', { ...NEW, ac
 log('');
 log(`Новый конфиг: кривая XP ${P.XP_CURVE_BASE} + ${P.XP_CURVE_LINEAR}n + ${P.XP_CURVE_QUADRATIC}n², классы открываются на ур. 8/20/35/55/75, гаражи — на ур. 5/20/50 за ${GARAGES.slice(1).map((g) => usd(g.price)).join(' / ')}.`);
 
+// ─── Филиал с управляющим ──────────────────────────────────────────────────
+
+interface BranchRun {
+  rep: number;
+  level: number;
+  managerLevel: number;
+  strategy: B.ManagerStrategy;
+  clearance: number;
+  slots?: number;
+  months?: number;
+}
+
+/**
+ * Филиал в Гараже 1 на реальном модуле branches.ts: игровые тики каждые 0,25 дня, зарплатный день
+ * через closeMonth. Репутация держится на заданном уровне (её рост от филиала не учитывается).
+ */
+const simulateBranch = (r: BranchRun) => {
+  const months = r.months ?? 12;
+  const garage = r.slots && r.slots > 1 ? { id: 'garage_3', name: 'Гараж 3', slots: 4, rank: 2 } : { id: 'garage_1', name: 'Гараж 1', slots: 1, rank: 0 };
+  let s = E.createEconomy(E.toCents(10_000_000), true, true, 1000 + r.rep + r.managerLevel * 7 + r.clearance);
+  s = { ...s, player: { ...s.player, xp: { level: Math.max(r.level, r.slots && r.slots > 1 ? 25 : 12), xp: 0, totalXp: 0 } } };
+  s = Br.openBranch(s, garage, 3, 0).state;
+  s = Br.hireBranchStaff(s, garage.id, 'manager', 0).state;
+  const b0 = s.branches[garage.id];
+  const managerId = b0.managerId!;
+  s = { ...s, contracts: { ...s.contracts, [managerId]: { ...s.contracts[managerId], skill: { ...s.contracts[managerId].skill, level: r.managerLevel } } } };
+  s = E.changeSalary(s, managerId, E.salaryForLevel(r.managerLevel, 'manager', 1), 0);
+  for (let slot = 0; slot < (r.slots ?? 1); slot++) {
+    if (slot > 0) s = { ...s, branches: { ...s.branches, [garage.id]: { ...s.branches[garage.id], slots: [...s.branches[garage.id].slots, { mechanicId: null }] } } };
+    s = Br.hireBranchStaff(s, garage.id, 'mechanic', 0, slot).state;
+    const mid = s.branches[garage.id].slots[slot].mechanicId!;
+    s = { ...s, contracts: { ...s.contracts, [mid]: { ...s.contracts[mid], clearance: r.clearance } } };
+    s = E.changeSalary(s, mid, E.salaryForLevel(1, 'mechanic', r.clearance), 0);
+  }
+  s = Br.setBranchStrategy(Br.setBranchReserve(s, garage.id, 0), garage.id, r.strategy);
+  s = Br.setBranchAutomation(s, garage.id, true, 0);
+  const tiers = [1, 2, 3, 4, 5, 6].filter((t) => r.level >= LADDER_TIERS[t as keyof typeof LADDER_TIERS]);
+  const bctx: Br.BranchContext = { unlockedTiers: tiers, playerLevel: r.level, sampleCar };
+  const start = s.balanceCents;
+  for (let m = 0; m < months; m++) {
+    s = { ...s, orders: { ...s.orders, reputation: r.rep } };
+    for (let t = m * MONTH_MS; t < (m + 1) * MONTH_MS; t += DAY_MS / 4) s = Br.advanceBranches(s, t, bctx, { [garage.id]: garage.name });
+    s = E.closeMonth(s, (m + 1) * MONTH_MS, 0).state;
+  }
+  const hist = s.branches[garage.id].history.map(Br.reportOf);
+  const sum = (f: (x: Br.BranchReport) => number) => hist.reduce((a, x) => a + f(x), 0);
+  return {
+    netPerMonth: (s.balanceCents - start) / 100 / months,
+    load: sum((x) => x.busyMs) / Math.max(1, sum((x) => x.slotMs)),
+    ordersPerMonth: sum((x) => x.completed) / months,
+    failed: sum((x) => x.failed + x.late) / months,
+    errors: sum((x) => x.managerErrors) / months,
+    expected: sum((x) => x.expectedProfitCents) / 100 / months,
+    actual: sum((x) => x.actualProfitCents) / 100 / months,
+    managerLevelEnd: s.contracts[managerId].skill.level,
+  };
+};
+
+log('');
+log('## 8. Автоматизированный филиал (реальный модуль branches.ts)');
+log('');
+log(`Открытие Гаража 1 как филиала: ${usd(B.BRANCH_OPEN_COST.garage_1)}. Оклады: управляющий ${usd(B.MANAGER_BASE_SALARY_CENTS / 100)} × (1 + 3% за уровень), механик по допуску. Классы открыты по лестнице ТЗ. Резерв 0.`);
+log('Чистыми — изменение баланса за месяц после окладов. «Ожидание / факт» — оценка управляющего при принятии и фактическая прибыль по заказам (до оклада управляющего).');
+log('');
+log('| Репутация | Ур. игрока | Управляющий (ур.) | Стратегия | Допуск механика | Загрузка | Заказов/мес | Поздно или провал/мес | Ошибок/мес | Ожидание / факт, $/мес | Чистыми/мес | Окупаемость открытия |');
+log('|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|');
+const STRAT_NAMES: Record<string, string> = { careful: 'Осторожный', balanced: 'Сбалансированный', aggressive: 'Агрессивный' };
+for (const r of [
+  { rep: 150, level: 12, managerLevel: 1, strategy: 'careful', clearance: 1 },
+  { rep: 150, level: 12, managerLevel: 1, strategy: 'balanced', clearance: 1 },
+  { rep: 150, level: 12, managerLevel: 1, strategy: 'aggressive', clearance: 1 },
+  { rep: 150, level: 12, managerLevel: 1, strategy: 'balanced', clearance: 2 },
+  { rep: 300, level: 15, managerLevel: 5, strategy: 'balanced', clearance: 2 },
+  { rep: 500, level: 20, managerLevel: 10, strategy: 'balanced', clearance: 2 },
+  { rep: 800, level: 35, managerLevel: 15, strategy: 'balanced', clearance: 3 },
+  { rep: 1000, level: 50, managerLevel: 20, strategy: 'aggressive', clearance: 4 },
+] as BranchRun[]) {
+  const x = simulateBranch(r);
+  const cost = B.BRANCH_OPEN_COST.garage_1;
+  log(
+    `| ${r.rep} | ${r.level} | ${r.managerLevel} → ${x.managerLevelEnd} | ${STRAT_NAMES[r.strategy]} | ${TIER_NAMES[r.clearance]} | ${pct(x.load)} | ${x.ordersPerMonth.toFixed(1)} | ${x.failed.toFixed(2)} | ${x.errors.toFixed(1)} | ${usd(x.expected)} / ${usd(x.actual)} | ${usd(x.netPerMonth)} | ${x.netPerMonth > 0 ? `${Math.ceil(cost / x.netPerMonth)} мес.` : 'не окупается'} |`,
+  );
+}
+log('');
+log('Филиал на 4 слота (Гараж 3, уровень 25+, один управляющий на все слоты):');
+log('');
+log('| Репутация | Ур. игрока | Управляющий (ур.) | Допуск механиков | Загрузка | Заказов/мес | Чистыми/мес | Чистыми на слот |');
+log('|---:|---:|---:|---|---:|---:|---:|---:|');
+for (const r of [
+  { rep: 500, level: 30, managerLevel: 10, strategy: 'balanced', clearance: 3, slots: 4 },
+  { rep: 1000, level: 60, managerLevel: 20, strategy: 'balanced', clearance: 4, slots: 4 },
+] as BranchRun[]) {
+  const x = simulateBranch(r);
+  log(`| ${r.rep} | ${r.level} | ${r.managerLevel} → ${x.managerLevelEnd} | ${TIER_NAMES[r.clearance]} | ${pct(x.load)} | ${x.ordersPerMonth.toFixed(1)} | ${usd(x.netPerMonth)} | ${usd(x.netPerMonth / 4)} |`);
+}
+
 // ─── 5. Риск ───────────────────────────────────────────────────────────────
 
 log('');
-log('## 7. Риск случайной покупки (без выбора)');
+log('## 9. Риск случайной покупки (без выбора)');
 log('');
 log('| Класс | Убыточных | Худший случай | Средняя прибыль сделки |');
 log('|---|---:|---:|---:|');

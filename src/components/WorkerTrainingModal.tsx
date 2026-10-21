@@ -10,10 +10,10 @@ import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { SkillCard } from '@components/SkillCard';
 import { useToast } from '@components/toast/ToastContext';
 import { getMechanicAvatar } from '@img/gameIcons';
-import { salaryForLevel, workerPracticeAt } from '../economy/economy';
+import { DAY_MS, salaryForLevel, workerCurve, workerPracticeAt } from '../economy/economy';
 import { SKILL_MAX_LEVEL, skillMultiplier } from '../economy/progression';
-import { PAINTER_SPEED_PER_SEC } from '../economy/balance';
-import { formatMoney } from '../economy/format';
+import { MANAGER_ORDER_PRACTICE, PAINTER_SPEED_PER_SEC, managerDelayDays, managerErrorChance } from '../economy/balance';
+import { formatGameSpan, formatMoney, formatPercent } from '../economy/format';
 import type { Mechanic } from '@/types';
 
 /** Базовая скорость ремонта механика, % состояния в секунду (как в useGarage) */
@@ -30,7 +30,11 @@ interface WorkerTrainingModalProps {
   onClose: () => void;
 }
 
-/** Навык нанятого механика: практика от реальных ремонтов, скорость, оклад и курс обучения */
+/** Реакция и ошибки управляющего на уровне */
+const managerText = (level: number) =>
+  `реакция ${formatGameSpan(managerDelayDays(level) * DAY_MS)}, ошибки ${formatPercent(managerErrorChance(level))}`;
+
+/** Навык нанятого сотрудника: практика от реальной работы, скорость (у управляющего — реакция), оклад и курс */
 export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalProps) => {
   const { state, workerCourseOffer, buyWorkerCourse } = useEconomy();
   const { gameTimeMs } = useGameClock();
@@ -42,6 +46,7 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
   const contract = mechanic ? state.contracts[mechanic.id] : undefined;
   // Модалка общая для механиков и маляров: навык, курсы и оклад — по профессии контракта
   const painter = contract?.profession === 'painter';
+  const manager = contract?.profession === 'manager';
   const profession = contract?.profession ?? 'mechanic';
   const offer = mechanic && contract ? workerCourseOffer(mechanic.id) : null;
 
@@ -66,7 +71,7 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
     <InnerOverlay visible={!!mechanic && !!contract}>
       <View style={garageStyles.modalOverlay}>
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
-          <SheetHeader title={painter ? 'Навык маляра' : 'Навык механика'} onClose={onClose} flush />
+          <SheetHeader title={manager ? 'Навык управляющего' : painter ? 'Навык маляра' : 'Навык механика'} onClose={onClose} flush />
           {mechanic && contract && (
             <SheetScroll>
               <SkillCard
@@ -74,19 +79,24 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
                 icon={getMechanicAvatar(mechanic.id)}
                 skill={contract.skill}
                 practice={workerPracticeAt(contract, gameTimeMs)}
-                bonusLabel={painter ? 'Скорость покраски' : 'Скорость ремонта'}
+                bonusLabel={manager ? 'Реакция' : painter ? 'Скорость покраски' : 'Скорость ремонта'}
+                bonusValue={manager ? (l) => formatGameSpan(managerDelayDays(l) * DAY_MS) : undefined}
+                curve={workerCurve(contract)}
                 offer={offer}
                 onBuyCourse={handleBuy}
                 extraRows={[
-                  { label: painter ? 'Красит сейчас' : 'Ремонтирует сейчас', value: speedText(level, painter) },
-                  ...(isMax ? [] : [{ label: 'После повышения', value: speedText(level + 1, painter) }]),
+                  manager
+                    ? { label: 'Сейчас', value: managerText(level) }
+                    : { label: painter ? 'Красит сейчас' : 'Ремонтирует сейчас', value: speedText(level, painter) },
+                  ...(isMax ? [] : [{ label: 'После повышения', value: manager ? managerText(level + 1) : speedText(level + 1, painter) }]),
                   { label: 'Оклад сейчас', value: `${formatMoney(contract.monthlyCents)}/мес` },
                   ...(isMax ? [] : [{ label: 'Оклад после повышения', value: `${formatMoney(salaryForLevel(level + 1, profession))}/мес` }]),
                 ]}
               />
               <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8 }}>
-                Практика копится только во время {painter ? 'покраски' : 'ремонта'}: 20 единиц за игровой день работы. Оклад — около
-                40% того, что сотрудник приносит при полной загрузке, и растёт вместе со скоростью.
+                {manager
+                  ? `Практика: +${MANAGER_ORDER_PRACTICE} за каждый выполненный заказ филиала. Курс даёт до половины порога, раз в 3 месяца. Оклад +3% за уровень.`
+                  : `Практика копится только во время ${painter ? 'покраски' : 'ремонта'}: 20 единиц за игровой день работы. Оклад — около 37,5% того, что сотрудник приносит при полной загрузке на машинах своего допуска, и растёт вместе со скоростью.`}
               </Text>
             </SheetScroll>
           )}

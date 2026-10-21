@@ -14,15 +14,18 @@ import { getMechanicAvatar } from '@img/gameIcons';
 import { TIER_NAMES } from '../../data/carModels';
 import { FinanceRow, FinanceSection, Notice, financeColors, moneyColor, ui } from './FinanceUI';
 import * as E from '../../economy/economy';
+import * as Br from '../../economy/branches';
+import { getGarageById } from '../../data/cityBuildings';
 import { formatGameDays, formatGameSpan, formatMoney, formatPercent } from '../../economy/format';
 
-type Tab = 'overview' | 'pnl' | 'assets' | 'mechanics' | 'advice' | 'loan';
+type Tab = 'overview' | 'pnl' | 'assets' | 'mechanics' | 'branches' | 'advice' | 'loan';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Обзор' },
   { id: 'pnl', label: 'Доходы и расходы' },
   { id: 'assets', label: 'Активы' },
   { id: 'mechanics', label: 'Персонал' },
+  { id: 'branches', label: 'Филиалы' },
   { id: 'advice', label: 'Советы' },
   { id: 'loan', label: 'Кредит' },
 ];
@@ -67,6 +70,7 @@ export const FinancePanel = ({ visible, onClose }: FinancePanelProps) => {
               {tab === 'pnl' && <PnlTab />}
               {tab === 'assets' && <AssetsTab />}
               {tab === 'mechanics' && <MechanicsTab />}
+              {tab === 'branches' && <BranchesTab />}
               {tab === 'advice' && <AdviceTab />}
               {tab === 'loan' && <LoanTab />}
             </ScrollView>
@@ -254,6 +258,59 @@ const MechanicsTab = () => {
             <FinanceRow label="Занят" value={formatGameSpan(activity.busyMs)} />
             <FinanceRow label="Простой" value={formatGameSpan(activity.idleMs)} />
             <Text style={styles.hint}>Загрузка — доля времени в ремонте от времени в штате в этом месяце.</Text>
+          </View>
+        );
+      })}
+    </>
+  );
+};
+
+// ─── Филиалы ──────────────────────────────────────────────────────────
+
+const BranchReportRows = ({ r }: { r: Br.BranchReport }) => (
+  <>
+    <FinanceRow label="Оплата заказов" cents={r.revenueCents} />
+    <FinanceRow label="Детали и материалы" cents={-r.partsCents} />
+    <FinanceRow label="Оклады" cents={-r.salaryCents} />
+    <FinanceRow label="Чистыми" cents={r.netCents} signed bold />
+    <FinanceRow label="Загрузка слотов / простой" value={`${formatPercent(r.loadPct)} · ${formatGameSpan(r.idleMs)}`} muted />
+    <FinanceRow label="Выполнено / провалено" value={`${r.completed} / ${r.failed + r.cancelled}`} muted />
+    <FinanceRow label="Ошибок управляющего" value={String(r.managerErrors)} muted />
+    <FinanceRow label="Ожидалось → факт" value={`${formatMoney(r.expectedProfitCents)} → ${formatMoney(r.actualProfitCents)}`} muted />
+  </>
+);
+
+/** Отчёты филиалов: текущий месяц и закрытые месяцы. Отдельных кредитов у филиалов нет — деньги общие */
+const BranchesTab = () => {
+  const { state } = useEconomy();
+  const { gameTimeMs } = useGameClock();
+  const branches = Br.branchList(state);
+  if (branches.length === 0) {
+    return (
+      <Text style={styles.empty}>
+        Филиалов пока нет. С 12 уровня старый гараж можно снова открыть как филиал — нажмите на него в городе.
+      </Text>
+    );
+  }
+  return (
+    <>
+      {branches.map((b) => {
+        const name = getGarageById(b.garageId)?.name ?? b.garageId;
+        const current = Br.currentBranchReport(state, b, gameTimeMs);
+        return (
+          <View key={b.garageId}>
+            <FinanceSection title={`${name} · этот месяц`}>
+              <BranchReportRows r={current} />
+              <Text style={styles.hint}>
+                {b.automation ? 'Автоматизация включена' : 'Автоматизация выключена'} · слотов {b.slots.length} · всего выполнено{' '}
+                {b.totals.completed}, выручка {formatMoney(b.totals.revenueCents)}
+              </Text>
+            </FinanceSection>
+            {[...b.history].reverse().slice(0, 3).map((m) => (
+              <FinanceSection key={m.month} title={`${name} · месяц ${m.month}`}>
+                <BranchReportRows r={Br.reportOf(m)} />
+              </FinanceSection>
+            ))}
           </View>
         );
       })}

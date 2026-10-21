@@ -121,6 +121,9 @@ export const requiredPractice: PracticeCurve = (level) => 1000 + 250 * (level - 
 /** Навык «Менеджмент» */
 export const requiredManagementPractice: PracticeCurve = (level) => 350 + 75 * (level - 1);
 
+/** Профессия «Управляющий» (сотрудник филиала): +20 практики за выполненный заказ */
+export const requiredManagerPractice: PracticeCurve = (level) => 150 + 40 * (level - 1);
+
 /** Навык «Подборщик» */
 export const requiredPickerPractice: PracticeCurve = (level) => 200 + 45 * (level - 1);
 

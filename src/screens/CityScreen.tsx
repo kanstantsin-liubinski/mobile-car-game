@@ -21,6 +21,8 @@ import { colors } from '@styles/colors';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useEconomy } from '@hooks/EconomyContext';
+import { BranchModal } from '@components/branch/BranchModal';
+import { branchUnlockLevel } from '../economy/branches';
 import { useExperienceContext } from '@hooks/ExperienceContext';
 import { useMarketContext } from '@hooks/MarketContext';
 import { RedDot } from '@components/RedDot';
@@ -71,7 +73,7 @@ const getPanBounds = (viewWidth: number, viewHeight: number) => {
 
 /**
  * active    — текущий гараж игрока
- * inactive  — гараж слабее текущего, с ним нельзя взаимодействовать
+ * inactive  — гараж слабее текущего: его можно открыть как филиал (или уже открыт филиал)
  * available — можно купить (переезд)
  * locked    — не хватает уровня
  */
@@ -134,7 +136,8 @@ interface CityScreenProps {
 
 export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: CityScreenProps) => {
   const { garageId, buyGarage } = useGarageContext();
-  const { balance, addOtherIncome, buyGarage: payForGarage } = useEconomy();
+  const { balance, addOtherIncome, buyGarage: payForGarage, state: economyState } = useEconomy();
+  const [branchGarageId, setBranchGarageId] = useState<string | null>(null);
   const { level } = useExperienceContext();
   const { marketHasAlert } = useMarketContext();
   const nativeInsets = useSafeAreaInsets();
@@ -274,7 +277,9 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
     const state = getGarageState(building);
     if (state === 'active') {
       onOpenGarage(building.id);
-    } else if (state !== 'inactive') {
+    } else if (state === 'inactive') {
+      setBranchGarageId(building.id);
+    } else {
       setGarageToBuy(building);
     }
   };
@@ -294,8 +299,12 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
     switch (getGarageState(building)) {
       case 'active':
         return `Ваш гараж · ${building.slots} ${pluralizePlaces(building.slots)}`;
-      case 'inactive':
-        return 'Неактивен';
+      case 'inactive': {
+        const branch = economyState.branches?.[building.id];
+        if (!branch) return level >= branchUnlockLevel(economyState) ? '🏗️ Можно открыть филиал' : 'Неактивен';
+        const working = branch.jobs.filter((j) => !j.finished).length;
+        return `${branch.automation ? '🟢' : '⚪'} Филиал · в работе ${working}/${branch.slots.length}`;
+      }
       case 'locked':
         return `🔒 Ур. ${building.requiredLevel}`;
       case 'available':
@@ -320,13 +329,14 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
 
           {CITY_BUILDINGS.map((building) => {
             const garageState = building.type === 'garage' ? getGarageState(building) : null;
-            const dimmed = garageState !== null && garageState !== 'active';
+            const isBranch = building.type === 'garage' && !!economyState.branches?.[building.id];
+            const dimmed = garageState !== null && garageState !== 'active' && !isBranch;
             const { area } = building;
 
             return (
               <Pressable
                 key={building.id}
-                disabled={garageState === 'inactive'}
+                disabled={false}
                 onPress={() => handleBuildingPress(building)}
                 style={({ pressed }) => [
                   styles.building,
@@ -409,7 +419,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
                 )}
                 {buyLevelOk && buyMoneyOk && activeGarage && (
                   <Text style={styles.noteText}>
-                    Машины и механики переедут сюда, а {activeGarage.name} станет неактивным
+                    Машины и механики переедут сюда, а {activeGarage.name} станет неактивным — позже его можно открыть как филиал
                   </Text>
                 )}
 
@@ -436,6 +446,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
             )}
           </View>
       </SheetModal>
+      <BranchModal garageId={branchGarageId} onClose={() => setBranchGarageId(null)} />
     </View>
   );
 };

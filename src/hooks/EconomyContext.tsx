@@ -3,6 +3,8 @@ import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as E from '../economy/economy';
 import * as O from '../economy/orders';
+import * as Br from '../economy/branches';
+import { GARAGES } from '../data/cityBuildings';
 import type { EquipmentId } from '../economy/balance';
 import { calculateMaxCondition } from '../utils/priceCalculator';
 import { generateRandomListing, type Rng } from '../utils/marketGenerator';
@@ -29,6 +31,12 @@ const sampleCar = (tier: number, rng: Rng): O.SampleCar => {
     maxCondition: car.maxCondition ?? calculateMaxCondition(car.year, car.mileage),
     paintCondition: car.paintCondition ?? car.condition,
   };
+};
+
+const GARAGE_NAMES: Record<string, string> = Object.fromEntries(GARAGES.map((g) => [g.id, g.name]));
+const garageInfo = (garageId: string): Br.GarageInfo | null => {
+  const rank = GARAGES.findIndex((g) => g.id === garageId);
+  return rank < 0 ? null : { id: garageId, name: GARAGES[rank].name, slots: GARAGES[rank].slots, rank };
 };
 
 const ordersCtx = (s: E.EconomyState) => ({
@@ -116,6 +124,18 @@ interface EconomyContextType {
   deliverServiceOrder: (orderId: string) => boolean;
   deliverPickingOrder: (orderId: string, carId: string, candidate: O.PickingCandidate) => boolean;
   unlockedTiers: number[];
+  // ─── Филиалы ───
+  /** Открыть старый гараж как филиал; mainGarageId — текущий основной гараж */
+  openBranch: (garageId: string, mainGarageId: string) => boolean;
+  hireBranchStaff: (garageId: string, role: 'mechanic' | 'manager', slot?: number) => boolean;
+  fireBranchStaff: (garageId: string, staffId: string) => boolean;
+  setBranchAutomation: (garageId: string, on: boolean) => void;
+  setBranchStrategy: (garageId: string, strategy: Br.ManagerStrategy) => void;
+  setBranchReserve: (garageId: string, reserveCents: number) => void;
+  addBranchSlot: (garageId: string) => boolean;
+  acceptBranchOrder: (garageId: string, orderId: string, slot: number) => boolean;
+  deliverBranchJob: (garageId: string, slot: number) => boolean;
+  cancelBranchJob: (garageId: string, slot: number) => boolean;
 }
 
 interface GameClockContextType {
@@ -250,6 +270,11 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Заказы: ежедневная проверка доски, истечение предложений, окончательные просрочки
       if (ordersDue(s, next)) {
         commit(E.advanceOrders(s, next, ordersCtx(s)));
+        return;
+      }
+      // Филиалы: доска, окончание работ, решения управляющего
+      if (Br.branchesDue(s, next, s.player.xp.level)) {
+        commit(Br.advanceBranches(s, next, ordersCtx(s), GARAGE_NAMES));
         return;
       }
       // Зарплатный день наступил — фиксируем сразу, чтобы перезагрузка вернула в него же
@@ -442,6 +467,54 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [commit],
   );
   const upgradeClearance = useCallback((workerId: string) => run((s, now) => E.upgradeClearance(s, workerId, now)), [run]);
+
+  // ─── Филиалы ──────────────────────────────────────────────────────
+  const openBranch = useCallback(
+    (garageId: string, mainGarageId: string) => {
+      const garage = garageInfo(garageId);
+      const main = garageInfo(mainGarageId);
+      if (!garage || !main) return false;
+      return run((s, now) => Br.openBranch(s, garage, main.rank, now));
+    },
+    [run],
+  );
+  const hireBranchStaff = useCallback(
+    (garageId: string, role: 'mechanic' | 'manager', slot = 0) => run((s, now) => Br.hireBranchStaff(s, garageId, role, now, slot)),
+    [run],
+  );
+  const fireBranchStaff = useCallback(
+    (garageId: string, staffId: string) => run((s, now) => Br.fireBranchStaff(s, garageId, staffId, now)),
+    [run],
+  );
+  const setBranchAutomation = useCallback(
+    (garageId: string, on: boolean) => commit(Br.setBranchAutomation(stateRef.current, garageId, on, timeRef.current)),
+    [commit],
+  );
+  const setBranchStrategy = useCallback(
+    (garageId: string, strategy: Br.ManagerStrategy) => commit(Br.setBranchStrategy(stateRef.current, garageId, strategy)),
+    [commit],
+  );
+  const setBranchReserve = useCallback(
+    (garageId: string, reserveCents: number) => commit(Br.setBranchReserve(stateRef.current, garageId, reserveCents)),
+    [commit],
+  );
+  const addBranchSlot = useCallback(
+    (garageId: string) => run((s, now) => Br.addBranchSlot(s, garageId, garageInfo(garageId)?.slots ?? 1, now)),
+    [run],
+  );
+  const acceptBranchOrder = useCallback(
+    (garageId: string, orderId: string, slot: number) =>
+      run((s, now) => Br.acceptBranchOrder(s, garageId, orderId, slot, now, s.player.xp.level)),
+    [run],
+  );
+  const deliverBranchJob = useCallback(
+    (garageId: string, slot: number) => run((s, now) => Br.deliverBranchJob(s, garageId, slot, now)),
+    [run],
+  );
+  const cancelBranchJob = useCallback(
+    (garageId: string, slot: number) => run((s, now) => Br.cancelBranchJob(s, garageId, slot, now, GARAGE_NAMES[garageId] ?? garageId)),
+    [run],
+  );
   const recordPaintTap = useCallback(
     () => commit(E.recordPaintTap(stateRef.current), { deferSave: true }),
     [commit],
@@ -540,6 +613,16 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       deliverServiceOrder,
       deliverPickingOrder,
       unlockedTiers: unlockedTiersFor(state.player.xp.level),
+      openBranch,
+      hireBranchStaff,
+      fireBranchStaff,
+      setBranchAutomation,
+      setBranchStrategy,
+      setBranchReserve,
+      addBranchSlot,
+      acceptBranchOrder,
+      deliverBranchJob,
+      cancelBranchJob,
     }),
     [
       isLoaded,
@@ -589,6 +672,16 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       markOrderWorkDone,
       deliverServiceOrder,
       deliverPickingOrder,
+      openBranch,
+      hireBranchStaff,
+      fireBranchStaff,
+      setBranchAutomation,
+      setBranchStrategy,
+      setBranchReserve,
+      addBranchSlot,
+      acceptBranchOrder,
+      deliverBranchJob,
+      cancelBranchJob,
     ],
   );
 

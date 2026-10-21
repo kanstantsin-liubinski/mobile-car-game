@@ -1186,7 +1186,10 @@ export const useGarage = () => {
     setPainters((prev) =>
       prev.map((p) => (employed.has(p.id) === p.hired ? p : { ...p, hired: employed.has(p.id), skillLevel: 1 })),
     );
-    for (const id of employed) economy.setMechanicBusy(id, busy.has(id), now);
+    // Сотрудники филиалов работают по своим заказам — их занятость ведёт модуль филиалов
+    for (const id of employed) {
+      if (!economy.state.contracts[id]?.branchId) economy.setMechanicBusy(id, busy.has(id), now);
+    }
 
     // Контракты до системы навыков: уровень берётся из прежней прокачки механика (не выше 20)
     for (const m of mechanics) {

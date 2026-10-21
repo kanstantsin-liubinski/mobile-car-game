@@ -149,6 +149,14 @@ export interface OrdersContext {
   owned: B.EquipmentId[];
   /** Обычная машина класса из генератора авторынка (использует только переданный rng) */
   sampleCar: (tier: number, rng: Rng) => SampleCar;
+  /** Только эти типы ремонтных заказов (филиал: простые работы). По умолчанию — все */
+  serviceTypes?: B.ServiceOrderType[];
+  /** Доля заказов на подбор (по умолчанию 30%; у филиала — 0) */
+  pickingShare?: number;
+  /** Сколько независимых потоков клиентов проверяется в день (филиал: по одному на автоматизированный слот) */
+  spawnRolls?: number;
+  /** Дополнительные места на доске сверх нормы репутации */
+  extraBoard?: number;
 }
 
 const pick = <T,>(items: T[], rng: Rng): T => items[Math.min(items.length - 1, Math.floor(rng() * items.length))];
@@ -165,7 +173,7 @@ const makeServiceOrder = (id: string, now: number, reputation: number, ctx: Orde
   const tier = pick(ctx.unlockedTiers, rng);
   const premium = rng() < B.premiumOrderChance(reputation);
   // Любые типы работ при любой репутации; чаще те, что игрок может выполнить имеющимся оборудованием
-  const allowed = B.SERVICE_ORDER_TYPES;
+  const allowed = ctx.serviceTypes ? B.SERVICE_ORDER_TYPES.filter((d) => ctx.serviceTypes!.includes(d.type)) : B.SERVICE_ORDER_TYPES;
   const doable = allowed.filter((d) => canPerform(d.type, ctx.owned));
   const locked = allowed.filter((d) => !canPerform(d.type, ctx.owned));
   const pool = locked.length === 0 || (doable.length > 0 && rng() < B.ORDER_AVAILABLE_TYPE_WEIGHT) ? doable : locked;
@@ -265,15 +273,15 @@ const runCheck = (s: OrdersState, t: number, ctx: OrdersContext): OrdersState =>
   if (ctx.unlockedTiers.length === 0) return next;
   const rng = rngForCheck(s.seed ^ 0x5bd1e995, index);
   const board = [...next.board];
-  const maxService = B.maxBoardService(s.reputation);
+  const maxService = B.maxBoardService(s.reputation) + (ctx.extraBoard ?? 0);
   const maxPicking = B.maxBoardPicking(s.reputation);
   let spawned = 0;
   const spawn = (n: number) => {
     // Подбор — примерно каждый третий заказ; если нужная доска заполнена — берём другую
     const servicePlace = countKind(board, 'service') < maxService;
     const pickingPlace = countKind(board, 'picking') < maxPicking;
-    if (!servicePlace && !pickingPlace) return;
-    const kind: Order['kind'] = (rng() < 0.3 && pickingPlace) || !servicePlace ? 'picking' : 'service';
+    if (!servicePlace && (!pickingPlace || ctx.pickingShare === 0)) return;
+    const kind: Order['kind'] = (rng() < (ctx.pickingShare ?? 0.3) && pickingPlace) || !servicePlace ? 'picking' : 'service';
     const id = `ord-${s.seed.toString(36)}-${index}-${n}`;
     const orderRng = mulberry32(Math.floor(rng() * 0xffffffff));
     board.push(
@@ -284,9 +292,12 @@ const runCheck = (s: OrdersState, t: number, ctx: OrdersContext): OrdersState =>
     spawned += 1;
   };
   const guaranteed = t - s.lastOrderAtMs >= B.ORDER_GUARANTEE_DAYS * DAY_MS;
-  if (guaranteed || rng() < B.orderSpawnChance(s.reputation)) {
-    spawn(0);
-    if (rng() < B.extraOrderChance(s.reputation)) spawn(1);
+  let n = 0;
+  for (let roll = 0; roll < Math.max(1, ctx.spawnRolls ?? 1); roll++) {
+    if ((roll === 0 && guaranteed) || rng() < B.orderSpawnChance(s.reputation)) {
+      spawn(n++);
+      if (rng() < B.extraOrderChance(s.reputation)) spawn(n++);
+    }
   }
   return { ...next, board, lastOrderAtMs: spawned > 0 ? t : s.lastOrderAtMs };
 };
