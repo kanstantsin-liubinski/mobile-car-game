@@ -18,6 +18,7 @@ import { generateRandomListing } from '../src/utils/marketGenerator.ts';
 import { mulberry32 } from '../src/economy/hotOffers.ts';
 import * as E from '../src/economy/economy.ts';
 import * as Br from '../src/economy/branches.ts';
+import * as L from '../src/economy/legacy.ts';
 import { DAY_MS, MONTH_MS } from '../src/economy/time.ts';
 import { TIER_NAMES, TIER_UNLOCK_LEVELS } from '../src/data/carModels.ts';
 import { GARAGES } from '../src/data/cityBuildings.ts';
@@ -319,6 +320,10 @@ interface CareerOpts {
   /** XP на переход с уровня; по умолчанию — формула игры */
   xpCurve?: (level: number) => number;
   maxMonths?: number;
+  /** Очки наследия этой карьеры */
+  legacyPoints?: number;
+  /** Остановить карьеру (перезапуск), когда условие выполнено */
+  stop?: (x: { level: number; cash: number; month: number }) => boolean;
 }
 
 const addXpWith = (p: P.PlayerXp, amount: number, curve: (level: number) => number): P.PlayerXp => {
@@ -341,9 +346,15 @@ const career = (o: CareerOpts) => {
   let cash = 25_000;
   let garage = 0;
   let player = P.createPlayerXp();
+  let baseProfit = 0;
+  let months = 0;
+  const profitMult = L.legacyProfitMultiplier(o.legacyPoints ?? 0);
+  const xpMult = L.legacyXpMultiplier(o.legacyPoints ?? 0);
   const at: Record<string, number> = {};
   const cashAt: Record<string, number> = {};
   for (let month = 1; month <= (o.maxMonths ?? 3000); month++) {
+    months = month;
+    const cashBefore = cash;
     const slots = GARAGES[garage].slots;
     const open = (t: number) => player.level >= (o.tierLevels[t] ?? 0);
     const best = (pool: typeof resaleGood) => {
@@ -364,7 +375,11 @@ const career = (o: CareerOpts) => {
       cash += used * resaleGood[t].month;
       xp += ((used * 30) / resaleGood[t].days) * resaleGood[t].xp;
     }
-    player = addXpWith(player, xp * 1.1, o.xpCurve ?? P.requiredXp); // +10% — бонус прибыльного месяца
+    // Наследие: бонус к положительной прибыли (отдельной строкой, в базу очков не входит), XP × множитель
+    const earned = cash - cashBefore;
+    baseProfit += earned;
+    if (earned > 0) cash += earned * (profitMult - 1);
+    player = addXpWith(player, xp * xpMult + xp * 0.1, o.xpCurve ?? P.requiredXp); // +10% от базового XP — бонус прибыльного месяца
     const next = garage + 1;
     if (next < GARAGES.length && player.level >= o.garageLevels[next] && cashAt[GARAGES[next].name] === undefined) cashAt[GARAGES[next].name] = cash;
     if (next < GARAGES.length && cash >= o.garagePrices[next] * 1.3 && player.level >= o.garageLevels[next]) {
@@ -373,9 +388,10 @@ const career = (o: CareerOpts) => {
       at[GARAGES[next].name] = month;
     }
     for (const lv of [5, 8, 12, 20, 35, 50, 75, 100]) if (player.level >= lv && at[`ур. ${lv}`] === undefined) at[`ур. ${lv}`] = month;
-    if (player.level >= 100) break;
+    if (cash >= 1e9 && at['$1 млрд'] === undefined) at['$1 млрд'] = month;
+    if (o.stop ? o.stop({ level: player.level, cash, month }) : player.level >= 100) break;
   }
-  return { at, cashAt };
+  return { at, cashAt, baseProfit, months, level: player.level, cash };
 };
 
 const hours = (m?: number) => (m === undefined ? '—' : `${m} (${((m * 5) / 60).toFixed(1)} ч)`);
@@ -410,6 +426,53 @@ careerRow('Новый конфиг, активный игрок', { ...NEW, acti
 careerRow('Новый конфиг, только механики', { ...NEW, active: false });
 log('');
 log(`Новый конфиг: кривая XP ${P.XP_CURVE_BASE} + ${P.XP_CURVE_LINEAR}n + ${P.XP_CURVE_QUADRATIC}n², классы открываются на ур. 8/20/35/55/75, гаражи — на ур. 5/20/50 за ${GARAGES.slice(1).map((g) => usd(g.price)).join(' / ')}.`);
+
+// ─── Наследие: серия карьер ────────────────────────────────────────────────
+
+const NEW_CAREER = { garagePrices: GARAGES.map((g) => g.price), garageLevels: [0, 5, 20, 50], tierLevels: { 1: 0, 2: 8, 3: 20, 4: 35, 5: 55, 6: 75 }, active: true };
+
+/** Серия карьер: каждая заканчивается перезапуском на своём уровне, последняя идёт до 100 уровня и $1 млрд */
+const legacyRun = (restartLevels: number[]) => {
+  let lifetimeCents = 0;
+  let points = 0;
+  let totalMonths = 0;
+  const rows: string[] = [];
+  for (let i = 0; i <= restartLevels.length; i++) {
+    const last = i === restartLevels.length;
+    const stopLevel = restartLevels[i];
+    const c = career({
+      ...NEW_CAREER,
+      legacyPoints: points,
+      maxMonths: 6000,
+      stop: last ? (x) => x.level >= 100 && x.cash >= 1e9 : (x) => x.level >= stopLevel,
+    });
+    totalMonths += c.months;
+    lifetimeCents += Math.max(0, c.baseProfit) * 100;
+    const before = points;
+    if (!last) points = Math.max(points, L.legacyPointsTotal(lifetimeCents));
+    rows.push(
+      `| ${i + 1} | ${before} | ${last ? `до ур. 100 и $1 млрд` : `ур. ${stopLevel}`} | ${hours(c.months)} | ${usd(c.baseProfit)} | ${
+        last ? '—' : `+${points - before} → ${points}`
+      } | ×${L.legacyProfitMultiplier(before).toFixed(2)} / ×${L.legacyXpMultiplier(before).toFixed(2)} | ${((totalMonths * 5) / 60).toFixed(1)} ч |` +
+        (last ? ` ур. 100: ${hours(c.at['ур. 100'])}, $1 млрд: ${hours(c.at['$1 млрд'])}` : ''),
+    );
+  }
+  return { rows, totalHours: (totalMonths * 5) / 60 };
+};
+
+log('');
+log('## 7. Наследие: серия карьер (активный игрок, новый конфиг)');
+log('');
+log(`Очки = floor(10 × √(прибыль закрытых карьер / $1M)), прибыль × min(${B.LEGACY_PROFIT_MAX}; 1 + 0,04P + 0,0015P²) к положительной марже, опыт × min(2,5; 1 + 0,02P).`);
+for (const plan of [[], [20], [20, 35], [20, 35, 50], [20, 35, 50, 75]]) {
+  log('');
+  log(`**Перезапуски на уровнях: ${plan.length ? plan.join(', ') : 'без перезапусков'}**`);
+  log('');
+  log('| Карьера | Очки в карьере | Перезапуск | Длительность | Прибыль (база) | Очки после | Бонусы прибыль / опыт | Всего времени | Итог последней |');
+  log('|---:|---:|---|---:|---:|---:|---|---:|---|');
+  const r = legacyRun(plan);
+  for (const row of r.rows) log(row);
+}
 
 // ─── Филиал с управляющим ──────────────────────────────────────────────────
 

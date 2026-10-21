@@ -22,6 +22,7 @@ import * as O from './orders.ts';
 import { randomSeed } from './hotOffers.ts';
 import { pluralDays } from './format.ts';
 import { rollBranchMonths, type BranchState } from './branchModel.ts';
+import { legacyMarginBonusCents, legacyXpMultiplier, type CareerSummary } from './legacy.ts';
 
 // ─── Константы ─────────────────────────────────────────────────────────────
 
@@ -156,6 +157,8 @@ export interface MonthLedger {
   carExtraCostsCents: number;
   /** Практика «Подборщика» за осмотры в этом месяце (лимит) */
   inspectPractice: number;
+  /** Бонус наследия к положительной марже продаж и заказов */
+  legacyBonusCents: number;
 }
 
 export interface MechanicMonthStat {
@@ -200,7 +203,14 @@ export interface EconomyState {
   history: MonthReport[];
   processedOps: string[];
   bankruptcy: Bankruptcy | null;
-  totals: { carsSold: number; revenueCents: number; netProfitCents: number };
+  totals: {
+    carsSold: number;
+    revenueCents: number;
+    netProfitCents: number;
+    /** Бонус наследия за всю карьеру (не входит в базу очков наследия) */
+    legacyBonusCents: number;
+    bestMonthProfitCents: number;
+  };
   /** Контракты для механиков из сохранений до финансовой системы уже созданы */
   contractsMigrated: boolean;
   player: PlayerProgress;
@@ -214,6 +224,10 @@ export interface EconomyState {
   xpLog: XpEntry[];
   /** Филиалы по id гаража (основной гараж сюда не входит) */
   branches: Record<string, BranchState>;
+  /** Карьера: id для защиты от повторного закрытия в «Наследии» */
+  careerId: string;
+  /** Очки наследия, действующие в этой карьере (фиксируются при её создании) */
+  legacyPoints: number;
 }
 
 export interface XpEntry {
@@ -280,6 +294,7 @@ export const emptyLedger = (): MonthLedger => ({
   diagnosticsCents: 0,
   carExtraCostsCents: 0,
   inspectPractice: 0,
+  legacyBonusCents: 0,
 });
 
 export const createEconomy = (
@@ -287,6 +302,7 @@ export const createEconomy = (
   contractsMigrated = true,
   playerMigrated = true,
   seed: number = randomSeed(),
+  legacyPoints = 0,
 ): EconomyState => ({
   version: 1,
   completedMonths: 0,
@@ -299,7 +315,7 @@ export const createEconomy = (
   history: [],
   processedOps: [],
   bankruptcy: null,
-  totals: { carsSold: 0, revenueCents: 0, netProfitCents: 0 },
+  totals: { carsSold: 0, revenueCents: 0, netProfitCents: 0, legacyBonusCents: 0, bestMonthProfitCents: 0 },
   contractsMigrated,
   player: createPlayerProgress(),
   playerMigrated,
@@ -307,6 +323,8 @@ export const createEconomy = (
   orders: O.createOrdersState(seed, 0),
   xpLog: [],
   branches: {},
+  careerId: `career-${(seed >>> 0).toString(36)}`,
+  legacyPoints,
 });
 
 // ─── Календарь ─────────────────────────────────────────────────────────────
@@ -572,6 +590,23 @@ const awardXp = (s: EconomyState, amount: number, reason = 'Опыт'): EconomyS
   return { ...s, player: { ...s.player, xp }, xpLog: [entry, ...(s.xpLog ?? [])].slice(0, XP_LOG_LIMIT) };
 };
 
+// ─── Наследие: бонусы карьеры ─────────────────────────────────────────────
+
+/** Опыт с множителем наследия (применяется один раз — к самой награде) */
+export const legacyXp = (s: EconomyState, baseXp: number): number => Math.round(baseXp * legacyXpMultiplier(s.legacyPoints ?? 0));
+
+/** Бонус наследия к положительной марже: отдельной строкой учёта, на баланс сразу */
+export const creditLegacyBonus = (s: EconomyState, marginCents: number): EconomyState => {
+  const bonus = legacyMarginBonusCents(s.legacyPoints ?? 0, marginCents);
+  if (bonus <= 0) return s;
+  return {
+    ...s,
+    balanceCents: s.balanceCents + bonus,
+    ledger: { ...s.ledger, legacyBonusCents: s.ledger.legacyBonusCents + bonus },
+    totals: { ...s.totals, legacyBonusCents: s.totals.legacyBonusCents + bonus },
+  };
+};
+
 // ─── Навыки игрока: единая инфраструктура ─────────────────────────────────
 
 export type SkillKey = 'mechanic' | 'painter' | 'picker' | 'trade' | 'management';
@@ -689,10 +724,12 @@ export const sellCar = (s: EconomyState, sale: CarSale): EconomyState => {
   const asset = s.assets[sale.carId];
   const cost = asset ? assetCostCents(asset) : sale.fallbackCostCents;
   const purchase = asset ? asset.purchaseCents : sale.fallbackCostCents;
-  const xp = P.saleXp(asset?.tier ?? sale.tier, sale.priceCents, purchase, asset?.extraCostsCents ?? 0);
+  // Месячный бонус XP считается от базового опыта продаж, наследие умножает только саму награду
+  const baseXp = P.saleXp(asset?.tier ?? sale.tier, sale.priceCents, purchase, asset?.extraCostsCents ?? 0);
+  const xp = legacyXp(s, baseXp);
   const practice = P.managementSalePractice(sale.priceCents, purchase, asset?.extraCostsCents ?? 0);
   const { [sale.carId]: _sold, ...assets } = s.assets;
-  const withXp = awardXp({
+  const withXp = awardXp(creditLegacyBonus({
     ...s,
     balanceCents: s.balanceCents + sale.priceCents,
     assets,
@@ -701,14 +738,14 @@ export const sellCar = (s: EconomyState, sale: CarSale): EconomyState => {
       revenueCents: s.ledger.revenueCents + sale.priceCents,
       cogsCents: s.ledger.cogsCents + cost,
       carsSold: s.ledger.carsSold + 1,
-      salesXp: s.ledger.salesXp + xp,
+      salesXp: s.ledger.salesXp + baseXp,
     },
     totals: {
       ...s.totals,
       carsSold: s.totals.carsSold + 1,
       revenueCents: s.totals.revenueCents + sale.priceCents,
     },
-  }, xp, `Продажа: ${asset?.name ?? 'машина'} (доходность ${purchase > 0 ? Math.round(((sale.priceCents - cost) / purchase) * 100) : 0}%)`);
+  }, sale.priceCents - cost), xp, `Продажа: ${asset?.name ?? 'машина'} (доходность ${purchase > 0 ? Math.round(((sale.priceCents - cost) / purchase) * 100) : 0}%)`);
   return withProcessed(awardSkill(awardManagement(withXp, practice), 'trade', practice), opId);
 };
 
@@ -716,7 +753,7 @@ export const sellCar = (s: EconomyState, sale: CarSale): EconomyState => {
 export const awardFullRepair = (s: EconomyState, carId: string): EconomyState => {
   const asset = s.assets[carId];
   if (!asset || asset.fullRepairAwarded || s.bankruptcy) return s;
-  const xp = P.fullRepairXp(asset.tier, asset.initialWearPct ?? 0);
+  const xp = legacyXp(s, P.fullRepairXp(asset.tier, asset.initialWearPct ?? 0));
   const marked: EconomyState = {
     ...s,
     assets: { ...s.assets, [carId]: { ...asset, fullRepairAwarded: true } },
@@ -953,6 +990,7 @@ export interface MonthResult {
   serviceCostsCents: number;
   serviceProfitCents: number;
   diagnosticsCents: number;
+  legacyBonusCents: number;
   netProfitCents: number;
   carsSold: number;
 }
@@ -975,7 +1013,9 @@ export const getMonthResult = (s: EconomyState, now: number): MonthResult => {
     serviceCostsCents: l.serviceCostsCents,
     serviceProfitCents: l.serviceRevenueCents - l.serviceCostsCents,
     diagnosticsCents: l.diagnosticsCents,
+    legacyBonusCents: l.legacyBonusCents,
     netProfitCents:
+      l.legacyBonusCents +
       dealProfitCents +
       (l.serviceRevenueCents - l.serviceCostsCents) -
       salaryCents -
@@ -1142,10 +1182,48 @@ export const closeMonth = (
     monthStartBalanceCents: state.balanceCents,
     ledger: emptyLedger(),
     history: [...s.history, report].slice(-HISTORY_MONTHS),
-    totals: { ...state.totals, netProfitCents: state.totals.netProfitCents + result.netProfitCents },
+    totals: {
+      ...state.totals,
+      netProfitCents: state.totals.netProfitCents + result.netProfitCents,
+      bestMonthProfitCents: Math.max(state.totals.bestMonthProfitCents ?? 0, result.netProfitCents),
+    },
   };
   return { state, outcome: 'closed' };
 };
+
+// ─── Итоги карьеры (для «Наследия») ────────────────────────────────────────
+
+/** Чистая прибыль карьеры без бонуса наследия: закрытые месяцы + текущий на момент now */
+export const careerBaseProfitCents = (s: EconomyState, now: number): number =>
+  s.totals.netProfitCents + getMonthResult(s, now).netProfitCents - (s.totals.legacyBonusCents ?? 0);
+
+/**
+ * Стоимость бизнеса: свободные деньги + машины по себестоимости + гаражи (их цены передаёт вызывающий)
+ * + оборудование + вложения в филиалы − кредит − начисленная зарплата.
+ */
+export const businessValueCents = (s: EconomyState, now: number, garagesValueCents: number): number => {
+  const equipment = s.equipment.owned.reduce((sum, id) => sum + toCents(B.EQUIPMENT.find((e) => e.id === id)?.price ?? 0), 0);
+  const branches = Object.values(s.branches ?? {}).reduce((sum, b) => {
+    let v = toCents(B.BRANCH_OPEN_COST[b.garageId] ?? 0);
+    for (let k = 2; k <= b.slots.length; k++) v += toCents(B.branchSlotCost(k));
+    return sum + v;
+  }, 0);
+  return s.balanceCents + assetsTotalCents(s) + garagesValueCents + equipment + branches - (s.loan?.principalCents ?? 0) - payrollCents(s, now);
+};
+
+export const careerSummary = (s: EconomyState, now: number, garagesValueCents: number): CareerSummary => ({
+  careerId: s.careerId,
+  level: s.player.xp.level,
+  months: s.completedMonths + 1,
+  carsSold: s.totals.carsSold,
+  baseProfitCents: careerBaseProfitCents(s, now),
+  netWorthCents: businessValueCents(s, now, garagesValueCents),
+  bestMonthProfitCents: s.totals.bestMonthProfitCents ?? 0,
+  branches: Object.keys(s.branches ?? {}).length,
+  hasDebt: !!s.loan,
+  bankrupt: !!s.bankruptcy,
+  pointsDuring: s.legacyPoints ?? 0,
+});
 
 // ─── Советы ────────────────────────────────────────────────────────────────
 
@@ -1425,6 +1503,8 @@ export const deliverServiceOrder = (s: EconomyState, id: string, now: number): O
     ledger: { ...s.ledger, serviceRevenueCents: s.ledger.serviceRevenueCents + paid },
     orders: O.completeOrder(s.orders, id, now, outcome, paid),
   };
+  // Маржа заказа: оплата клиента − детали, оплаченные при принятии
+  state = creditLegacyBonus(state, paid - o.partsCents);
   state = awardSkill(state, 'management', B.MANAGEMENT_ORDER_PRACTICE);
   return { ok: true, state: withProcessed(state, opId) };
 };
@@ -1522,6 +1602,8 @@ export const deserializeEconomy = (raw: string): EconomySave | null => {
         ? { owned: Array.from(new Set<B.EquipmentId>(['basic_tools', ...loaded.equipment.owned])), boothSlot: loaded.equipment.boothSlot ?? null }
         : createEquipment(),
       xpLog: loaded.xpLog ?? [],
+      careerId: loaded.careerId ?? `career-${(loaded.orders?.seed ?? randomSeed()).toString(36)}`,
+      legacyPoints: loaded.legacyPoints ?? 0,
       branches: Object.fromEntries(
         Object.entries(loaded.branches ?? {}).map(([id, b]) => [
           id,

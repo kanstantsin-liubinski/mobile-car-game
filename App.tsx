@@ -11,12 +11,14 @@ import { useNavigation } from '@hooks/useNavigation';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { GarageProvider } from '@hooks/GarageContext';
 import { EconomyProvider, useGameClock } from '@hooks/EconomyContext';
+import { LegacyProvider, useLegacy } from '@hooks/LegacyContext';
 import { SoldCarsProvider } from '@hooks/SoldCarsContext';
 import { GameStateProvider, useGameState } from '@hooks/GameStateContext';
 import { MarketProvider } from '@hooks/MarketContext';
 import { PaydayModal } from '@components/finance/PaydayModal';
 import { FinancePanel } from '@components/finance/FinancePanel';
 import { ExperienceModal } from '@components/info/ExperienceModal';
+import { LegacyModal } from '@components/legacy/LegacyModal';
 import { CalendarModal } from '@components/info/CalendarModal';
 import { BankruptcyScreen } from '@components/finance/BankruptcyScreen';
 import { ToastProvider } from '@components/toast/ToastContext';
@@ -29,12 +31,14 @@ function GameContent() {
   const { currentScreen, goToScreen, activeMarketId, marketFocus, openMarket } = useNavigation();
   const [financeOpen, setFinanceOpen] = useState(false);
   const [xpOpen, setXpOpen] = useState(false);
+  const [legacyOpen, setLegacyOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const { paydayPending } = useGameClock();
   useEffect(() => {
     if (paydayPending) {
       setFinanceOpen(false);
       setXpOpen(false);
+      setLegacyOpen(false);
       setCalendarOpen(false);
     }
   }, [paydayPending]);
@@ -79,7 +83,15 @@ function GameContent() {
           {/* Финансы: панель по нажатию на баланс, обязательный отчёт в зарплатный день, банкротство */}
           {/* В зарплатный день панель закрывается: отчёт — поверх всей игры */}
           <FinancePanel visible={financeOpen && !paydayPending} onClose={() => setFinanceOpen(false)} />
-          <ExperienceModal visible={xpOpen && !paydayPending} onClose={() => setXpOpen(false)} />
+          <ExperienceModal
+            visible={xpOpen && !paydayPending}
+            onClose={() => setXpOpen(false)}
+            onOpenLegacy={() => {
+              setXpOpen(false);
+              setLegacyOpen(true);
+            }}
+          />
+          <LegacyModal visible={legacyOpen && !paydayPending} onClose={() => setLegacyOpen(false)} />
           <CalendarModal visible={calendarOpen && !paydayPending} onClose={() => setCalendarOpen(false)} />
           <PaydayModal />
           <BankruptcyScreen />
@@ -96,6 +108,7 @@ function GameContent() {
 
 function AppWrapper() {
   const { currentScreen, setCurrentScreen, hasSaveData, resetGameData, isLoading, gameResetTrigger } = useGameState();
+  const { recordSavedCareer } = useLegacy();
   // Все картинки игры грузим и декодируем один раз при запуске — дальше они рисуются сразу
   const [imagesReady, setImagesReady] = useState(false);
   const [imagesProgress, setImagesProgress] = useState(0);
@@ -126,6 +139,8 @@ function AppWrapper() {
   };
 
   const handleNewGame = async () => {
+    // Прошлая карьера уходит в историю «Наследия» (очки не начисляются, наследие сохраняется)
+    await recordSavedCareer();
     await resetGameData();
     setCurrentScreen('game');
   };
@@ -176,7 +191,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <GameStateProvider>
-        <AppWrapper />
+        <LegacyProvider>
+          <AppWrapper />
+        </LegacyProvider>
       </GameStateProvider>
     </SafeAreaProvider>
   );

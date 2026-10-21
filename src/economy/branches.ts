@@ -377,6 +377,7 @@ const deliverJob = (s: E.EconomyState, b: BranchState, job: BranchJob, now: numb
     },
     opId,
   );
+  state = E.creditLegacyBonus(state, paid - order.partsCents);
   if (b.managerId) state = E.addWorkerPractice(state, b.managerId, B.MANAGER_ORDER_PRACTICE, now);
   // Факт: оклад механика с момента принятия (включая задержки управляющего) до окончания работы
   const workDays = Math.max(0, ((job.doneAtMs ?? now) - (order.acceptedAtMs ?? job.startAtMs)) / DAY_MS);

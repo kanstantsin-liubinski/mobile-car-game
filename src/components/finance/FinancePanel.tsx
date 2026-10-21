@@ -135,6 +135,7 @@ const PnlTab = () => {
         <FinanceRow label="Сторонняя диагностика" cents={-r.diagnosticsCents} />
         <FinanceRow label="Обучение (курсы)" cents={-r.otherExpenseCents} />
         <FinanceRow label="Прочие доходы" cents={r.otherIncomeCents} />
+        {r.legacyBonusCents > 0 && <FinanceRow label="Бонус наследия" cents={r.legacyBonusCents} />}
         <View style={ui.divider} />
         <FinanceRow label="Чистая прибыль" cents={r.netProfitCents} signed bold />
         <FinanceRow label="Вложения (гаражи, оборудование)" cents={-r.investmentsCents} muted />

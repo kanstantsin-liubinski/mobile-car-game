@@ -5,6 +5,8 @@ import { colors } from '@styles/colors';
 import { useEconomy } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useGameState } from '@hooks/GameStateContext';
+import { garagesValueCents, useLegacy } from '@hooks/LegacyContext';
+import { careerSummary } from '../../economy/economy';
 import { GameIcon } from '@components/GameIcon';
 import { BUILDING_ICONS } from '@img/gameIcons';
 import { getGarageById } from '../../data/cityBuildings';
@@ -13,7 +15,8 @@ import { formatMoney } from '../../economy/format';
 
 /** Экран проигрыша: причина, итоги бизнеса и новая игра */
 export const BankruptcyScreen = () => {
-  const { state } = useEconomy();
+  const { state, getNow } = useEconomy();
+  const { recordEnd } = useLegacy();
   const { garageId, garage } = useGarageContext();
   const { resetGameData } = useGameState();
   const [restarting, setRestarting] = useState(false);
@@ -25,6 +28,8 @@ export const BankruptcyScreen = () => {
   const handleNewGame = async () => {
     if (restarting) return;
     setRestarting(true);
+    // Банкротство не стирает «Наследие»: карьера только записывается в историю
+    await recordEnd(careerSummary(state, getNow(), garagesValueCents(garageId)), 'bankruptcy');
     await resetGameData();
   };
 

@@ -7,6 +7,8 @@ import { FULL_REPAIR_XP, SALE_BASE_XP, requiredXp } from '../../economy/progress
 import { TIER_NAMES, TIER_UNLOCK_LEVELS } from '../../data/carModels';
 import { GARAGES } from '../../data/cityBuildings';
 import { EQUIPMENT } from '../../economy/balance';
+import { legacyProfitMultiplier, legacyXpMultiplier } from '../../economy/legacy';
+import { TouchableOpacity } from '@components/Touchable';
 
 /** Что открывается на каком уровне: классы машин, гаражи, оборудование */
 const unlocks = (): { level: number; text: string }[] => {
@@ -20,7 +22,7 @@ const unlocks = (): { level: number; text: string }[] => {
 };
 
 /** Окно «Опыт»: уровень, прогресс, история начислений, как заработать и что даёт уровень */
-export const ExperienceModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
+export const ExperienceModal = ({ visible, onClose, onOpenLegacy }: { visible: boolean; onClose: () => void; onOpenLegacy?: () => void }) => {
   const { state } = useEconomy();
   const { level, xp, totalXp } = state.player.xp;
   const required = requiredXp(level);
@@ -37,6 +39,19 @@ export const ExperienceModal = ({ visible, onClose }: { visible: boolean; onClos
         <InfoRow label="Всего заработано" value={`${totalXp.toLocaleString('ru-RU')} XP`} />
         <InfoRow label="Продано машин за всё время" value={String(state.totals.carsSold)} />
       </InfoSection>
+
+      {onOpenLegacy && (
+        <InfoSection title="Наследие">
+          <InfoText>
+            Очки наследия: {state.legacyPoints ?? 0} · опыт ×{legacyXpMultiplier(state.legacyPoints ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} · прибыль ×
+            {legacyProfitMultiplier(state.legacyPoints ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}. С 20 уровня карьеру можно перезапустить с
+            постоянными бонусами.
+          </InfoText>
+          <TouchableOpacity style={styles.legacyButton} onPress={onOpenLegacy}>
+            <Text style={styles.legacyButtonText}>🏛️ Открыть «Наследие»</Text>
+          </TouchableOpacity>
+        </InfoSection>
+      )}
 
       <InfoSection title="Последние начисления">
         {log.length === 0 ? (
@@ -66,7 +81,8 @@ export const ExperienceModal = ({ visible, onClose }: { visible: boolean; onClos
           • Первое полное восстановление своей машины до технического максимума: до {FULL_REPAIR_XP[1]}–{FULL_REPAIR_XP[6]} XP по
           классу (полный бонус — если износ был от 30 пунктов).
         </InfoText>
-        <InfoText>• Прибыльный месяц: +10% от XP продаж за месяц (не больше 80 XP) — начисляется в зарплатный день.</InfoText>
+        <InfoText>• Прибыльный месяц: +10% от базового XP продаж за месяц (не больше 80 XP) — начисляется в зарплатный день.</InfoText>
+        <InfoText>• «Наследие» умножает опыт продаж и восстановлений (один раз, до ×2,5).</InfoText>
         <InfoText>Навыки («Механик», «Торговля» и др.) и заказы клиентов общий опыт не дают — у них своя практика.</InfoText>
       </InfoSection>
 
@@ -93,6 +109,8 @@ export const ExperienceModal = ({ visible, onClose }: { visible: boolean; onClos
 };
 
 const styles = StyleSheet.create({
+  legacyButton: { backgroundColor: '#B45309', borderRadius: 10, paddingVertical: 10, alignItems: 'center', marginTop: 8 },
+  legacyButtonText: { color: '#FFF', fontWeight: '800', fontSize: 14 },
   logRow: {
     flexDirection: 'row',
     alignItems: 'center',

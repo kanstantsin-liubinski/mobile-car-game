@@ -5,6 +5,7 @@ import * as E from '../economy/economy';
 import * as O from '../economy/orders';
 import * as Br from '../economy/branches';
 import { GARAGES } from '../data/cityBuildings';
+import { loadLegacy } from './LegacyContext';
 import type { EquipmentId } from '../economy/balance';
 import { calculateMaxCondition } from '../utils/priceCalculator';
 import { generateRandomListing, type Rng } from '../utils/marketGenerator';
@@ -211,7 +212,9 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
           // Сохранение до финансовой системы: переносим баланс, контракты механикам создаст гараж
           const legacy = await AsyncStorage.getItem(LEGACY_BALANCE_KEY);
           const balanceCents = legacy !== null ? E.toCents(parseFloat(legacy) || 0) : INITIAL_BALANCE_CENTS;
-          stateRef.current = E.createEconomy(balanceCents, legacy === null, legacy === null);
+          // Новая карьера получает очки «Наследия», накопленные к этому моменту
+          const heritage = await loadLegacy();
+          stateRef.current = E.createEconomy(balanceCents, legacy === null, legacy === null, undefined, heritage.pointsTotal);
           timeRef.current = 0;
         }
         if (!stateRef.current.playerMigrated) {

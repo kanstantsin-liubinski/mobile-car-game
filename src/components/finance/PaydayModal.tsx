@@ -73,6 +73,7 @@ export const PaydayModal = () => {
               )}
               {result.diagnosticsCents > 0 && <FinanceRow label="Сторонняя диагностика" cents={-result.diagnosticsCents} />}
               {result.otherIncomeCents > 0 && <FinanceRow label="Прочие доходы" cents={result.otherIncomeCents} />}
+              {result.legacyBonusCents > 0 && <FinanceRow label="Бонус наследия" cents={result.legacyBonusCents} />}
               {result.otherExpenseCents > 0 && (
                 <FinanceRow label="Обучение (курсы)" cents={-result.otherExpenseCents} />
               )}

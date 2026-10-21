@@ -455,3 +455,20 @@ export const managerStrategy = (id: ManagerStrategy | undefined): ManagerStrateg
 
 /** Скорость механика: 0,05 п. техники в секунду = 0,5 п. в игровой день (× навык × допуск) */
 export const MECHANIC_POINTS_PER_DAY = 0.5;
+
+// ─── Наследие ──────────────────────────────────────────────────────────────
+
+/** Перезапуск через «Наследие» доступен с этого уровня, без кредита и при стоимости бизнеса от… ($) */
+export const LEGACY_MIN_LEVEL = 20;
+export const LEGACY_MIN_NET_WORTH = 100_000;
+/** Всего очков = floor(SCALE × √(прибыль закрытых карьер / UNIT)) */
+export const LEGACY_POINTS_SCALE = 10;
+export const LEGACY_POINTS_PROFIT_UNIT = 1_000_000;
+/** Множитель прибыли = 1 + LINEAR × P + QUADRATIC × P² (только к положительной марже) */
+export const LEGACY_PROFIT_LINEAR = 0.04;
+export const LEGACY_PROFIT_QUADRATIC = 0.0015;
+/** Потолок множителя прибыли: без него после цели «Концерн» бонус разгоняется до ×50–160 (симулятор) */
+export const LEGACY_PROFIT_MAX = 10;
+/** Множитель опыта = min(MAX, 1 + PER_POINT × P) */
+export const LEGACY_XP_PER_POINT = 0.02;
+export const LEGACY_XP_MAX = 2.5;
