@@ -30,14 +30,14 @@ function must<T>(value: T | null | undefined): T {
 }
 
 describe('уровни игрока', () => {
-  it('пороги из таблицы ТЗ', () => {
-    const table: Record<number, number> = { 1: 100, 2: 124, 3: 156, 4: 196, 9: 516, 15: 1164, 20: 1924, 30: 4044, 50: 10684 };
+  it('пороги по кривой 100 + 10n + 1,5n²', () => {
+    const table: Record<number, number> = { 1: 100, 2: 112, 3: 126, 4: 144, 9: 276, 15: 534, 20: 832, 30: 1652, 50: 4192 };
     for (const [level, xp] of Object.entries(table)) assert.equal(requiredXp(Number(level)), xp);
   });
 
   it('остаток переносится, большая награда поднимает несколько уровней', () => {
-    const p = addXp(createPlayerXp(), 100 + 124 + 156 + 10);
-    assert.deepEqual(p, { level: 4, xp: 10, totalXp: 390 });
+    const p = addXp(createPlayerXp(), 100 + 112 + 126 + 10);
+    assert.deepEqual(p, { level: 4, xp: 10, totalXp: 348 });
   });
 
   it('нет искусственного максимума и потери точности', () => {

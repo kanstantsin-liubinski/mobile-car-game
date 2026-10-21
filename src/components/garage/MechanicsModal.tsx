@@ -18,13 +18,14 @@ import { MECHANIC_MONTHLY_SALARY_CENTS, salaryForLevel } from '../../economy/eco
 import { skillMultiplier } from '../../economy/progression';
 import { formatMoney } from '../../economy/format';
 import { ACTION_COLORS } from './CarWorkPanels';
+import { clearanceName, clearanceTile } from './clearanceTile';
 import type { Mechanic } from '@/types';
 
 type Status = { text: string; color: string };
 
 /** Окно персонала: механики, их слоты, навык и увольнение. Вложенные окна — слоями внутри (iOS) */
 export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
-  const { state } = useEconomy();
+  const { state, upgradeClearance } = useEconomy();
   const { mechanics, garageSlots, boothSlot, hireMechanic, fireMechanic, changeMechanicSlot, mechanicRepairs } = useGarageContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
@@ -70,7 +71,7 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
 
                   <Text style={styles.info}>
                     {m.hired
-                      ? `Скорость ремонта +${Math.round((skillMultiplier(m.skillLevel) - 1) * 100)}% · оклад ${formatMoney(salary)}/мес`
+                      ? `Скорость ремонта +${Math.round((skillMultiplier(m.skillLevel) - 1) * 100)}% · допуск: ${clearanceName(contract?.clearance)} · оклад ${formatMoney(salary)}/мес`
                       : `Ремонтирует машины сам, 0,5% в день. Оклад ${formatMoney(salaryForLevel(1))}/мес, платится и в простое.`}
                   </Text>
 
@@ -113,6 +114,9 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
                               info: 'Уровень, практика и платный курс механика. Практика копится только во время ремонта; с уровнем растут скорость и оклад.',
                               onPress: () => setTrainingId(m.id),
                             },
+                            ...[clearanceTile(contract, state.balanceCents, () => upgradeClearance(m.id))].filter(
+                              (t): t is NonNullable<typeof t> => t !== null,
+                            ),
                             {
                               key: 'unassign',
                               emoji: '↩️',

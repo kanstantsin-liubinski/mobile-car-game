@@ -16,9 +16,10 @@ import { CAR_MODELS_BY_TIER, TIER_NAMES, TIER_UNLOCK_LEVELS, type CarModel } fro
 import { DEALERSHIP } from '../data/cityBuildings';
 import { calculateCarPrice } from '../utils/priceCalculator';
 import { tradePurchasePrice } from '../economy/carCondition';
+import { GAME_YEAR } from '../economy/balance';
 import type { Car } from '@/types';
 
-const NEW_CAR_YEAR = 2026; // совпадает с CURRENT_YEAR в priceCalculator
+const NEW_CAR_YEAR = GAME_YEAR; // текущий год игры (balance.ts)
 const NEW_CAR_MILEAGE = 0;
 const NEW_CAR_CONDITION = 100;
 

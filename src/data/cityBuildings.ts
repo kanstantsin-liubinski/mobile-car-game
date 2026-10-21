@@ -125,8 +125,8 @@ export const GARAGES: GarageBuilding[] = [
     name: 'Гараж 3',
     emoji: '🏭',
     area: bgArea(345, 284, 228, 150), // автосервис слева от фонтана
-    slots: 3,
-    price: 75000, // TODO: баланс
+    slots: 4,
+    price: 150_000, // ≈половина денег активного игрока к открытию по уровню (scripts/simulate.ts)
     requiredLevel: 5,
   },
   {
@@ -135,8 +135,8 @@ export const GARAGES: GarageBuilding[] = [
     name: 'Гараж 4',
     emoji: '🏢',
     area: bgArea(837, 504, 353, 240), // большой сервисный центр справа внизу
-    slots: 4,
-    price: 200000, // TODO: баланс
+    slots: 8,
+    price: 2_000_000,
     requiredLevel: 10,
   },
 ];

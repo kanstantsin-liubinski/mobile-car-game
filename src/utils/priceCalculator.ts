@@ -1,11 +1,12 @@
+import { GAME_YEAR } from '../economy/balance.ts';
+
 /**
  * Вычислить максимальное состояние для автомобиля
  * На основе года выпуска и пробега
  * Результат уже округлён до одного знака после запятой
  */
 export function calculateMaxCondition(year: number, mileage: number): number {
-  const CURRENT_YEAR = 2026;
-  const yearsSinceMake = Math.max(0, CURRENT_YEAR - year);
+  const yearsSinceMake = Math.max(0, GAME_YEAR - year);
   
   // За каждый год отнимаем 0.5% от максимального состояния
   const yearsPenalty = yearsSinceMake * 0.5;
@@ -29,7 +30,6 @@ export function calculateMaxCondition(year: number, mileage: number): number {
  * - Состояния (0-100%)
  */
 
-const CURRENT_YEAR = 2026;
 const MAX_MILEAGE = 500000; // км, при котором цена падает почти к нулю
 
 function getConditionFactor(condition: number): number {
@@ -44,7 +44,7 @@ function getMileageFactor(mileage: number): number {
 
 function getYearFactor(year: number): number {
   // Фактор возраста: каждый год = 5% потери стоимости
-  const yearsSinceMake = Math.max(0, CURRENT_YEAR - year);
+  const yearsSinceMake = Math.max(0, GAME_YEAR - year);
   return Math.max(0.3, 1 - (yearsSinceMake / 20) * 0.5);
 }
 

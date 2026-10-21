@@ -6,9 +6,13 @@
 // ─── Опыт игрока ───────────────────────────────────────────────────────────
 
 /** XP, нужный на текущем уровне, чтобы перейти на следующий. Уровни бесконечны. */
+export const XP_CURVE_BASE = 100;
+export const XP_CURVE_LINEAR = 10;
+export const XP_CURVE_QUADRATIC = 1.5;
+/** Кривая подобрана симулятором (scripts/simulate.ts): активный игрок доходит до 20-го уровня за ≈5 ч, до 100-го — за ≈45 ч */
 export const requiredXp = (level: number): number => {
   const n = Math.max(0, level - 1);
-  return 100 + 20 * n + 4 * n * n;
+  return Math.round(XP_CURVE_BASE + XP_CURVE_LINEAR * n + XP_CURVE_QUADRATIC * n * n);
 };
 
 export interface PlayerXp {

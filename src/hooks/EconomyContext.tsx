@@ -19,7 +19,7 @@ const sampleCar = (tier: number, rng: Rng): O.SampleCar => {
   return {
     tier,
     name: car.name,
-    modelId: car.id,
+    modelId: car.name,
     emoji: car.emoji,
     speed: car.speed,
     year: car.year,
@@ -98,8 +98,14 @@ interface EconomyContextType {
   recordInspection: (listingId: string) => void;
   recordScan: (listingId: string) => boolean;
   payServiceDiagnostics: (listingId: string, tier: number | undefined) => boolean;
-  /** Затраты на свою машину (покраска) — в её себестоимость */
+  /** Затраты на свою машину (покраска, детали) — в её себестоимость */
   spendOnCar: (carId: string, cents: number, opId: string) => boolean;
+  /** Детали за ручной тап ремонта: частые мелкие списания, сохраняются вместе с тиком часов */
+  payTapParts: (carId: string, cents: number) => boolean;
+  /** Возврат неиспользованных деталей остановленного ремонта */
+  refundOnCar: (carId: string, cents: number, opId: string) => void;
+  /** Повышение допуска сотрудника к следующему классу */
+  upgradeClearance: (workerId: string) => boolean;
   recordPaintTap: () => void;
   paintTapMultiplier: number;
   hirePainter: (painterId: string) => void;
@@ -422,6 +428,20 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     (carId: string, cents: number, opId: string) => run((s) => E.spendOnCar(s, carId, cents, opId)),
     [run],
   );
+  const payTapParts = useCallback(
+    (carId: string, cents: number) => {
+      if (cents <= 0) return true;
+      const res = E.spendOnCar(stateRef.current, carId, cents);
+      if (res.ok) commit(res.state, { deferSave: true });
+      return res.ok;
+    },
+    [commit],
+  );
+  const refundOnCar = useCallback(
+    (carId: string, cents: number, opId: string) => commit(E.refundOnCar(stateRef.current, carId, cents, opId)),
+    [commit],
+  );
+  const upgradeClearance = useCallback((workerId: string) => run((s, now) => E.upgradeClearance(s, workerId, now)), [run]);
   const recordPaintTap = useCallback(
     () => commit(E.recordPaintTap(stateRef.current), { deferSave: true }),
     [commit],
@@ -507,6 +527,9 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       recordScan,
       payServiceDiagnostics,
       spendOnCar,
+      payTapParts,
+      refundOnCar,
+      upgradeClearance,
       recordPaintTap,
       paintTapMultiplier: E.paintTapMultiplier(state),
       hirePainter,
@@ -555,6 +578,9 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       recordScan,
       payServiceDiagnostics,
       spendOnCar,
+      payTapParts,
+      refundOnCar,
+      upgradeClearance,
       recordPaintTap,
       hirePainter,
       acceptOrder,

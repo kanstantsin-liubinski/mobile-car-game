@@ -121,7 +121,7 @@ describe('зарплаты', () => {
     let s = startContract(createEconomy(0), 'm1', 0);
     const t = runTicks(s, 0, MONTH_MS, 7);
     assert.equal(accruedSalaryCents(s.contracts.m1, t), SALARY);
-    assert.equal(SALARY, $(360));
+    assert.equal(SALARY, $(290), 'оклад механика с допуском «Эконом» — 37,5% его выработки');
     s = close({ ...s, balanceCents: $(2000) }, t).state;
     assert.equal(s.balanceCents, $(2000) - SALARY);
   });
@@ -173,7 +173,7 @@ describe('зарплаты', () => {
 
   it('механик нанят прямо перед концом месяца — почти ничего не начислено', () => {
     const s = startContract(createEconomy($(100)), 'm1', MONTH_MS - 1000);
-    assert.equal(payrollCents(s, MONTH_MS), SALARY / 300); // оклад за последнюю секунду
+    assert.equal(payrollCents(s, MONTH_MS), Math.round(SALARY / 300)); // оклад за последнюю секунду
   });
 });
 
@@ -213,7 +213,7 @@ describe('увольнение', () => {
     assert.equal(c.hiredAtMs, 100_000);
     assert.equal(c.jobsDoneTotal, 0);
     assert.equal(c.busySinceMs, null);
-    assert.equal(accruedSalaryCents(c, MONTH_MS), SALARY / 3 * 2);
+    assert.equal(accruedSalaryCents(c, MONTH_MS), Math.round((SALARY / 3) * 2));
   });
 
   it('не хватает денег на увольнение — недостаток в кредит, свободных денег не появляется', () => {
@@ -532,7 +532,8 @@ describe('навыки и курсы в экономике', () => {
     const restored = must(deserializeEconomy(serializeEconomy(worker.state, 2000)));
     assert.equal(restored.state.player.skill.courseCooldownUntilMs, 1000 + COURSE_COOLDOWN_MS);
     assert.equal(restored.state.contracts.m1.skill.courseCooldownUntilMs, 2000 + COURSE_COOLDOWN_MS);
-    assert.equal(getMonthResult(restored.state, 2000).otherExpenseCents, $(1000) + $(200));
+    // Курс механика: половина оклада ($290 → $145) с округлением до $50 = $150
+    assert.equal(getMonthResult(restored.state, 2000).otherExpenseCents, $(1000) + $(150));
   });
 
   it('курс не оплачивается кредитом', () => {

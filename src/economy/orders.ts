@@ -74,6 +74,8 @@ export interface PickingOrder extends OrderBase {
   minPaint: number | null;
   /** Сколько клиент платит за машину */
   priceCents: number;
+  /** Нужная модель: цена клиента считается именно по ней (у старых сохранений может не быть) */
+  modelName?: string;
   /** Машина, переданная клиенту */
   carId?: string;
 }
@@ -124,7 +126,7 @@ export const serviceDef = (type: B.ServiceOrderType): B.ServiceOrderDef =>
   B.SERVICE_ORDER_TYPES.find((d) => d.type === type) ?? B.SERVICE_ORDER_TYPES[0];
 
 /** Цена пункта общего состояния типичной подержанной машины класса, $ */
-export const tierPointValue = (tier: number): number => ((B.TIER_AVG_BASE[tier] ?? B.TIER_AVG_BASE[1]) * B.TYPICAL_USED_FACTOR) / 100;
+export const tierPointValue = B.tierPointValue;
 
 /** Сколько пунктов работы делает за игровой день один исполнитель с базовой скоростью */
 export const pointsPerDay = (type: B.ServiceOrderType): number =>
@@ -234,6 +236,8 @@ const makePickingOrder = (id: string, now: number, reputation: number, ctx: Orde
     maxMileage,
     minOverall,
     minPaint,
+    // Цена — по конкретной модели клиента: дешёвая модель того же класса заказ не выполняет
+    modelName: sample.name,
     priceCents: cents(value * mult),
     deadlineDays: Math.round(between(B.PICKING_MIN_DAYS, B.PICKING_MAX_DAYS, rng)),
     createdAtMs: now,
@@ -428,6 +432,8 @@ export const completeOrder = (
 
 export interface PickingCandidate {
   tier?: number;
+  /** Модель машины игрока */
+  name?: string;
   mileage: number;
   overall: number;
   paintCondition: number;
@@ -436,6 +442,7 @@ export interface PickingCandidate {
 export const pickingMismatch = (o: PickingOrder, car: PickingCandidate): string[] => {
   const problems: string[] = [];
   if (car.tier !== o.tier) problems.push('другой класс');
+  else if (o.modelName && car.name !== o.modelName) problems.push(`нужна модель ${o.modelName}`);
   if (car.mileage > o.maxMileage) problems.push('пробег больше допустимого');
   if (car.overall + 1e-9 < o.minOverall) problems.push(`общее состояние ниже ${o.minOverall}%`);
   if (o.minPaint !== null && car.paintCondition + 1e-9 < o.minPaint) problems.push(`ЛКП ниже ${o.minPaint}%`);

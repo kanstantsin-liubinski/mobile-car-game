@@ -4,10 +4,11 @@
  */
 
 import type { Car } from '@/types';
-import type { CarModel } from '../data/carModels';
-import { CAR_MODELS_BY_TIER } from '../data/carModels';
-import { calculateCarPrice } from './priceCalculator';
-import { generateTraits, overallCondition } from '../economy/carCondition';
+import type { CarModel } from '../data/carModels.ts';
+import { CAR_MODELS_BY_TIER } from '../data/carModels.ts';
+import { calculateCarPrice } from './priceCalculator.ts';
+import { generateTraits, overallCondition } from '../economy/carCondition.ts';
+import { GAME_YEAR } from '../economy/balance.ts';
 
 export interface MarketListing {
   car: Car;
@@ -60,8 +61,7 @@ function generateListingId(modelId: string): string {
  * Старые машины → больше пробег
  */
 function generateMileage(year: number, rng: Rng): number {
-  const CURRENT_YEAR = 2026;
-  const age = CURRENT_YEAR - year;
+  const age = GAME_YEAR - year;
   
   // В среднем 12000-20000 км/год, но с рандомом
   const avgPerYear = randInt(8000, 22000, rng);
@@ -86,7 +86,7 @@ export function generateListing(model: CarModel, now: number, rng: Rng = Math.ra
   const [minYear, maxYear] = YEAR_RANGES[model.tier];
   const year = randInt(minYear, maxYear, rng);
   const mileage = generateMileage(year, rng);
-  const traits = generateTraits(year, mileage, 2026, rng);
+  const traits = generateTraits(year, mileage, GAME_YEAR, rng);
   const condition = traits.condition;
   const fairPrice = calculateCarPrice(model.basePrice, {
     year,

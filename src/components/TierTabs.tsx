@@ -95,7 +95,7 @@ export const TierTabs = ({ selectedTier, onSelect, hotTier }: TierTabsProps) => 
                   !unlocked && { opacity: 0.4 },
                 ]}
               >
-                {unlocked ? `Ур. ${tier}` : `🔒 Ур. ${TIER_UNLOCK_LEVELS[tier]}`}
+                {unlocked ? `с ур. ${Math.max(1, TIER_UNLOCK_LEVELS[tier] ?? 1)}` : `🔒 Ур. ${TIER_UNLOCK_LEVELS[tier]}`}
               </Text>
             </TouchableOpacity>
           );

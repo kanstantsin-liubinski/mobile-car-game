@@ -393,10 +393,11 @@ describe('доска заказов и репутация', () => {
 
   it('оплата растёт с репутацией и уровнем по формуле', () => {
     assert.equal(B.orderRewardMultiplier(1, B.REPUTATION_START), 1, 'на старте — ×1');
-    const steps: [number, number][] = [[0, 1], [249, 1], [250, 1.25], [499, 1.25], [500, 1.75], [749, 1.75], [750, 2], [999, 2], [1000, 2.5]];
+    const steps: [number, number][] = [[0, 1], [249, 1], [250, 1.075], [499, 1.075], [500, 1.15], [749, 1.15], [750, 1.225], [999, 1.225], [1000, 1.3]];
     for (const [rep, m] of steps) assert.equal(B.orderReputationFactor(rep), m, `репутация ${rep}`);
-    assert.ok(Math.abs(B.orderRewardMultiplier(21, 1000) - 2.5 * 1.3) < 1e-12);
-    assert.equal(B.orderRewardMultiplier(50, 1000), B.orderRewardMultiplier(21, 1000), 'уровень даёт не больше +30%');
+    assert.ok(Math.abs(B.orderLevelFactor(101) - 1.15) < 1e-12, 'уровень даёт не больше +15%');
+    assert.equal(B.orderLevelFactor(500), B.orderLevelFactor(101));
+    assert.ok(Math.abs(B.orderRewardMultiplier(101, 1000) - 1.3 * 1.15) < 1e-12);
     // Тот же заказ (seed) у сильного сервиса стоит дороже
     const first = (rep: number, level: number) => {
       const st = O.advanceOrders({ ...O.createOrdersState(11, 0), reputation: rep, lastOrderAtMs: -10 * DAY_MS }, 0, ctx(['basic_tools'], level));
@@ -405,7 +406,7 @@ describe('доска заказов и репутация', () => {
     const cheap = first(300, 1);
     const rich = first(300, 21);
     assert.ok(cheap && rich);
-    assert.ok(rich.rewardCents - rich.partsCents > (cheap.rewardCents - cheap.partsCents) * 1.25);
+    assert.ok(rich.rewardCents - rich.partsCents > (cheap.rewardCents - cheap.partsCents) * 1.02);
   });
 
   it('сложные заказы приходят при любой репутации, даже нулевой', () => {
@@ -536,7 +537,7 @@ describe('ремонтные заказы', () => {
     assert.equal(E.acceptOrder(s, ids[2], 0, [1]).ok, false);
   });
 
-  it('на старте (×1) работа по заказу оплачивается ниже ремонта под перепродажу, на 1000 — в 2,5 раза дороже', () => {
+  it('работа по заказу оплачивается ниже ремонта под перепродажу на старте, на 1000 — в 1,3 раза дороже старта', () => {
     const at = (reputation: number) => {
       for (let seed = 1; seed < 2000; seed++) {
         const st = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation, lastOrderAtMs: -10 * DAY_MS }, 0, ctx());
@@ -549,7 +550,7 @@ describe('ремонтные заказы', () => {
     const start = at(B.REPUTATION_START);
     const resalePerPoint = B.TECH_WEIGHT * O.tierPointValue(start.tier) * 100;
     assert.ok(perPoint(start) < resalePerPoint);
-    assert.ok(Math.abs(perPoint(at(1000)) / perPoint(start) - 2.5) < 0.05);
+    assert.ok(Math.abs(perPoint(at(1000)) / perPoint(start) - 1.3) < 0.05);
   });
 });
 
@@ -581,7 +582,9 @@ describe('заказы на подбор', () => {
     st = E.buyCar(st, { carId: 'car', name: 'X', tier: 1, priceCents: $(3_000) }).state;
     const bad = { tier: 1, mileage: order.maxMileage + 1, overall: 100, paintCondition: 100 };
     assert.equal(E.deliverPickingOrder(st, order.id, 'car', bad, DAY_MS).ok, false);
-    const good = { tier: 1, mileage: order.maxMileage, overall: order.minOverall, paintCondition: 100 };
+    const wrongModel = { tier: 1, name: 'Другая', mileage: order.maxMileage, overall: 100, paintCondition: 100 };
+    assert.equal(E.deliverPickingOrder(st, order.id, 'car', wrongModel, DAY_MS).ok, false, 'нужна конкретная модель');
+    const good = { tier: 1, name: order.modelName, mileage: order.maxMileage, overall: order.minOverall, paintCondition: 100 };
     const res = E.deliverPickingOrder(st, order.id, 'car', good, DAY_MS);
     assert.ok(res.ok);
     assert.equal(res.state.balanceCents, st.balanceCents + order.priceCents);
@@ -695,5 +698,50 @@ describe('максимальная репутация', () => {
         assert.equal(s.lastOrderAtMs, day * DAY_MS, `seed ${seed}, день ${day}: заказа не было (был ${before})`);
       }
     }
+  });
+});
+
+describe('квалификация сотрудников и детали', () => {
+  it('оклад зависит от допуска: ≈37,5% выработки на машинах этого класса', () => {
+    for (let tier = 1; tier <= 6; tier++) {
+      const mech = B.mechanicBaseSalaryCents(tier) / 100;
+      const output = B.MECHANIC_OVERALL_POINTS_PER_MONTH * B.tierPointValue(tier);
+      assert.ok(Math.abs(mech / output - B.STAFF_SALARY_SHARE) < 0.02, `класс ${tier}: ${mech} / ${output}`);
+    }
+    assert.ok(B.mechanicBaseSalaryCents(2) > B.mechanicBaseSalaryCents(1));
+    assert.equal(E.salaryForLevel(1, 'mechanic', 3), B.mechanicBaseSalaryCents(3));
+  });
+
+  it('повышение допуска: плата из свободных денег, оклад растёт с этого момента, начисленное не пересчитывается', () => {
+    let s = E.startContract(E.createEconomy($(10_000), true, true, 1), 'm', 0);
+    const before = E.accruedSalaryCents(s.contracts.m, MONTH_MS / 2);
+    const cost = E.clearanceUpgradeCostCents(s.contracts.m);
+    assert.equal(cost, 2 * B.mechanicBaseSalaryCents(2));
+    const res = E.upgradeClearance(s, 'm', MONTH_MS / 2);
+    assert.ok(res.ok);
+    s = res.state;
+    assert.equal(s.contracts.m.clearance, 2);
+    assert.equal(s.contracts.m.monthlyCents, B.mechanicBaseSalaryCents(2));
+    assert.equal(s.balanceCents, $(10_000) - cost);
+    assert.equal(s.ledger.otherExpenseCents, cost);
+    assert.equal(E.accruedSalaryCents(s.contracts.m, MONTH_MS / 2), before, 'прошлое время — по старой ставке');
+    assert.equal(E.upgradeClearance(E.createEconomy(0), 'm', 0).ok, false);
+  });
+
+  it('без допуска к классу машины работа вдвое медленнее', () => {
+    const s = E.startContract(E.createEconomy(0, true, true, 1), 'm', 0);
+    assert.equal(E.clearanceSpeedFactor(s.contracts.m, 1), 1);
+    assert.equal(E.clearanceSpeedFactor(s.contracts.m, 2), B.NO_CLEARANCE_SPEED);
+  });
+
+  it('детали своей машины: в себестоимость; неиспользованное возвращается один раз', () => {
+    let s = E.buyCar(E.createEconomy($(10_000), true, true, 1), { carId: 'c', name: 'C', tier: 1, priceCents: $(2000) }).state;
+    s = E.spendOnCar(s, 'c', $(300), 'parts:c:1').state;
+    assert.equal(s.assets.c.extraCostsCents, $(300));
+    s = E.refundOnCar(s, 'c', $(100), 'refund:c:1');
+    s = E.refundOnCar(s, 'c', $(100), 'refund:c:1');
+    assert.equal(s.assets.c.extraCostsCents, $(200));
+    assert.equal(s.balanceCents, $(10_000) - $(2000) - $(200));
+    assert.equal(E.refundOnCar(s, 'c', $(999), 'refund:c:2').assets.c.extraCostsCents, 0, 'не больше, чем вложено');
   });
 });

@@ -1,3 +1,4 @@
+import { formatMoney } from '../economy/format';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -298,7 +299,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
       case 'locked':
         return `🔒 Ур. ${building.requiredLevel}`;
       case 'available':
-        return `$${building.price.toLocaleString('ru-RU')}`;
+        return formatMoney(building.price * 100);
     }
   };
 

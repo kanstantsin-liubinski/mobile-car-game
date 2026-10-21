@@ -616,7 +616,7 @@ export const GarageScreen: React.FC = () => {
                   <View style={garageStyles.priceContainer}>
                     <Text style={garageStyles.priceLabel}>Текущая цена:</Text>
                     <Text style={[garageStyles.currentPrice, { fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
-                      ${currentPrice.toLocaleString()}
+                      {formatMoney(Math.round(currentPrice * 100))}
                     </Text>
                     <Text
                       style={[
@@ -628,8 +628,7 @@ export const GarageScreen: React.FC = () => {
                       ]}
                       numberOfLines={1}
                     >
-                      {priceChange > 0 ? "+" : ""}
-                      {priceChange.toLocaleString()}$ ({priceChangePercent}%)
+                      {formatMoney(Math.round(priceChange * 100), { sign: true })} ({priceChangePercent}%)
                     </Text>
                   </View>
                   )}
@@ -680,7 +679,7 @@ export const GarageScreen: React.FC = () => {
             <View style={garageStyles.modalInfoBlock}>
               <Text style={garageStyles.modalLabel}>Себестоимость (покупка + затраты):</Text>
               <Text style={garageStyles.modalPrice}>
-                ${selectedCarForSale?.boughtPrice.toLocaleString()}
+                {formatMoney(Math.round((selectedCarForSale?.boughtPrice ?? 0) * 100))}
               </Text>
             </View>
 
@@ -689,7 +688,7 @@ export const GarageScreen: React.FC = () => {
               <Text
                 style={[garageStyles.modalPrice, { color: colors.primary }]}
               >
-                ${selectedCarForSale?.sellPrice.toLocaleString()}
+                {formatMoney(Math.round((selectedCarForSale?.sellPrice ?? 0) * 100))}
               </Text>
             </View>
 
@@ -780,8 +779,7 @@ export const GarageScreen: React.FC = () => {
                   },
                 ]}
               >
-                {(selectedCarForSale?.profit ?? 0) > 0 ? "+" : (selectedCarForSale?.profit ?? 0) < 0 ? "−" : ""}$
-                {Math.abs(selectedCarForSale?.profit ?? 0).toLocaleString()} (
+                {formatMoney(Math.round((selectedCarForSale?.profit ?? 0) * 100), { sign: true })} (
                 {selectedCarForSale?.profitPercent}%)
               </Text>
             </View>

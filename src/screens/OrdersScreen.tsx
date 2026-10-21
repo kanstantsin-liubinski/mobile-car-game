@@ -275,7 +275,7 @@ const ServiceDetails = ({ order }: { order: ServiceOrder }) => {
 const PickingDetails = ({ order }: { order: PickingOrder }) => (
   <>
     <Text style={styles.line}>
-      📋 Класс «{TIER_NAMES[order.tier]}», пробег до {order.maxMileage.toLocaleString('ru-RU')} км, общее состояние от{' '}
+      📋 {order.modelName ? `${order.modelName} (класс «${TIER_NAMES[order.tier]}»)` : `Класс «${TIER_NAMES[order.tier]}»`}, пробег до {order.maxMileage.toLocaleString('ru-RU')} км, общее состояние от{' '}
       {order.minOverall}%{order.minPaint !== null ? `, ЛКП от ${order.minPaint}%` : ''}
     </Text>
     <Text style={styles.line}>

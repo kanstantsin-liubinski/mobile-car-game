@@ -20,6 +20,7 @@ import * as P from './progression.ts';
 import * as B from './balance.ts';
 import * as O from './orders.ts';
 import { randomSeed } from './hotOffers.ts';
+import { pluralDays } from './format.ts';
 
 // ─── Константы ─────────────────────────────────────────────────────────────
 
@@ -28,21 +29,34 @@ export { DAY_MS, DAYS_IN_MONTH, MONTH_MS };
 export const LOAN_TERM_MONTHS = 6;
 export const HISTORY_MONTHS = 12;
 /**
- * Оклад механика ≈ 40% того, что он приносит за месяц при полной загрузке.
- * Механик чинит 0,05% состояния в секунду → 15 пунктов за месяц (300 сек).
- * На машинах класса «Эконом» (стартовый класс) +1% состояния в среднем добавляет
- * к цене ≈ $60 (оценка по генератору авторынка) → выработка ≈ $900/мес → оклад $360.
+ * Оклад механика ≈ 37,5% прироста стоимости, который он даёт за месяц при полной загрузке
+ * на машинах своего допуска (balance.ts: mechanicBaseSalaryCents). Эконом — $290.
  */
-export const MECHANIC_MONTHLY_SALARY_CENTS = 36_000;
+export const MECHANIC_MONTHLY_SALARY_CENTS = B.mechanicBaseSalaryCents(1);
 
-/** Оклад растёт вместе со скоростью механика: каждый уровень навыка +5% к выработке и к окладу */
-export type Profession = 'mechanic' | 'painter';
+/** Профессии сотрудников: механик и маляр работают руками, управляющий ведёт филиал */
+export type Profession = 'mechanic' | 'painter' | 'manager';
 
-export const baseSalaryCents = (profession: Profession = 'mechanic'): number =>
-  profession === 'painter' ? B.PAINTER_MONTHLY_SALARY_CENTS : MECHANIC_MONTHLY_SALARY_CENTS;
+/** Базовый оклад (1 уровень) по профессии и допуску к классу */
+export const baseSalaryCents = (profession: Profession = 'mechanic', clearance = 1): number =>
+  profession === 'manager'
+    ? B.MANAGER_BASE_SALARY_CENTS
+    : profession === 'painter'
+      ? B.painterBaseSalaryCents(clearance)
+      : B.mechanicBaseSalaryCents(clearance);
 
-export const salaryForLevel = (skillLevel: number, profession: Profession = 'mechanic'): number =>
-  Math.round(baseSalaryCents(profession) * P.skillMultiplier(skillLevel));
+/**
+ * Оклад растёт вместе с производительностью: механик и маляр +5% за уровень навыка (как скорость),
+ * управляющий — B.MANAGER_SALARY_STEP за уровень.
+ */
+export const salaryForLevel = (skillLevel: number, profession: Profession = 'mechanic', clearance = 1): number =>
+  Math.round(
+    baseSalaryCents(profession, clearance) *
+      (profession === 'manager' ? 1 + B.MANAGER_SALARY_STEP * (skillLevel - 1) : P.skillMultiplier(skillLevel)),
+  );
+
+/** Оклад по текущему контракту: профессия, уровень и допуск */
+export const contractSalary = (c: Contract): number => salaryForLevel(c.skill.level, c.profession, c.clearance ?? 1);
 /** Сколько последних операций помнить для защиты от повторного применения */
 const PROCESSED_OPS_LIMIT = 1000;
 /** Минимальное время наблюдения, после которого показываем советы об эффективности */
@@ -82,8 +96,12 @@ export interface Contract {
   levelChangedAtMs: number;
   /** Контракт из сохранения до системы навыков: уровень возьмётся из старых данных механика */
   legacySkillPending?: boolean;
-  /** Профессия: механик (по умолчанию) или маляр. Навык, курсы и оклад — по профессии */
+  /** Профессия: механик (по умолчанию), маляр или управляющий. Навык, курсы и оклад — по профессии */
   profession?: Profession;
+  /** Допуск к классам машин 1–6 (механик, маляр): выше допуска — работа вдвое медленнее. По умолчанию 1 */
+  clearance?: number;
+  /** Филиал, к которому прикреплён сотрудник (нет — основной гараж) */
+  branchId?: string;
 }
 
 /** Непроданная машина по себестоимости */
@@ -354,7 +372,7 @@ export const startContract = (
   profession: Profession = 'mechanic',
 ): EconomyState => {
   if (s.contracts[mechanicId]) return s;
-  monthlyCents = monthlyCents ?? salaryForLevel(1, profession);
+  monthlyCents = monthlyCents ?? salaryForLevel(1, profession, 1);
   const contract: Contract = {
     profession,
     mechanicId,
@@ -377,7 +395,7 @@ export const startContract = (
 export const syncSalariesWithSkill = (s: EconomyState, now: number): EconomyState => {
   let state = s;
   for (const c of Object.values(s.contracts)) {
-    const target = salaryForLevel(c.skill.level, c.profession);
+    const target = contractSalary(c);
     if (c.monthlyCents !== target) state = changeSalary(state, c.mechanicId, target, now);
   }
   return state;
@@ -422,7 +440,7 @@ export const syncWorkerSkill = (s: EconomyState, mechanicId: string, until: numb
     skill = { ...skill, level: skill.level + 1, practice: Math.max(0, overshoot) };
     t = crossAt;
     levelChangedAtMs = crossAt;
-    monthlyCents = salaryForLevel(skill.level, c.profession);
+    monthlyCents = salaryForLevel(skill.level, c.profession, c.clearance ?? 1);
     segments = [
       ...segments.map((seg) => (seg.toMs === null ? { ...seg, toMs: crossAt } : seg)),
       { monthlyCents, fromMs: crossAt, toMs: null },
@@ -463,6 +481,31 @@ export const setMechanicBusy = (s: EconomyState, mechanicId: string, busy: boole
 
 /** Скорость автоматического ремонта механика: ×(1 + 5% за уровень) */
 export const workerSpeedMultiplier = (c: Contract | undefined): number => P.skillMultiplier(c?.skill.level ?? 1);
+
+/** Работа с машиной класса выше допуска сотрудника — медленнее (B.NO_CLEARANCE_SPEED) */
+export const clearanceSpeedFactor = (c: Contract | undefined, carTier: number | undefined): number =>
+  carTier !== undefined && carTier > (c?.clearance ?? 1) ? B.NO_CLEARANCE_SPEED : 1;
+
+export const clearanceUpgradeCostCents = (c: Contract): number =>
+  (c.clearance ?? 1) >= 6
+    ? 0
+    : B.CLEARANCE_UPGRADE_SALARIES * baseSalaryCents(c.profession, (c.clearance ?? 1) + 1);
+
+/**
+ * Повышение допуска сотрудника на один класс: разовая плата (расход «Обучение»), оклад растёт
+ * с этого момента. Уже начисленная зарплата не пересчитывается.
+ */
+export const upgradeClearance = (s: EconomyState, id: string, now: number): OpResult => {
+  const synced = syncWorkerSkill(s, id, now);
+  const c = synced.contracts[id];
+  if (!c || c.profession === 'manager' || (c.clearance ?? 1) >= 6) return { state: s, ok: false };
+  const cost = clearanceUpgradeCostCents(c);
+  const paid = spendOtherExpense(synced, cost);
+  if (!paid.ok) return { state: s, ok: false };
+  const updated: Contract = { ...c, clearance: (c.clearance ?? 1) + 1 };
+  const state = { ...paid.state, contracts: { ...paid.state.contracts, [id]: updated } };
+  return { ok: true, state: changeSalary(state, id, contractSalary(updated), now) };
+};
 
 export const recordMechanicJob = (s: EconomyState, mechanicId: string): EconomyState => {
   const c = s.contracts[mechanicId];
@@ -591,6 +634,23 @@ export const spendOnCar = (s: EconomyState, carId: string, cents: number, opId?:
   if (!res.ok || isProcessed(s, opId)) return res;
   const updated = { ...asset, extraCostsCents: asset.extraCostsCents + cents };
   return { ...res, state: { ...res.state, assets: { ...res.state.assets, [carId]: updated } } };
+};
+
+/** Возврат части затрат на машину (неиспользованные детали остановленного ремонта) — себестоимость уменьшается */
+export const refundOnCar = (s: EconomyState, carId: string, cents: number, opId?: string): EconomyState => {
+  const asset = s.assets[carId];
+  if (!asset || cents <= 0 || isProcessed(s, opId) || s.bankruptcy) return s;
+  const back = Math.min(cents, asset.extraCostsCents);
+  if (back <= 0) return s;
+  return withProcessed(
+    {
+      ...s,
+      balanceCents: s.balanceCents + back,
+      ledger: { ...s.ledger, carExtraCostsCents: s.ledger.carExtraCostsCents - back },
+      assets: { ...s.assets, [carId]: { ...asset, extraCostsCents: asset.extraCostsCents - back } },
+    },
+    opId,
+  );
 };
 
 export const assetCostCents = (a: Asset): number => a.purchaseCents + a.extraCostsCents;
@@ -776,7 +836,7 @@ export const buyWorkerCourse = (s: EconomyState, mechanicId: string, now: number
       },
     },
   };
-  if (skill.level !== c.skill.level) state = changeSalary(state, mechanicId, salaryForLevel(skill.level, c.profession), now);
+  if (skill.level !== c.skill.level) state = changeSalary(state, mechanicId, salaryForLevel(skill.level, c.profession, c.clearance ?? 1), now);
   return { state, ok: true };
 };
 
@@ -1085,15 +1145,15 @@ export const buildAdvice = (s: EconomyState, input: AdviceInput): Advice[] => {
 
   if (cal.msToPayday <= 60_000 && cal.msToPayday > 0) {
     const projected = projectedPayrollCents(s);
-    const seconds = Math.ceil(cal.msToPayday / 1000);
+    const days = pluralDays(Math.ceil(cal.msToPayday / DAY_MS));
     if (projected > s.balanceCents) {
       advice.push({
         id: 'payday-short',
         level: 'danger',
-        text: `До зарплатного дня ${seconds} сек. Не хватает ${money(projected - s.balanceCents)} — недостающее покроет кредит.`,
+        text: `До зарплатного дня ${days}. Не хватает ${money(projected - s.balanceCents)} — недостающее покроет кредит.`,
       });
     } else if (projected > 0) {
-      advice.push({ id: 'payday-soon', level: 'info', text: `До зарплатного дня ${seconds} сек. Денег на выплату хватает.` });
+      advice.push({ id: 'payday-soon', level: 'info', text: `До зарплатного дня ${days}. Денег на выплату хватает.` });
     }
   }
 

@@ -11,6 +11,9 @@
  * Все значения ниже — стартовые, их можно калибровать без поиска по проекту.
  */
 
+/** Текущий год игры: от него считаются возраст машин, износ и годы выпуска на рынке */
+export const GAME_YEAR = 2026;
+
 // ─── Состояние машины и ЛКП ────────────────────────────────────────────────
 
 /** Доля технического состояния и ЛКП в общем состоянии (сумма = 1) */
@@ -91,10 +94,11 @@ export const MAX_SELL_DAYS_INFO = 30;
  * Цены покраски считаются от прироста стоимости конкретной машины, поэтому одинаково
  * работают во всех классах. Пункт ЛКП стоит 0,2 пункта общего состояния.
  * - Сторонний сервис берёт 80% прироста стоимости: покраска в сервисе выгодна, но мало.
- * - Своя камера: материалы 30% прироста, работа своя (тапы) или маляра.
+ * - Своя камера: материалы 15% прироста, работа своя (тапы) или маляра. Симулятор: на Премиуме камера
+ *   с маляром окупается за ≈12 покрасок, если красить самому — за ≈7.
  */
 export const SERVICE_PAINT_SHARE = 0.8;
-export const OWN_PAINT_MATERIALS_SHARE = 0.3;
+export const OWN_PAINT_MATERIALS_SHARE = 0.15;
 /** Сторонняя покраска: 2 дня + 1 день на каждые 15 п. ЛКП */
 export const SERVICE_PAINT_BASE_DAYS = 2;
 export const SERVICE_PAINT_POINTS_PER_DAY = 15;
@@ -102,19 +106,7 @@ export const SERVICE_PAINT_POINTS_PER_DAY = 15;
 export const PLAYER_PAINT_PER_TAP = 0.5;
 /** Маляр: п. ЛКП в секунду игрового времени (×навык маляра) = 2,5 п. в игровой день */
 export const PAINTER_SPEED_PER_SEC = 0.25;
-/**
- * Оклад маляра ≈ 40% чистого вклада при полной загрузке.
- * 0,25 п./сек → 75 п. ЛКП за месяц. Камера открывается на 5 уровне вместе со «Средним» классом:
- * пункт ЛКП там ≈ 0,2 × $125 ≈ $25, минус 30% материалов ≈ $17,5 → ≈ $1 300 в месяц → оклад ≈ $500.
- * На Экономе вклад ≈ $570, поэтому маляр выгоден прежде всего на машинах дороже.
- */
-export const PAINTER_MONTHLY_SALARY_CENTS = 50_000;
 
-/**
- * Камера окупается за 10–15 хороших покрасок: на «Среднем» классе типичная покраска
- * ≈ 48 п. ЛКП ≈ $1 300 прироста; своя камера экономит против сервиса ≈ 50% прироста ≈ $650
- * → 12 покрасок ≈ $8 000.
- */
 
 // ─── Оборудование ──────────────────────────────────────────────────────────
 
@@ -298,20 +290,61 @@ export const maxBoardService = (reputation: number): number => 3 + Math.floor(re
 export const maxBoardPicking = (reputation: number): number => 1 + Math.floor(repShare(reputation) * 2);
 
 /**
- * Оплата работы по заказу растёт с репутацией сервиса (ступенями) и общим уровнем игрока:
- *   множитель = ступень репутации × (1 + 0,015 × min(уровень − 1, 20))
- * Ступени репутации: 0–249 — ×1; 250–499 — ×1,25; 500–749 — ×1,75; 750–999 — ×2; 1000 — ×2,5.
- * Уровень: +1,5% за уровень, до +30% к 21-му. Применяется к работе, детали клиент возмещает по себестоимости.
+ * Оплата работы по заказу умеренно растёт с репутацией (ступенями) и общим уровнем игрока:
+ *   множитель = ступень репутации × (1 + 0,0015 × min(уровень − 1, 100))
+ * Ступени: 0–249 — ×1; 250–499 — ×1,075; 500–749 — ×1,15; 750–999 — ×1,225; 1000 — ×1,30.
+ * Уровень: до +15% к 101-му. Главный эффект репутации — больше и чаще заказов, а не цена той же работы.
  */
 export const REPUTATION_PAY_STEPS: { from: number; mult: number }[] = [
   { from: 0, mult: 1 },
-  { from: 250, mult: 1.25 },
-  { from: 500, mult: 1.75 },
-  { from: 750, mult: 2 },
-  { from: 1000, mult: 2.5 },
+  { from: 250, mult: 1.075 },
+  { from: 500, mult: 1.15 },
+  { from: 750, mult: 1.225 },
+  { from: 1000, mult: 1.3 },
 ];
 export const orderReputationFactor = (reputation: number): number =>
   REPUTATION_PAY_STEPS.reduce((m, step) => (reputation >= step.from ? step.mult : m), 1);
-export const orderLevelFactor = (playerLevel: number): number => 1 + 0.015 * Math.min(Math.max(0, playerLevel - 1), 20);
+export const ORDER_LEVEL_BONUS_PER_LEVEL = 0.0015;
+export const ORDER_LEVEL_BONUS_MAX_LEVELS = 100;
+export const orderLevelFactor = (playerLevel: number): number =>
+  1 + ORDER_LEVEL_BONUS_PER_LEVEL * Math.min(Math.max(0, playerLevel - 1), ORDER_LEVEL_BONUS_MAX_LEVELS);
 export const orderRewardMultiplier = (playerLevel: number, reputation: number): number =>
   orderReputationFactor(reputation) * orderLevelFactor(playerLevel);
+
+// ─── Персонал: квалификация (допуск к классам) и оклады ────────────────────
+
+/** Цена пункта общего состояния типичной подержанной машины класса, $ */
+export const tierPointValue = (tier: number): number => ((TIER_AVG_BASE[tier] ?? TIER_AVG_BASE[1]) * TYPICAL_USED_FACTOR) / 100;
+
+/** Доля потенциального прироста стоимости (до деталей), которую сотрудник получает окладом при полной загрузке */
+export const STAFF_SALARY_SHARE = 0.375;
+/** Выработка за месяц при полной загрузке, пункты общего состояния: механик 15 п. техники × 0,8, маляр 75 п. ЛКП × 0,2 */
+export const MECHANIC_OVERALL_POINTS_PER_MONTH = 15 * TECH_WEIGHT;
+export const PAINTER_OVERALL_POINTS_PER_MONTH = 75 * PAINT_WEIGHT;
+
+const roundTo10Dollars = (dollars: number) => Math.max(10, Math.round(dollars / 10) * 10) * 100;
+
+/**
+ * Базовый оклад (1 уровень навыка) по допуску к классу — ≈37,5% прироста стоимости, который
+ * сотрудник даёт за месяц на машинах этого класса. Эконом: механик $290, маляр $360.
+ */
+export const mechanicBaseSalaryCents = (clearance: number): number =>
+  roundTo10Dollars(STAFF_SALARY_SHARE * MECHANIC_OVERALL_POINTS_PER_MONTH * tierPointValue(clearance));
+export const painterBaseSalaryCents = (clearance: number): number =>
+  roundTo10Dollars(STAFF_SALARY_SHARE * PAINTER_OVERALL_POINTS_PER_MONTH * tierPointValue(clearance));
+
+/** Повышение допуска до класса — разовая плата: два базовых оклада нового класса */
+export const CLEARANCE_UPGRADE_SALARIES = 2;
+/** Работа с машиной класса выше допуска — вдвое медленнее (и без доплаты) */
+export const NO_CLEARANCE_SPEED = 0.5;
+
+export const PAINTER_MONTHLY_SALARY_CENTS = painterBaseSalaryCents(1);
+
+/** Управляющий филиалом: базовый оклад и прибавка за уровень (уточняется симулятором) */
+export const MANAGER_BASE_SALARY_CENTS = 26_000;
+export const MANAGER_SALARY_STEP = 0.03;
+
+// ─── Детали при ремонте своих машин ────────────────────────────────────────
+
+/** Детали стоят 30% прироста рыночной стоимости от технического ремонта; платятся за фактически сделанную работу */
+export const OWN_REPAIR_PARTS_SHARE = 0.3;

@@ -1,3 +1,4 @@
+import { formatMoney } from '../../economy/format';
 import { useEffect } from 'react';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useMarketContext } from '@hooks/MarketContext';
@@ -30,7 +31,7 @@ export const HotOfferNotifier = ({ onOpen }: { onOpen: (marketId: string, tier: 
     const { car } = hotOffer.listing;
     showToast({
       title: '🔥 Горящее предложение',
-      message: `${getMarketById(hotOffer.marketId)?.name ?? 'Авторынок'}: ${car.name} за $${hotOffer.price.toLocaleString()} вместо $${hotOffer.normalPrice.toLocaleString()} (−${Math.round(hotOffer.discount * 100)}%). Нажмите, чтобы посмотреть.`,
+      message: `${getMarketById(hotOffer.marketId)?.name ?? 'Авторынок'}: ${car.name} за ${formatMoney(hotOffer.price * 100)} вместо ${formatMoney(hotOffer.normalPrice * 100)} (−${Math.round(hotOffer.discount * 100)}%). Нажмите, чтобы посмотреть.`,
       icon: TIER_ICONS[hotOffer.tier],
       tone: 'hot',
       onPress: () => onOpen(hotOffer.marketId, hotOffer.tier),

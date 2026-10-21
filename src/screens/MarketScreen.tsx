@@ -1,3 +1,4 @@
+import { formatMoney } from '../economy/format';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
@@ -117,8 +118,8 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
             />
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={[marketStyles.carPrice, hot && { color: HOT_COLOR }]}>${finalPrice.toLocaleString()}</Text>
-            {hot && <Text style={styles.normalPrice}>${hot.normalPrice.toLocaleString()}</Text>}
+            <Text style={[marketStyles.carPrice, hot && { color: HOT_COLOR }]}>{formatMoney(finalPrice * 100)}</Text>
+            {hot && <Text style={styles.normalPrice}>{formatMoney(hot.normalPrice * 100)}</Text>}
             {tradeLevel > 1 && (
               <Text style={styles.tradeNote}>
                 Торговля −{(tradePurchaseBonus(tradeLevel) * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%
@@ -129,7 +130,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
 
         {hot && (
           <Text style={styles.hotNote}>
-            Обычная цена ${hot.normalPrice.toLocaleString()} — экономия ${(hot.normalPrice - hot.price).toLocaleString()}
+            Обычная цена {formatMoney(hot.normalPrice * 100)} — экономия {formatMoney((hot.normalPrice - hot.price) * 100)}
           </Text>
         )}
 

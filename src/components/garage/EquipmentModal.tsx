@@ -12,6 +12,7 @@ import { useToast } from '@components/toast/ToastContext';
 import { GameIcon } from '@components/GameIcon';
 import { SheetFooter, SheetHeader, SheetScroll } from '@components/SheetHeader';
 import { ActionTiles } from '@components/ActionTiles';
+import { clearanceName, clearanceTile } from './clearanceTile';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { EQUIPMENT, PAINTER_MONTHLY_SALARY_CENTS, type EquipmentId } from '../../economy/balance';
 import { equipmentBlock, hasEquipment } from '../../economy/economy';
@@ -151,7 +152,7 @@ export const PainterModal = ({
   /** Вложенные окна (навык, увольнение) — рисуются слоем внутри этого окна */
   children?: React.ReactNode;
 }) => {
-  const { state } = useEconomy();
+  const { state, upgradeClearance } = useEconomy();
   const { painters, hirePainter, boothSlot, painterRun } = useGarageContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
@@ -171,7 +172,7 @@ export const PainterModal = ({
                     <Text style={styles.name}>{p.name}</Text>
                     <Text style={styles.desc}>
                       {p.hired
-                        ? `Уровень ${p.skillLevel} · скорость +${Math.round((skillMultiplier(p.skillLevel) - 1) * 100)}% · оклад ${formatMoney(contract?.monthlyCents ?? PAINTER_MONTHLY_SALARY_CENTS)}/мес`
+                        ? `Уровень ${p.skillLevel} · скорость +${Math.round((skillMultiplier(p.skillLevel) - 1) * 100)}% · допуск: ${clearanceName(contract?.clearance)} · оклад ${formatMoney(contract?.monthlyCents ?? PAINTER_MONTHLY_SALARY_CENTS)}/мес`
                         : 'Красит машины в камере автоматически. Зарплата идёт и в простое.'}
                     </Text>
                     {p.hired && (
@@ -195,6 +196,9 @@ export const PainterModal = ({
                             info: 'Уровень, практика и платный курс маляра. Практика копится только во время покраски; с уровнем растут скорость и оклад.',
                             onPress: () => onTraining(p),
                           },
+                          ...[clearanceTile(contract, state.balanceCents, () => upgradeClearance(p.id))].filter(
+                            (t): t is NonNullable<typeof t> => t !== null,
+                          ),
                           {
                             key: 'fire',
                             emoji: '✕',

@@ -14,8 +14,9 @@ import { ActionTiles, type TileSpec } from '@components/ActionTiles';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { formatMoney, formatGameDays, pluralDays } from '../../economy/format';
 import { DAY_MS } from '../../economy/time';
-import { MAX_SELL_DAYS_INFO, PLAYER_PAINT_PER_TAP } from '../../economy/balance';
+import { MAX_SELL_DAYS_INFO, OWN_PAINT_MATERIALS_SHARE, OWN_REPAIR_PARTS_SHARE, PLAYER_PAINT_PER_TAP } from '../../economy/balance';
 import { overallCondition } from '../../economy/carCondition';
+import { clearanceSpeedFactor } from '../../economy/economy';
 import { pickingMismatch, serviceDef } from '../../economy/orders';
 import type { GarageCar, Mechanic } from '@/types';
 
@@ -209,6 +210,44 @@ interface CarActionsProps {
 
 type PaintConfirm = { kind: 'service' | 'booth' } | null;
 
+/** Перестановка машины в свободный слот гаража */
+const MoveCarModal = ({ car, visible, onClose }: { car: GarageCar; visible: boolean; onClose: () => void }) => {
+  const { garage, garageSlots, boothSlot, changeCarSlot } = useGarageContext();
+  const nativeInsets = useSafeAreaInsets();
+  const webInsets = useSafeAreaWeb();
+  const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
+  return (
+    <SheetModal visible={visible} onRequestClose={onClose}>
+      <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12 }]}>
+        <SheetHeader title="Переставить машину" onClose={onClose} />
+        <Text style={styles.confirmLine}>
+          {car.name} сейчас в слоте {car.slotIndex + 1}. Выберите свободный слот:
+        </Text>
+        <View style={styles.moveSlots}>
+          {Array.from({ length: garageSlots }).map((_, i) => {
+            const occupied = garage.some((c) => c.slotIndex === i && c.id !== car.id);
+            const current = car.slotIndex === i;
+            const isBooth = i === boothSlot;
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[styles.moveSlot, current && styles.moveSlotCurrent, occupied && styles.tileDisabled]}
+                disabled={occupied || current}
+                onPress={() => {
+                  if (changeCarSlot(car.id, i)) onClose();
+                }}
+              >
+                <Text style={styles.moveSlotText}>{isBooth ? '🎨' : i + 1}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.text}>🎨 — покрасочная камера: там можно красить, но нельзя ремонтировать.</Text>
+      </View>
+    </SheetModal>
+  );
+};
+
 const STOP = '#EF4444';
 const fmtNum = (v: number, digits = 3) => v.toLocaleString('ru-RU', { maximumFractionDigits: digits });
 
@@ -239,6 +278,8 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
   } = useGarageContext();
   const { state, paintTapMultiplier } = useEconomy();
   const [confirm, setConfirm] = useState<PaintConfirm>(null);
+  const [moving, setMoving] = useState(false);
+  const { garage, garageSlots } = useGarageContext();
 
   const isClient = !!car.clientOrderId;
   const inBooth = boothSlot !== null && car.slotIndex === boothSlot;
@@ -251,6 +292,8 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
   const busy = carBusyReason(car.id);
   const hiredPainter = painters.find((p) => p.hired);
   const tiles: TileSpec[] = [];
+  const mechanicContract = mechanic ? state.contracts[mechanic.id] : undefined;
+  const slowMechanic = !!mechanic && clearanceSpeedFactor(mechanicContract, car.tier) < 1;
 
   // Машина на продаже: единственное действие — снять с продажи
   if (selling) {
@@ -274,7 +317,9 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         subtitle: atMax ? `Максимум ${car.maxCondition}%` : repairing ? 'Чинит механик' : `+${fmtNum(tapRepairPercent)}% за тап`,
         state: atMax ? 'done' : repairing ? 'locked' : 'ready',
         accent: ACTION_COLORS.repair,
-        info: `Ручной ремонт: каждый тап добавляет ${fmtNum(tapRepairPercent)}% технического состояния, до максимума ${car.maxCondition}%. Тап даёт 1 практику навыка «Механик»${
+        info: `Ручной ремонт: каждый тап добавляет ${fmtNum(tapRepairPercent)}% технического состояния, до максимума ${car.maxCondition}%.${
+          isClient ? '' : ` За свою машину платите детали — ${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста её стоимости от тапа.`
+        } Тап даёт 1 практику навыка «Механик»${
           isClient ? '.' : ', а первое полное восстановление своей машины — бонус XP.'
         }`,
         onPress: onRepair,
@@ -296,11 +341,13 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
           key: 'mechanic',
           icon: mechanic ? getMechanicAvatar(mechanic.id) : ICONS.hireMechanic,
           title: 'Механику',
-          subtitle: mechanic ? mechanic.name : 'нет на слоте',
+          subtitle: mechanic ? (slowMechanic ? `${mechanic.name} · ×0,5, нет допуска` : mechanic.name) : 'нет на слоте',
           state: mechanic ? 'ready' : 'locked',
           accent: ACTION_COLORS.mechanic,
           info: mechanic
-            ? `${mechanic.name} сам отремонтирует машину до ${car.maxCondition}%. Пока работает, копит практику; зарплата идёт и в простое.`
+            ? `${mechanic.name} сам отремонтирует машину до ${car.maxCondition}%. Детали (${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста стоимости) оплачиваются сразу, неиспользованное вернётся при остановке.${
+                slowMechanic ? ' У механика нет допуска к этому классу — он работает вдвое медленнее; повысьте допуск в окне «Механики».' : ''
+              }`
             : 'Наймите механика и прикрепите его к этому слоту: гараж → «Механики». Он будет ремонтировать сам, пока вы заняты другим.',
           onPress: onMechanic,
         });
@@ -365,7 +412,7 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         subtitle: done ? 'ЛКП 100%' : cost > 0 ? `материалы ${formatMoney(cost)}` : 'материалы оплачены',
         state: done ? 'done' : busy || state.balanceCents < cost ? 'locked' : 'ready',
         accent: ACTION_COLORS.paint,
-        info: `Покраска в своей камере до ${quote?.target ?? 100}%: материалы — 30% прироста стоимости, они входят в себестоимость машины. Красите тапами сами или нанятый маляр.`,
+        info: `Покраска в своей камере до ${quote?.target ?? 100}%: материалы — ${Math.round(OWN_PAINT_MATERIALS_SHARE * 100)}% прироста стоимости, они входят в себестоимость машины. Красите тапами сами или нанятый маляр.`,
         onPress: () => setConfirm({ kind: 'booth' }),
       });
     } else if (!isClient) {
@@ -386,6 +433,21 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         accent: ACTION_COLORS.paint,
         info: 'Сторонний сервис покрасит до 100%: цена — 80% прироста стоимости, срок 2 дня + 1 день на каждые 15 п. ЛКП. Машина в это время занята. Затраты входят в себестоимость. Своя покрасочная камера — дешевле (гараж → «Оборудование»).',
         onPress: () => setConfirm({ kind: 'service' }),
+      });
+    }
+
+    // ─ Перестановка в другой свободный слот
+    const freeSlots = Array.from({ length: garageSlots }).filter((_, i) => !garage.some((c) => c.slotIndex === i)).length;
+    if (!isClient && freeSlots > 0) {
+      tiles.push({
+        key: 'move',
+        emoji: '↔️',
+        title: 'Переставить',
+        subtitle: busy && !selling ? 'машина занята' : `свободно: ${freeSlots}`,
+        state: (busy && !selling) || repairing ? 'locked' : 'ready',
+        accent: colors.textTertiary,
+        info: 'Переставить машину в свободный слот гаража — например, в покрасочную камеру или к другому механику. Во время ремонта и покраски переставить нельзя.',
+        onPress: () => setMoving(true),
       });
     }
 
@@ -428,6 +490,7 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
     <>
       <ActionTiles tiles={tiles} />
       <PaintConfirmModal car={car} confirm={confirm} onClose={() => setConfirm(null)} />
+      <MoveCarModal car={car} visible={moving} onClose={() => setMoving(false)} />
     </>
   );
 };
@@ -528,5 +591,18 @@ const styles = StyleSheet.create({
   tileSub: { fontSize: 11, fontWeight: '600', color: 'rgba(255, 255, 255, 0.85)' },
   note: { fontSize: 12, color: '#F59E0B', fontWeight: '600', marginTop: 6 },
   confirmBox: { gap: 6, marginBottom: 14 },
+  moveSlots: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 12 },
+  moveSlot: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moveSlotCurrent: { borderColor: colors.primary, backgroundColor: 'rgba(99, 102, 241, 0.25)' },
+  moveSlotText: { fontSize: 18, fontWeight: '800', color: colors.textPrimary },
   confirmLine: { fontSize: 14, color: colors.textPrimary, lineHeight: 20 },
 });

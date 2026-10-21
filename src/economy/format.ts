@@ -1,10 +1,14 @@
-/** Деньги из центов: «$1 234», «−$500», с флагом sign — «+$300». Центы показываются, только если они есть. */
+/**
+ * Деньги из центов — единый формат во всей игре: «$1 234», «−$500», с флагом sign — «+$300».
+ * От $100 — целые доллары (округление); меньше — с центами, если они есть («$0,14», «$12,50»).
+ */
 export const formatMoney = (cents: number, options: { sign?: boolean } = {}): string => {
   const abs = Math.abs(cents);
-  const hasCents = abs % 100 !== 0;
-  const text = (abs / 100).toLocaleString('ru-RU', {
+  const small = abs < 10_000;
+  const hasCents = small && abs % 100 !== 0;
+  const text = (small ? abs / 100 : Math.round(abs / 100)).toLocaleString('ru-RU', {
     minimumFractionDigits: hasCents ? 2 : 0,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: hasCents ? 2 : 0,
   });
   const sign = cents < 0 ? '−' : options.sign && cents > 0 ? '+' : '';
   return `${sign}$${text}`;

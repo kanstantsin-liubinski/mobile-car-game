@@ -10,10 +10,17 @@ import { getCarTier } from '@components/CarImage';
 import { ICONS, TIER_ICONS, getMechanicAvatar } from '@img/gameIcons';
 
 const ICONS_PAINT = ICONS.repair;
-import { assetCostCents, hasEquipment, repairToolsMultiplier, toCents, workerSpeedMultiplier } from '../economy/economy';
+import {
+  assetCostCents,
+  clearanceSpeedFactor,
+  hasEquipment,
+  repairToolsMultiplier,
+  toCents,
+  workerSpeedMultiplier,
+} from '../economy/economy';
 import { saleXp } from '../economy/progression';
 import { formatMoney } from '../economy/format';
-import { overallCondition, paintValueGain } from '../economy/carCondition';
+import { carValue, overallCondition, paintValueGain } from '../economy/carCondition';
 import * as BAL from '../economy/balance';
 import { DAY_MS } from '../economy/time';
 import type { ServiceOrder } from '../economy/orders';
@@ -31,6 +38,12 @@ export interface MechanicRepairInfo {
   skillLevel?: number;
   /** Множитель инструментов, с которым считается скорость */
   toolsMult?: number;
+  /** Детали, оплаченные за весь запланированный ремонт (своя машина) */
+  partsCents?: number;
+  /** С какого состояния считался план деталей — для возврата неиспользованного при остановке */
+  partsFromCondition?: number;
+  /** Множитель допуска (вдвое медленнее, если класс машины выше допуска механика) */
+  clearanceMult?: number;
 }
 
 /** Покраска своей машины в стороннем сервисе: машина занята, по окончании ЛКП = цель */
@@ -87,6 +100,13 @@ const MECHANIC_NAMES = [
   'Валентин',
 ];
 
+/** Детали за технический ремонт своей машины с from до to: доля прироста её рыночной стоимости, в центах */
+const repairPartsCents = (car: GarageCar, from: number, to: number): number => {
+  if (to <= from) return 0;
+  const gain = carValue(car.basePrice, { ...car, condition: to }) - carValue(car.basePrice, { ...car, condition: from });
+  return Math.max(1, Math.round(gain * BAL.OWN_REPAIR_PARTS_SHARE * 100));
+};
+
 const paintAt = (run: PainterRun, target: number, now: number): number =>
   Math.min(target, Math.round((run.startPaint + (Math.max(0, now - run.startedAtMs) / 1000) * run.speedPerSec) * 100) / 100);
 
@@ -120,6 +140,7 @@ export const useGarage = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const reconciledRef = useRef(false);
+  const partsWarnAt = useRef(0);
 
   // Ремонты и продажи хранятся вместе с гаражом и продолжаются после перезапуска
   const [mechanicRepairs, setMechanicRepairs] = useState<Record<string, MechanicRepairInfo>>({});
@@ -421,6 +442,18 @@ export const useGarage = () => {
       Math.round(car.maxCondition * 1000) / 1000,
       Math.round((car.condition + repairAmount) * 1000) / 1000,
     );
+    // Детали за свою машину: OWN_REPAIR_PARTS_SHARE прироста стоимости от этого тапа; нет денег — тап не выполняется
+    if (!car.clientOrderId && economy.state.assets[carId]) {
+      const parts = repairPartsCents(car, car.condition, newCondition);
+      if (!economy.payTapParts(carId, parts)) {
+        // Предупреждаем не чаще раза в 3 секунды, чтобы не засыпать тостами при быстрых тапах
+        if (Date.now() - partsWarnAt.current > 3000) {
+          partsWarnAt.current = Date.now();
+          showToast({ title: 'Не хватает денег на детали', message: 'Ремонт своей машины требует запчастей — пополните баланс.', icon: ICONS.repair });
+        }
+        return false;
+      }
+    }
     setGarage((prev) => prev.map((c) => (c.id === carId ? { ...c, condition: newCondition } : c)));
     economy.recordPlayerTap();
     if (newCondition >= car.maxCondition) {
@@ -429,7 +462,7 @@ export const useGarage = () => {
       else economy.awardFullRepair(carId);
     }
     return true;
-  }, [storedGarage, mechanicRepairs, activeSells, servicePaints, boothSlot, economy]);
+  }, [storedGarage, mechanicRepairs, activeSells, servicePaints, boothSlot, economy, showToast]);
 
   const getCar = useCallback((carId: string) => garage.find((car) => car.id === carId), [garage]);
 
@@ -504,7 +537,14 @@ export const useGarage = () => {
     const reached = repairConditionAt(repair, now);
     setGarage((prev) => prev.map((car) => (car.id === carId ? { ...car, condition: reached } : car)));
     setMechanicRepairs((prev) => without(prev, carId));
-  }, []);
+    // Неиспользованные детали возвращаются: оплачено только фактически сделанное
+    if (repair.partsCents && repair.partsFromCondition !== undefined) {
+      const planned = repair.maxCondition - repair.partsFromCondition;
+      const left = Math.max(0, repair.maxCondition - reached);
+      const refund = planned > 0 ? Math.floor((repair.partsCents * left) / planned) : 0;
+      if (refund > 0) economy.refundOnCar(carId, refund, `refund:${carId}:${repair.startedAtMs}:${repair.partsFromCondition}`);
+    }
+  }, [economy]);
 
   /**
    * Увольнение: расчёт (долг по зарплате + оклад) через экономику, затем механик
@@ -527,8 +567,9 @@ export const useGarage = () => {
   const changeCarSlot = useCallback((carId: string, newSlotIndex: number): boolean => {
     // Проверяем, что слот в допустимом диапазоне
     if (newSlotIndex !== -1 && (newSlotIndex < 0 || newSlotIndex >= garageSlots)) return false;
-    // Машину с начатой покраской из камеры не переставить, пока работа не отменена
-    if (boothJob?.carId === carId) return false;
+    // Машину с начатой покраской из камеры не переставить, пока работа не отменена;
+    // во время ремонта механиком и покраски в сервисе — тоже (механик привязан к слоту)
+    if (boothJob?.carId === carId || mechanicRepairs[carId] || servicePaints[carId]) return false;
 
     // Проверяем, что в целевом слоте нет другой машины
     if (newSlotIndex !== -1) {
@@ -545,7 +586,7 @@ export const useGarage = () => {
       })
     );
     return true;
-  }, [garage, garageSlots, boothJob]);
+  }, [garage, garageSlots, boothJob, mechanicRepairs, servicePaints]);
 
   // ─── Ремонт механиком ─────────────────────────────────────────────
   const startMechanicRepair = useCallback((carId: string, mechanicId: string) => {
@@ -555,9 +596,17 @@ export const useGarage = () => {
     const now = economy.getNow();
     const contract = economy.state.contracts[mechanicId];
     const toolsMult = repairToolsMultiplier(economy.state);
-    const speedPerSec = MECHANIC_REPAIR_SPEED * workerSpeedMultiplier(contract) * toolsMult;
+    const clearanceMult = clearanceSpeedFactor(contract, car.tier ?? getCarTier(car));
+    const speedPerSec = MECHANIC_REPAIR_SPEED * workerSpeedMultiplier(contract) * toolsMult * clearanceMult;
     const improvementNeeded = car.maxCondition - car.condition;
     const durationMs = Math.ceil((improvementNeeded / speedPerSec) * 1000);
+
+    // Детали на весь ремонт своей машины — сразу; при остановке неиспользованное вернётся. Нет денег — ремонт не начнётся
+    const partsCents = car.clientOrderId || !economy.state.assets[carId] ? 0 : repairPartsCents(car, car.condition, car.maxCondition);
+    if (partsCents > 0 && !economy.spendOnCar(carId, partsCents, `parts:${carId}:${now}`)) {
+      showToast({ title: 'Не хватает денег на детали', message: `Нужно ${formatMoney(partsCents)} на запчасти для ремонта.`, icon: ICONS.repair });
+      return;
+    }
 
     economy.setMechanicBusy(mechanicId, true, now);
     setMechanicRepairs((prev) => ({
@@ -571,9 +620,12 @@ export const useGarage = () => {
         speedPerSec,
         skillLevel: contract?.skill.level ?? 1,
         toolsMult,
+        clearanceMult,
+        partsCents,
+        partsFromCondition: car.condition,
       },
     }));
-  }, [storedGarage, mechanicRepairs, economy]);
+  }, [storedGarage, mechanicRepairs, economy, showToast]);
 
   const cancelMechanicRepair = useCallback((carId: string) => {
     const repair = mechanicRepairs[carId];
@@ -698,7 +750,7 @@ export const useGarage = () => {
       // Новый уровень — с момента повышения; новые инструменты — с текущего момента
       const at = levelChanged ? Math.min(gameTimeMs, Math.max(repair.startedAtMs, contract.levelChangedAtMs)) : gameTimeMs;
       const reached = repairConditionAt(repair, at);
-      const speedPerSec = MECHANIC_REPAIR_SPEED * workerSpeedMultiplier(contract) * toolsMult;
+      const speedPerSec = MECHANIC_REPAIR_SPEED * workerSpeedMultiplier(contract) * toolsMult * (repair.clearanceMult ?? 1);
       setMechanicRepairs((prev) =>
         prev[carId] === repair
           ? {
@@ -771,7 +823,7 @@ export const useGarage = () => {
   );
 
   // ─── Своя покрасочная камера ──────────────────────────────────────
-  /** Материалы для покраски в своей камере: 30% прироста стоимости (у клиента — уже оплачены деталями заказа) */
+  /** Материалы для покраски в своей камере: OWN_PAINT_MATERIALS_SHARE прироста стоимости (у клиента — уже оплачены деталями заказа) */
   const boothPaintQuote = useCallback(
     (carId: string) => {
       const car = storedGarage.find((c) => c.id === carId);
@@ -930,7 +982,7 @@ export const useGarage = () => {
       painterId: painter.id,
       startPaint: from,
       startedAtMs: now,
-      speedPerSec: BAL.PAINTER_SPEED_PER_SEC * workerSpeedMultiplier(contract),
+      speedPerSec: BAL.PAINTER_SPEED_PER_SEC * workerSpeedMultiplier(contract) * clearanceSpeedFactor(contract, car.tier ?? getCarTier(car)),
       skillLevel: contract.skill.level,
     });
   }, [isLoaded, isConfigLoaded, economy.isLoaded, painters, boothJob, painterRun, painterPaused, economy.state.contracts]);
@@ -939,13 +991,17 @@ export const useGarage = () => {
   useEffect(() => {
     if (!painterRun || !boothJob) return;
     const contract = economy.state.contracts[painterRun.painterId];
+    const paintedCar = storedGarage.find((c) => c.id === boothJob.carId);
     if (!contract || contract.skill.level === painterRun.skillLevel) return;
     const at = Math.min(gameTimeMs, Math.max(painterRun.startedAtMs, contract.levelChangedAtMs));
     setPainterRun({
       ...painterRun,
       startPaint: paintAt(painterRun, boothJob.targetPaint, at),
       startedAtMs: at,
-      speedPerSec: BAL.PAINTER_SPEED_PER_SEC * workerSpeedMultiplier(contract),
+      speedPerSec:
+        BAL.PAINTER_SPEED_PER_SEC *
+        workerSpeedMultiplier(contract) *
+        clearanceSpeedFactor(contract, paintedCar ? paintedCar.tier ?? getCarTier(paintedCar) : undefined),
       skillLevel: contract.skill.level,
     });
   }, [economy.state.contracts, painterRun, boothJob, gameTimeMs]);
@@ -1062,6 +1118,7 @@ export const useGarage = () => {
       if (!car) return null;
       return {
         tier: car.tier ?? getCarTier(car),
+        name: car.name,
         mileage: car.mileage,
         overall: overallCondition(car.condition, car.paintCondition),
         paintCondition: car.paintCondition ?? car.condition,
