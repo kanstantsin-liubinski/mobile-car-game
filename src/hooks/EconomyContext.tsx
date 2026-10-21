@@ -4,17 +4,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as E from '../economy/economy';
 import * as O from '../economy/orders';
 import * as Br from '../economy/branches';
+import * as A from '../economy/auctions';
 import { GARAGES } from '../data/cityBuildings';
 import { loadLegacy } from './LegacyContext';
 import type { EquipmentId } from '../economy/balance';
 import { calculateMaxCondition } from '../utils/priceCalculator';
 import { generateRandomListing, type Rng } from '../utils/marketGenerator';
-import { TIER_UNLOCK_LEVELS, TOTAL_TIERS } from '../data/carModels';
+
 import type { Car } from '@/types';
 
-/** Классы, открытые на этом уровне игрока */
-export const unlockedTiersFor = (level: number): number[] =>
-  Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).filter((t) => level >= (TIER_UNLOCK_LEVELS[t] ?? 0));
 
 /** Машина для заказа — обычный экземпляр из генератора авторынка */
 const sampleCar = (tier: number, rng: Rng): O.SampleCar => {
@@ -34,6 +32,9 @@ const sampleCar = (tier: number, rng: Rng): O.SampleCar => {
   };
 };
 
+/** Машина для лота аукциона — обычный экземпляр генератора авторынка */
+const auctionSample = (tier: number, rng: Rng): Car => generateRandomListing(tier, 0, [], rng).car;
+
 const GARAGE_NAMES: Record<string, string> = Object.fromEntries(GARAGES.map((g) => [g.id, g.name]));
 const garageInfo = (garageId: string): Br.GarageInfo | null => {
   const rank = GARAGES.findIndex((g) => g.id === garageId);
@@ -41,7 +42,7 @@ const garageInfo = (garageId: string): Br.GarageInfo | null => {
 };
 
 const ordersCtx = (s: E.EconomyState) => ({
-  unlockedTiers: unlockedTiersFor(s.player.xp.level),
+  unlockedTiers: E.unlockedTiers(s),
   playerLevel: s.player.xp.level,
   sampleCar,
 });
@@ -137,6 +138,10 @@ interface EconomyContextType {
   acceptBranchOrder: (garageId: string, orderId: string, slot: number) => boolean;
   deliverBranchJob: (garageId: string, slot: number) => boolean;
   cancelBranchJob: (garageId: string, slot: number) => boolean;
+  // ─── Аукцион ───
+  auctionBid: () => boolean;
+  /** Выкупить выигранный лот: деньги списываются, машину добавляет гараж */
+  claimAuctionLot: () => Car | null;
 }
 
 interface GameClockContextType {
@@ -273,6 +278,11 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Заказы: ежедневная проверка доски, истечение предложений, окончательные просрочки
       if (ordersDue(s, next)) {
         commit(E.advanceOrders(s, next, ordersCtx(s)));
+        return;
+      }
+      // Аукцион: окончание лота, срок выкупа, новый лот
+      if (A.auctionDue(s.auction, next, E.auctionEnabled(s))) {
+        commit(E.advanceAuction(s, next, auctionSample));
         return;
       }
       // Филиалы: доска, окончание работ, решения управляющего
@@ -471,6 +481,15 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
   const upgradeClearance = useCallback((workerId: string) => run((s, now) => E.upgradeClearance(s, workerId, now)), [run]);
 
+  // ─── Аукцион ──────────────────────────────────────────────────────
+  const auctionBid = useCallback(() => run((s, now) => E.auctionBid(s, now)), [run]);
+  const claimAuctionLot = useCallback(() => {
+    const lot = stateRef.current.auction.current;
+    if (!lot) return null;
+    const car = { ...lot.car, price: lot.currentCents / 100 };
+    return run((s, now) => E.claimAuctionLot(s, now)) ? car : null;
+  }, [run]);
+
   // ─── Филиалы ──────────────────────────────────────────────────────
   const openBranch = useCallback(
     (garageId: string, mainGarageId: string) => {
@@ -528,7 +547,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
   const acceptOrder = useCallback(
     (orderId: string) =>
-      run((s, now) => E.acceptOrder(s, orderId, now, unlockedTiersFor(s.player.xp.level))),
+      run((s, now) => E.acceptOrder(s, orderId, now, E.unlockedTiers(s))),
     [run],
   );
   const declineOffer = useCallback((orderId: string) => commit(E.declineOffer(stateRef.current, orderId)), [commit]);
@@ -615,7 +634,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       markOrderWorkDone,
       deliverServiceOrder,
       deliverPickingOrder,
-      unlockedTiers: unlockedTiersFor(state.player.xp.level),
+      unlockedTiers: E.unlockedTiers(state),
       openBranch,
       hireBranchStaff,
       fireBranchStaff,
@@ -626,6 +645,8 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       acceptBranchOrder,
       deliverBranchJob,
       cancelBranchJob,
+      auctionBid,
+      claimAuctionLot,
     }),
     [
       isLoaded,
@@ -685,6 +706,8 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       acceptBranchOrder,
       deliverBranchJob,
       cancelBranchJob,
+      auctionBid,
+      claimAuctionLot,
     ],
   );
 

@@ -14,9 +14,9 @@ import { ActionTiles, type TileSpec } from '@components/ActionTiles';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { formatMoney, formatGameDays, pluralDays } from '../../economy/format';
 import { DAY_MS } from '../../economy/time';
-import { MAX_SELL_DAYS_INFO, OWN_PAINT_MATERIALS_SHARE, OWN_REPAIR_PARTS_SHARE, PLAYER_PAINT_PER_TAP } from '../../economy/balance';
+import { MAX_SELL_DAYS_INFO, OWN_REPAIR_PARTS_SHARE, PLAYER_PAINT_PER_TAP } from '../../economy/balance';
 import { overallCondition } from '../../economy/carCondition';
-import { clearanceSpeedFactor } from '../../economy/economy';
+import { clearanceSpeedFactor, ownPaintMaterialsShare } from '../../economy/economy';
 import { pickingMismatch, serviceDef } from '../../economy/orders';
 import type { GarageCar, Mechanic } from '@/types';
 
@@ -212,7 +212,7 @@ type PaintConfirm = { kind: 'service' | 'booth' } | null;
 
 /** Перестановка машины в свободный слот гаража */
 const MoveCarModal = ({ car, visible, onClose }: { car: GarageCar; visible: boolean; onClose: () => void }) => {
-  const { garage, garageSlots, boothSlot, changeCarSlot } = useGarageContext();
+  const { garage, allSlots, isParkingSlot, slotLabel, boothSlot, changeCarSlot } = useGarageContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
@@ -221,11 +221,11 @@ const MoveCarModal = ({ car, visible, onClose }: { car: GarageCar; visible: bool
       <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12 }]}>
         <SheetHeader title="Переставить машину" onClose={onClose} />
         <Text style={styles.confirmLine}>
-          {car.name} сейчас в слоте {car.slotIndex + 1}. Выберите свободный слот:
+          {car.name} сейчас {isParkingSlot(car.slotIndex) ? 'на стоянке' : 'в слоте'} {slotLabel(car.slotIndex)}. Выберите свободное место:
         </Text>
         <View style={styles.moveSlots}>
-          {Array.from({ length: garageSlots }).map((_, i) => {
-            const occupied = garage.some((c) => c.slotIndex === i && c.id !== car.id);
+          {allSlots.map((i) => {
+            const occupied = garage.some((c) => c.slotIndex === i && c.id !== car.id) || (isParkingSlot(i) && !!car.clientOrderId);
             const current = car.slotIndex === i;
             const isBooth = i === boothSlot;
             return (
@@ -237,12 +237,14 @@ const MoveCarModal = ({ car, visible, onClose }: { car: GarageCar; visible: bool
                   if (changeCarSlot(car.id, i)) onClose();
                 }}
               >
-                <Text style={styles.moveSlotText}>{isBooth ? '🎨' : i + 1}</Text>
+                <Text style={styles.moveSlotText}>{isBooth ? '🎨' : slotLabel(i)}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
-        <Text style={styles.text}>🎨 — покрасочная камера: там можно красить, но нельзя ремонтировать.</Text>
+        <Text style={styles.text}>
+          🎨 — покрасочная камера: там можно красить, но нельзя ремонтировать.{allSlots.some(isParkingSlot) ? ' P — коммерческая стоянка: только хранение и продажа.' : ''}
+        </Text>
       </View>
     </SheetModal>
   );
@@ -279,10 +281,11 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
   const { state, paintTapMultiplier } = useEconomy();
   const [confirm, setConfirm] = useState<PaintConfirm>(null);
   const [moving, setMoving] = useState(false);
-  const { garage, garageSlots } = useGarageContext();
+  const { garage, allSlots, isParkingSlot, tuningQuote, tuneCar } = useGarageContext();
 
   const isClient = !!car.clientOrderId;
   const inBooth = boothSlot !== null && car.slotIndex === boothSlot;
+  const parked = isParkingSlot(car.slotIndex);
   const job = inBooth && boothJob?.carId === car.id ? boothJob : null;
   const servicePaint = servicePaints[car.id];
   const selling = activeSells[car.id];
@@ -308,8 +311,8 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
       onPress: () => cancelSell(car.id),
     });
   } else {
-    // ─ Технический ремонт: тапом и механиком (не в камере и не во время покраски в сервисе)
-    if (!inBooth && !servicePaint) {
+    // ─ Технический ремонт: тапом и механиком (не в камере, не на стоянке и не во время покраски в сервисе)
+    if (!inBooth && !servicePaint && !parked) {
       tiles.push({
         key: 'repair',
         icon: ICONS.repair,
@@ -412,10 +415,12 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         subtitle: done ? 'ЛКП 100%' : cost > 0 ? `материалы ${formatMoney(cost)}` : 'материалы оплачены',
         state: done ? 'done' : busy || state.balanceCents < cost ? 'locked' : 'ready',
         accent: ACTION_COLORS.paint,
-        info: `Покраска в своей камере до ${quote?.target ?? 100}%: материалы — ${Math.round(OWN_PAINT_MATERIALS_SHARE * 100)}% прироста стоимости, они входят в себестоимость машины. Красите тапами сами или нанятый маляр.`,
+        info: `Покраска в своей камере до ${quote?.target ?? 100}%: материалы — ${Math.round(ownPaintMaterialsShare(state) * 100)}% прироста стоимости${
+          state.equipment.owned.includes('paint_matching') ? ' (с компьютерным подбором краски)' : ''
+        }, они входят в себестоимость машины. Красите тапами сами или нанятый маляр.`,
         onPress: () => setConfirm({ kind: 'booth' }),
       });
-    } else if (!isClient) {
+    } else if (!isClient && !parked) {
       const quote = servicePaintQuote(car.id);
       const done = paint >= 100;
       tiles.push({
@@ -436,8 +441,27 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
       });
     }
 
-    // ─ Перестановка в другой свободный слот
-    const freeSlots = Array.from({ length: garageSlots }).filter((_, i) => !garage.some((c) => c.slotIndex === i)).length;
+    // ─ Тюнинг на диностенде: технический максимум выше (один раз на машину)
+    const tuning = tuningQuote(car.id);
+    if (!isClient && state.equipment.owned.includes('dyno') && (tuning || car.tuned)) {
+      tiles.push({
+        key: 'tune',
+        emoji: '🏎️',
+        title: 'Тюнинг',
+        subtitle: car.tuned ? 'сделан' : tuning ? `${formatMoney(tuning.costCents)} · макс ${fmtNum(tuning.to)}%` : '',
+        state: car.tuned ? 'done' : !tuning || busy || state.balanceCents < tuning.costCents ? 'locked' : 'ready',
+        accent: '#F97316',
+        info: tuning
+          ? `Диностенд: технический максимум ${fmtNum(tuning.from)}% → ${fmtNum(tuning.to)}%. Стоит ${formatMoney(
+              tuning.costCents,
+            )} (четверть будущего прироста стоимости), входит в себестоимость. Поднятые пункты ещё нужно отремонтировать (с деталями).`
+          : 'Тюнинг этой машины уже сделан.',
+        onPress: () => tuneCar(car.id),
+      });
+    }
+
+    // ─ Перестановка в другое свободное место (слот или стоянка)
+    const freeSlots = allSlots.filter((i) => !garage.some((c) => c.slotIndex === i) && !(isClient && isParkingSlot(i))).length;
     if (!isClient && freeSlots > 0) {
       tiles.push({
         key: 'move',

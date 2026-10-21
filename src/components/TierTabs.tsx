@@ -16,7 +16,7 @@ interface TierTabsProps {
 
 /** Горизонтальные вкладки классов авто (авторынок, автосалон) с замками по уровню */
 export const TierTabs = ({ selectedTier, onSelect, hotTier }: TierTabsProps) => {
-  const { isTierUnlocked } = useExperienceContext();
+  const { isTierUnlocked, level } = useExperienceContext();
 
   // Custom scrollbar state for tier tabs
   const [scrollIndicator, setScrollIndicator] = useState({ thumbWidth: 0, thumbLeft: 0, visible: false });
@@ -95,7 +95,11 @@ export const TierTabs = ({ selectedTier, onSelect, hotTier }: TierTabsProps) => 
                   !unlocked && { opacity: 0.4 },
                 ]}
               >
-                {unlocked ? `с ур. ${Math.max(1, TIER_UNLOCK_LEVELS[tier] ?? 1)}` : `🔒 Ур. ${TIER_UNLOCK_LEVELS[tier]}`}
+                {unlocked
+                  ? level >= (TIER_UNLOCK_LEVELS[tier] ?? 0)
+                    ? `с ур. ${Math.max(1, TIER_UNLOCK_LEVELS[tier] ?? 1)}`
+                    : 'открыт ранее'
+                  : `🔒 Ур. ${TIER_UNLOCK_LEVELS[tier]}`}
               </Text>
             </TouchableOpacity>
           );

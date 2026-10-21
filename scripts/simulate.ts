@@ -417,19 +417,25 @@ log('| Вариант | Ур. 5 | Ур. 12 | Ур. 20 | Ур. 50 | Ур. 100 | �
 log('|---|---:|---:|---:|---:|---:|---:|---:|---:|');
 const OLD_CURVE = (l: number) => 100 + 20 * (l - 1) + 4 * (l - 1) ** 2;
 const OLD = { garagePrices: [0, 25_000, 75_000, 200_000], garageLevels: [0, 2, 5, 10], tierLevels: { 1: 0, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25 }, xpCurve: OLD_CURVE };
-const LADDER_TIERS = { 1: 0, 2: 8, 3: 20, 4: 35, 5: 55, 6: 75 };
-const LADDER_GARAGES = [0, 5, 20, 50];
-const NEW = { garagePrices: GARAGES.map((g) => g.price), garageLevels: LADDER_GARAGES, tierLevels: LADDER_TIERS };
+const NEW = { garagePrices: GARAGES.map((g) => g.price), garageLevels: GARAGES.map((g) => g.requiredLevel), tierLevels: TIER_UNLOCK_LEVELS };
 careerRow('До обновления, активный игрок', { ...OLD, active: true });
-careerRow('Лестница ТЗ + старая кривая XP, активный', { ...NEW, xpCurve: OLD_CURVE, active: true });
-careerRow('Новый конфиг, активный игрок', { ...NEW, active: true });
-careerRow('Новый конфиг, только механики', { ...NEW, active: false });
+careerRow('Лестница + старая кривая XP, активный', { ...NEW, xpCurve: OLD_CURVE, active: true });
+careerRow('Текущий конфиг, активный игрок', { ...NEW, active: true });
+careerRow('Текущий конфиг, только механики', { ...NEW, active: false });
 log('');
-log(`Новый конфиг: кривая XP ${P.XP_CURVE_BASE} + ${P.XP_CURVE_LINEAR}n + ${P.XP_CURVE_QUADRATIC}n², классы открываются на ур. 8/20/35/55/75, гаражи — на ур. 5/20/50 за ${GARAGES.slice(1).map((g) => usd(g.price)).join(' / ')}.`);
+log(
+  `Текущий конфиг: кривая XP ${P.XP_CURVE_BASE} + ${P.XP_CURVE_LINEAR}n + ${P.XP_CURVE_QUADRATIC}n², классы открываются на ур. ${[2, 3, 4, 5, 6]
+    .map((t) => TIER_UNLOCK_LEVELS[t])
+    .join('/')}, гаражи — на ур. ${GARAGES.slice(1)
+    .map((g) => g.requiredLevel)
+    .join('/')} за ${GARAGES.slice(1)
+    .map((g) => usd(g.price))
+    .join(' / ')}.`,
+);
 
 // ─── Наследие: серия карьер ────────────────────────────────────────────────
 
-const NEW_CAREER = { garagePrices: GARAGES.map((g) => g.price), garageLevels: [0, 5, 20, 50], tierLevels: { 1: 0, 2: 8, 3: 20, 4: 35, 5: 55, 6: 75 }, active: true };
+const NEW_CAREER = { garagePrices: GARAGES.map((g) => g.price), garageLevels: GARAGES.map((g) => g.requiredLevel), tierLevels: TIER_UNLOCK_LEVELS, active: true };
 
 /** Серия карьер: каждая заканчивается перезапуском на своём уровне, последняя идёт до 100 уровня и $1 млрд */
 const legacyRun = (restartLevels: number[]) => {
@@ -510,7 +516,7 @@ const simulateBranch = (r: BranchRun) => {
   }
   s = Br.setBranchStrategy(Br.setBranchReserve(s, garage.id, 0), garage.id, r.strategy);
   s = Br.setBranchAutomation(s, garage.id, true, 0);
-  const tiers = [1, 2, 3, 4, 5, 6].filter((t) => r.level >= LADDER_TIERS[t as keyof typeof LADDER_TIERS]);
+  const tiers = [1, 2, 3, 4, 5, 6].filter((t) => r.level >= TIER_UNLOCK_LEVELS[t]);
   const bctx: Br.BranchContext = { unlockedTiers: tiers, playerLevel: r.level, sampleCar };
   const start = s.balanceCents;
   for (let m = 0; m < months; m++) {
@@ -570,10 +576,88 @@ for (const r of [
   log(`| ${r.rep} | ${r.level} | ${r.managerLevel} → ${x.managerLevelEnd} | ${TIER_NAMES[r.clearance]} | ${pct(x.load)} | ${x.ordersPerMonth.toFixed(1)} | ${usd(x.netPerMonth)} | ${usd(x.netPerMonth / 4)} |`);
 }
 
+// ─── Продвинутое оборудование ──────────────────────────────────────────────
+
+const eqPrice = (id: B.EquipmentId) => B.EQUIPMENT.find((e) => e.id === id)!.price;
+/** Ремонтные заказы данного типа на доске (репутация 800, уровень 45, классы до Люкса) */
+const ordersOfType = (type: B.ServiceOrderType, owned: B.EquipmentId[]) => {
+  const tiers = [1, 2, 3, 4];
+  let count = 0;
+  const net: number[] = [];
+  const days: number[] = [];
+  const runs = 40;
+  for (let seed = 1; seed <= runs; seed++) {
+    let s = { ...O.createOrdersState(seed * 31, 0), reputation: 800 };
+    for (let day = 1; day <= 30; day++) {
+      s = O.advanceOrders(s, day * DAY_MS, { unlockedTiers: tiers, owned, playerLevel: 45, sampleCar });
+      for (const o of s.board) {
+        if (o.kind !== 'service' || o.type !== type) continue;
+        count++;
+        net.push((o.rewardCents - o.partsCents) / 100);
+        days.push(o.workPoints / MECHANIC_PTS_PER_DAY);
+      }
+      s = { ...s, board: [] };
+    }
+  }
+  return { perMonth: count / runs, net: mean(net), days: mean(days) };
+};
+
+log('');
+log('## 10. Продвинутое оборудование (уровень 40+), окупаемость');
+log('');
+log('| Оборудование | Цена | Что даёт (расчёт) | Окупаемость |');
+log('|---|---:|---|---:|');
+{
+  const al = ordersOfType('alignment', ['basic_tools', 'alignment']);
+  const perMonth = al.perMonth * (al.net - (B.mechanicBaseSalaryCents(3) / 100 / 30) * al.days);
+  log(
+    `| Стенд развал-схождения | ${usd(eqPrice('alignment'))} | ≈${al.perMonth.toFixed(1)} заказа/мес (реп. 800), ≈${usd(al.net)} за заказ за ${al.days.toFixed(1)} дн. работы | ${
+      perMonth > 0 ? `${Math.ceil(eqPrice('alignment') / perMonth)} мес.` : '—'
+    } |`,
+  );
+  const body = ordersOfType('body', ['basic_tools']);
+  const saved = body.perMonth * body.days * (1 - 1 / B.BODY_FRAME_SPEED);
+  const freedValue = saved * ((B.mechanicBaseSalaryCents(3) / 100 / 30) + body.net / body.days);
+  log(
+    `| Стапель | ${usd(eqPrice('body_frame'))} | кузовной ремонт ×${B.BODY_FRAME_SPEED}: при ${body.perMonth.toFixed(1)} заказах/мес освобождается ≈${saved.toFixed(
+      1,
+    )} дня слота под новые заказы | ≈${Math.ceil(eqPrice('body_frame') / Math.max(1, freedValue))} мес. |`,
+  );
+  for (const tier of [4, 5]) {
+    const rng = mulberry32(400 + tier);
+    const gains = Array.from({ length: SAMPLES }, () => {
+      const { car } = generateRandomListing(tier, 0, [], rng);
+      return paintValueGain(car.basePrice!, car.year, car.mileage, car.paintCondition!, 100);
+    });
+    const save = mean(gains) * B.OWN_PAINT_MATERIALS_SHARE * (1 - B.PAINT_MATCHING_FACTOR);
+    log(`| Подбор краски (${TIER_NAMES[tier]}) | ${usd(eqPrice('paint_matching'))} | экономия ≈${usd(save)} на покраске | ${Math.ceil(eqPrice('paint_matching') / save)} покрасок |`);
+  }
+  for (const tier of [4, 5]) {
+    const rng = mulberry32(500 + tier);
+    const nets = Array.from({ length: SAMPLES }, () => {
+      const { car } = generateRandomListing(tier, 0, [], rng);
+      const max = car.maxCondition!;
+      const to = Math.min(100, max + B.TUNING_MAX_BONUS);
+      const gain = carValue(car.basePrice!, { ...car, condition: to }) - carValue(car.basePrice!, { ...car, condition: max });
+      return gain * (1 - B.TUNING_COST_SHARE - B.OWN_REPAIR_PARTS_SHARE);
+    });
+    const net = mean(nets);
+    log(`| Диностенд (${TIER_NAMES[tier]}) | ${usd(eqPrice('dyno'))} | тюнинг +${B.TUNING_MAX_BONUS} к максимуму: чистыми ≈${usd(net)} с машины после цены тюнинга и деталей | ${Math.ceil(eqPrice('dyno') / net)} машин |`);
+  }
+  // Стоянка: машины ждут продажи по +10% (30 дней), не занимая рабочие слоты
+  const sport = resaleGood[5];
+  const parkingMonth = B.PARKING_SPOTS * (sport.buy * 1.6 * 0.1) * (30 / 30);
+  log(
+    `| Коммерческая стоянка | ${usd(eqPrice('parking'))} | ${B.PARKING_SPOTS} мест: машины Спорта ждут продажи по +10% (30 дней), не занимая рабочие слоты — ≈${usd(parkingMonth)}/мес | ${Math.ceil(
+      eqPrice('parking') / parkingMonth,
+    )} мес. |`,
+  );
+}
+
 // ─── 5. Риск ───────────────────────────────────────────────────────────────
 
 log('');
-log('## 9. Риск случайной покупки (без выбора)');
+log('## 11. Риск случайной покупки (без выбора)');
 log('');
 log('| Класс | Убыточных | Худший случай | Средняя прибыль сделки |');
 log('|---|---:|---:|---:|');

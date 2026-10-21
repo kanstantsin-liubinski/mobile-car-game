@@ -78,6 +78,8 @@ export interface PickingOrder extends OrderBase {
   modelName?: string;
   /** Машина, переданная клиенту */
   carId?: string;
+  /** Особый контракт коллекционера (85+): дороже, дольше срок, высокое ЛКП */
+  special?: boolean;
 }
 
 export type Order = ServiceOrder | PickingOrder;
@@ -173,7 +175,9 @@ const makeServiceOrder = (id: string, now: number, reputation: number, ctx: Orde
   const tier = pick(ctx.unlockedTiers, rng);
   const premium = rng() < B.premiumOrderChance(reputation);
   // Любые типы работ при любой репутации; чаще те, что игрок может выполнить имеющимся оборудованием
-  const allowed = ctx.serviceTypes ? B.SERVICE_ORDER_TYPES.filter((d) => ctx.serviceTypes!.includes(d.type)) : B.SERVICE_ORDER_TYPES;
+  const allowed = (ctx.serviceTypes ? B.SERVICE_ORDER_TYPES.filter((d) => ctx.serviceTypes!.includes(d.type)) : B.SERVICE_ORDER_TYPES).filter(
+    (d) => (d.minLevel ?? 0) <= ctx.playerLevel,
+  );
   const doable = allowed.filter((d) => canPerform(d.type, ctx.owned));
   const locked = allowed.filter((d) => !canPerform(d.type, ctx.owned));
   const pool = locked.length === 0 || (doable.length > 0 && rng() < B.ORDER_AVAILABLE_TYPE_WEIGHT) ? doable : locked;
@@ -222,37 +226,49 @@ const makeServiceOrder = (id: string, now: number, reputation: number, ctx: Orde
  * экземпляр (и похожие) встречается на рынке, а ремонт и покраска доводят его до требований.
  */
 const makePickingOrder = (id: string, now: number, reputation: number, ctx: OrdersContext, rng: Rng): PickingOrder => {
-  const tier = pick(ctx.unlockedTiers, rng);
+  // Особый контракт: коллекционеру нужна машина старшего открытого класса
+  const special = ctx.playerLevel >= B.LADDER.specialContracts && rng() < B.SPECIAL_CONTRACT_CHANCE;
+  const tier = special ? Math.max(...ctx.unlockedTiers) : pick(ctx.unlockedTiers, rng);
   const premium = rng() < B.premiumOrderChance(reputation);
   const sample = ctx.sampleCar(tier, rng);
   const maxMileage = Math.max(20_000, Math.ceil((sample.mileage * between(1.15, 1.4, rng)) / 10_000) * 10_000);
   const reachable = overallMax(sample.maxCondition);
   const minOverall = Math.max(25, Math.floor(reachable - between(4, 12, rng)));
-  const minPaint = rng() < 0.4 ? Math.round(between(60, 85, rng)) : null;
+  const minPaint = special ? B.SPECIAL_CONTRACT_MIN_PAINT : rng() < 0.4 ? Math.round(between(60, 85, rng)) : null;
   const value = calculateCarPrice(sample.basePrice, { year: sample.year, mileage: sample.mileage, condition: minOverall });
   // Наценка клиента за подбор тоже растёт с репутацией и уровнем — на 20% от прироста множителя
   const mult =
     between(B.PICKING_PRICE_MIN, B.PICKING_PRICE_MAX, rng) *
     (premium ? 1.08 : 1) *
+    (special ? B.SPECIAL_CONTRACT_MULT : 1) *
     (1 + 0.2 * (B.orderRewardMultiplier(ctx.playerLevel, reputation) - 1));
   return {
     id,
     kind: 'picking',
     tier,
     premium,
-    description: pick(PICKING_PHRASES, rng),
+    description: special ? pick(SPECIAL_PHRASES, rng) : pick(PICKING_PHRASES, rng),
+    special: special || undefined,
     maxMileage,
     minOverall,
     minPaint,
     // Цена — по конкретной модели клиента: дешёвая модель того же класса заказ не выполняет
     modelName: sample.name,
     priceCents: cents(value * mult),
-    deadlineDays: Math.round(between(B.PICKING_MIN_DAYS, B.PICKING_MAX_DAYS, rng)),
+    deadlineDays: special
+      ? Math.round(between(B.SPECIAL_CONTRACT_MIN_DAYS, B.SPECIAL_CONTRACT_MAX_DAYS, rng))
+      : Math.round(between(B.PICKING_MIN_DAYS, B.PICKING_MAX_DAYS, rng)),
     createdAtMs: now,
     offerExpiresAtMs: now + B.ORDER_OFFER_DAYS * DAY_MS,
     status: 'offered',
   };
 };
+
+const SPECIAL_PHRASES = [
+  'Особый контракт: коллекционер ищет экземпляр в отличном состоянии',
+  'Особый контракт: машина для выставки, кузов должен блестеть',
+  'Особый контракт: подарок к юбилею — только идеальное состояние',
+];
 
 const PICKING_PHRASES = [
   'Нужна машина для семьи, без сюрпризов',

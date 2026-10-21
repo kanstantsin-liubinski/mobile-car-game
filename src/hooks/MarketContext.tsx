@@ -7,7 +7,8 @@ import {
   MAX_LISTINGS_PER_TIER,
 } from '../utils/marketGenerator';
 import type { MarketListing, Rng } from '../utils/marketGenerator';
-import { TOTAL_TIERS, TIER_UNLOCK_LEVELS } from '../data/carModels';
+import { TOTAL_TIERS } from '../data/carModels';
+import { unlockedTiers } from '../economy/economy';
 import { MARKETS } from '../data/cityBuildings';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import * as H from '../economy/hotOffers';
@@ -108,12 +109,10 @@ const tickMarket = (prev: TierListings, now: number): { listings: TierListings; 
 };
 
 /** Горящее предложение собирается обычным генератором, но только из открытых игроку классов */
-const hotContext = (managementLevel: number, playerLevel: number): H.HotOfferContext<MarketListing> => ({
+const hotContext = (managementLevel: number, unlocked: number[]): H.HotOfferContext<MarketListing> => ({
   chance: hotOfferChance(managementLevel),
   generate: (rng: Rng) => {
-    const tiers = Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).filter(
-      (tier) => playerLevel >= (TIER_UNLOCK_LEVELS[tier] ?? 0),
-    );
+    const tiers = unlocked;
     if (tiers.length === 0) return null;
     const market = MARKETS[Math.floor(rng() * MARKETS.length)];
     const tier = tiers[Math.floor(rng() * tiers.length)];
@@ -161,10 +160,10 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const currentTime = gameTimeMs;
   const marketSecond = Math.floor(gameTimeMs / MARKET_TICK_MS);
   const managementLevel = economy.player.management.level;
-  const playerLevel = economy.player.xp.level;
+  const unlocked = unlockedTiers(economy);
   // Шанс и открытые классы берутся на момент проверки
-  const hotCtxRef = useRef(hotContext(managementLevel, playerLevel));
-  hotCtxRef.current = hotContext(managementLevel, playerLevel);
+  const hotCtxRef = useRef(hotContext(managementLevel, unlocked));
+  hotCtxRef.current = hotContext(managementLevel, unlocked);
 
   // Загружаем сохранённые объявления, когда известно игровое время
   useEffect(() => {

@@ -117,7 +117,7 @@ export const GARAGES: GarageBuilding[] = [
     area: bgArea(508, 565, 215, 142), // мастерская под фонтаном
     slots: 2,
     price: 25000,
-    requiredLevel: 2,
+    requiredLevel: 5,
   },
   {
     id: 'garage_3',
@@ -127,7 +127,7 @@ export const GARAGES: GarageBuilding[] = [
     area: bgArea(345, 284, 228, 150), // автосервис слева от фонтана
     slots: 4,
     price: 150_000, // ≈половина денег активного игрока к открытию по уровню (scripts/simulate.ts)
-    requiredLevel: 5,
+    requiredLevel: 20,
   },
   {
     id: 'garage_4',
@@ -137,7 +137,7 @@ export const GARAGES: GarageBuilding[] = [
     area: bgArea(837, 504, 353, 240), // большой сервисный центр справа внизу
     slots: 8,
     price: 2_000_000,
-    requiredLevel: 10,
+    requiredLevel: 50,
   },
 ];
 

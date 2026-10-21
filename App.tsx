@@ -19,6 +19,7 @@ import { PaydayModal } from '@components/finance/PaydayModal';
 import { FinancePanel } from '@components/finance/FinancePanel';
 import { ExperienceModal } from '@components/info/ExperienceModal';
 import { LegacyModal } from '@components/legacy/LegacyModal';
+import { LegacyWatcher } from '@components/legacy/LegacyWatcher';
 import { CalendarModal } from '@components/info/CalendarModal';
 import { BankruptcyScreen } from '@components/finance/BankruptcyScreen';
 import { ToastProvider } from '@components/toast/ToastContext';
@@ -96,6 +97,7 @@ function GameContent() {
           <PaydayModal />
           <BankruptcyScreen />
           <ProgressionToasts />
+          <LegacyWatcher />
           <HotOfferNotifier onOpen={openMarket} />
 
           <StatusBar style="auto" />

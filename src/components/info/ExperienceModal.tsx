@@ -4,20 +4,14 @@ import { colors } from '@styles/colors';
 import { useEconomy } from '@hooks/EconomyContext';
 import { InfoBar, InfoRow, InfoSection, InfoSheet, InfoText } from './InfoSheet';
 import { FULL_REPAIR_XP, SALE_BASE_XP, requiredXp } from '../../economy/progression';
-import { TIER_NAMES, TIER_UNLOCK_LEVELS } from '../../data/carModels';
-import { GARAGES } from '../../data/cityBuildings';
-import { EQUIPMENT } from '../../economy/balance';
+import { EQUIPMENT, LADDER, LEVEL_LADDER } from '../../economy/balance';
 import { legacyProfitMultiplier, legacyXpMultiplier } from '../../economy/legacy';
 import { TouchableOpacity } from '@components/Touchable';
 
-/** Что открывается на каком уровне: классы машин, гаражи, оборудование */
+/** Что открывается на каком уровне: лестница до 100 (классы, гаражи, филиалы, оборудование, новые механики) */
 const unlocks = (): { level: number; text: string }[] => {
-  const list: { level: number; text: string }[] = [];
-  for (const [tier, level] of Object.entries(TIER_UNLOCK_LEVELS)) {
-    if (level > 1) list.push({ level, text: `Класс «${TIER_NAMES[Number(tier)]}» на авторынке и в салоне` });
-  }
-  for (const g of GARAGES) if (g.requiredLevel > 1) list.push({ level: g.requiredLevel, text: `${g.name} (покупка в городе)` });
-  for (const e of EQUIPMENT) if (e.requiredLevel > 1) list.push({ level: e.requiredLevel, text: e.name });
+  const list = LEVEL_LADDER.filter((u) => u.level > 1).map((u) => ({ ...u }));
+  for (const e of EQUIPMENT) if (e.requiredLevel > 1 && e.requiredLevel !== LADDER.advancedEquipment && e.id !== 'paint_booth') list.push({ level: e.requiredLevel, text: e.name });
   return list.sort((a, b) => a.level - b.level);
 };
 

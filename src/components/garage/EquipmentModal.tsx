@@ -27,6 +27,11 @@ const EQUIPMENT_EMOJI: Record<EquipmentId, string> = {
   paint_booth: '🎨',
   engine: '🔧',
   pro_tools: '🛠️',
+  alignment: '📐',
+  body_frame: '🏗️',
+  paint_matching: '🎯',
+  dyno: '🏎️',
+  parking: '🅿️',
 };
 
 /** Оборудование: покупка по уровню игрока, установка и демонтаж покрасочной камеры */

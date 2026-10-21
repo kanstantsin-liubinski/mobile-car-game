@@ -246,7 +246,7 @@ describe('оборудование', () => {
   });
 
   it('камера занимает ровно один слот и требует оставить обычный слот', () => {
-    let s = E.buyEquipment(leveled(5), 'paint_booth').state;
+    let s = E.buyEquipment(leveled(B.LADDER.paintBooth), 'paint_booth').state;
     assert.equal(E.boothInstallBlock(s, 0, 1), 'last-slot');
     assert.equal(E.boothInstallBlock(s, 2, 2), 'bad-slot');
     s = E.installBooth(s, 1, 2).state;

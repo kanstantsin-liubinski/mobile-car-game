@@ -23,6 +23,8 @@ import { randomSeed } from './hotOffers.ts';
 import { pluralDays } from './format.ts';
 import { rollBranchMonths, type BranchState } from './branchModel.ts';
 import { legacyMarginBonusCents, legacyXpMultiplier, type CareerSummary } from './legacy.ts';
+import { TIER_UNLOCK_LEVELS, TOTAL_TIERS } from '../data/carModels.ts';
+import * as A from './auctions.ts';
 
 // ─── Константы ─────────────────────────────────────────────────────────────
 
@@ -228,6 +230,12 @@ export interface EconomyState {
   careerId: string;
   /** Очки наследия, действующие в этой карьере (фиксируются при её создании) */
   legacyPoints: number;
+  /** Классы, открытые до лестницы уровней (старое сохранение): остаются открытыми */
+  grandfatheredTiers: number[];
+  /** Версия лестницы уровней, по которой создано сохранение */
+  ladderVersion: number;
+  /** Аукцион на авторынке (с 30 уровня) */
+  auction: A.AuctionState;
 }
 
 export interface XpEntry {
@@ -325,7 +333,18 @@ export const createEconomy = (
   branches: {},
   careerId: `career-${(seed >>> 0).toString(36)}`,
   legacyPoints,
+  grandfatheredTiers: [],
+  ladderVersion: LADDER_VERSION,
+  auction: A.createAuctionState(seed ^ 0x51ed27, 0),
 });
+
+export const LADDER_VERSION = 2;
+
+/** Классы машин, открытые игроку: по уровню (лестница) плюс открытые в старом сохранении */
+export const unlockedTiers = (s: Pick<EconomyState, 'player' | 'grandfatheredTiers'>): number[] =>
+  Array.from({ length: TOTAL_TIERS }, (_, i) => i + 1).filter(
+    (t) => s.player.xp.level >= (TIER_UNLOCK_LEVELS[t] ?? 0) || (s.grandfatheredTiers ?? []).includes(t),
+  );
 
 // ─── Календарь ─────────────────────────────────────────────────────────────
 
@@ -1191,6 +1210,54 @@ export const closeMonth = (
   return { state, outcome: 'closed' };
 };
 
+// ─── Аукцион ───────────────────────────────────────────────────────────────
+
+export const auctionEnabled = (s: EconomyState): boolean => s.player.xp.level >= B.LADDER.auctions;
+
+export const advanceAuction = (s: EconomyState, now: number, sample: A.AuctionContext['sample']): EconomyState => {
+  if (s.bankruptcy) return s;
+  const auction = A.advanceAuction(s.auction, now, { enabled: auctionEnabled(s), unlockedTiers: unlockedTiers(s), sample });
+  return auction === s.auction ? s : { ...s, auction };
+};
+
+export const auctionBid = (s: EconomyState, now: number): OpResult => {
+  if (s.bankruptcy || !auctionEnabled(s)) return { state: s, ok: false };
+  const auction = A.placeBid(s.auction, now, s.balanceCents);
+  return auction === s.auction ? { state: s, ok: false } : { ok: true, state: { ...s, auction } };
+};
+
+/** Выкуп выигранного лота: обычная покупка машины по цене ставки (место в гараже проверяет гараж) */
+export const claimAuctionLot = (s: EconomyState, now: number): OpResult => {
+  const lot = s.auction.current;
+  if (!lot || lot.status !== 'won' || (lot.claimUntilMs !== undefined && now > lot.claimUntilMs)) return { state: s, ok: false };
+  const bought = buyCar(s, {
+    carId: lot.car.id,
+    name: lot.car.name,
+    tier: lot.tier,
+    priceCents: lot.currentCents,
+    conditionPct: lot.car.condition,
+    maxConditionPct: lot.car.maxCondition,
+  });
+  if (!bought.ok) return bought;
+  return { ok: true, state: { ...bought.state, auction: A.markClaimed(bought.state.auction) } };
+};
+
+// ─── Продвинутое оборудование ──────────────────────────────────────────────
+
+/** Доля материалов своей покраски: компьютерный подбор краски — на треть дешевле */
+export const ownPaintMaterialsShare = (s: EconomyState): number =>
+  B.OWN_PAINT_MATERIALS_SHARE * (hasEquipment(s, 'paint_matching') ? B.PAINT_MATCHING_FACTOR : 1);
+
+/** Скорость работы по клиентской машине: стапель ускоряет кузовной ремонт */
+export const clientWorkMultiplier = (s: EconomyState, orderId: string | undefined): number => {
+  if (!orderId || !hasEquipment(s, 'body_frame')) return 1;
+  const o = s.orders.active.find((x) => x.id === orderId);
+  return o?.kind === 'service' && o.type === 'body' ? B.BODY_FRAME_SPEED : 1;
+};
+
+/** Мест на коммерческой стоянке */
+export const parkingSpots = (s: EconomyState): number => (hasEquipment(s, 'parking') ? B.PARKING_SPOTS : 0);
+
 // ─── Итоги карьеры (для «Наследия») ────────────────────────────────────────
 
 /** Чистая прибыль карьеры без бонуса наследия: закрытые месяцы + текущий на момент now */
@@ -1604,6 +1671,16 @@ export const deserializeEconomy = (raw: string): EconomySave | null => {
       xpLog: loaded.xpLog ?? [],
       careerId: loaded.careerId ?? `career-${(loaded.orders?.seed ?? randomSeed()).toString(36)}`,
       legacyPoints: loaded.legacyPoints ?? 0,
+      auction: A.restoreAuctionState(loaded.auction, randomSeed(), Math.max(0, save.gameTimeMs || 0)),
+      // Сохранение до лестницы уровней: открытые тогда классы не закрываются
+      ladderVersion: LADDER_VERSION,
+      grandfatheredTiers:
+        loaded.ladderVersion === LADDER_VERSION
+          ? loaded.grandfatheredTiers ?? []
+          : Object.entries(B.OLD_TIER_UNLOCK_LEVELS)
+              .filter(([, lv]) => (loaded.player?.xp.level ?? 1) >= lv)
+              .map(([t]) => Number(t))
+              .filter((t) => (loaded.player?.xp.level ?? 1) < (TIER_UNLOCK_LEVELS[t] ?? 0)),
       branches: Object.fromEntries(
         Object.entries(loaded.branches ?? {}).map(([id, b]) => [
           id,

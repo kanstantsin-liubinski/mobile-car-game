@@ -17,6 +17,7 @@ import { useExperienceContext } from '@hooks/ExperienceContext';
 import { getMarketById } from '../data/cityBuildings';
 import { LocationHeader } from '@components/LocationHeader';
 import { SlotPickerModal } from '@components/SlotPickerModal';
+import { AuctionCard } from '@components/market/AuctionCard';
 import { GameIcon } from '@components/GameIcon';
 import { CarImage } from '@components/CarImage';
 import { CarSpecs } from '@components/CarSpecs';
@@ -155,6 +156,9 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
     <View style={{ flex: 1 }}>
     <LocationHeader title={market?.name ?? 'Авторынок'} icon={BUILDING_ICONS[marketId]} emoji={market?.emoji ?? '🏪'} onBack={onBack} />
     <ScrollView ref={scrollRef} style={[marketStyles.container, { paddingTop: 8 }]}>
+      {/* Аукцион (с 30 уровня) — над классами */}
+      <AuctionCard />
+
       {/* ─── Tier Tabs ──────────────────────────────────────────── */}
       <TierTabs selectedTier={selectedTier} onSelect={setSelectedTier} hotTier={hotHere?.tier ?? null} />
 

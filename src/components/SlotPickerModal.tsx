@@ -20,7 +20,7 @@ interface SlotPickerModalProps {
 
 /** Выбор места в гараже при покупке машины (авторынок, автосалон) */
 export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalProps) => {
-  const { garage, garageSlots } = useGarageContext();
+  const { garage, allSlots, slotLabel } = useGarageContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
@@ -32,9 +32,7 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
     setSelectedSlot(null);
   }, [car?.id]);
 
-  const hasFreeSlot = Array.from({ length: garageSlots }).some(
-    (_, slotIndex) => !garage.some((c) => c.slotIndex === slotIndex),
-  );
+  const hasFreeSlot = allSlots.some((slotIndex) => !garage.some((c) => c.slotIndex === slotIndex));
 
   return (
     <SheetModal visible={car !== null} onRequestClose={onCancel}>
@@ -82,7 +80,7 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
             </Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {Array.from({ length: garageSlots }).map((_, slotIndex) => {
+              {allSlots.map((slotIndex) => {
                 const carInSlot = garage.find((c) => c.slotIndex === slotIndex);
                 const isSelected = selectedSlot === slotIndex;
 
@@ -118,7 +116,7 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
                         fontWeight: '700',
                       }}
                     >
-                      {slotIndex + 1}
+                      {slotLabel(slotIndex)}
                     </Text>
                   </TouchableOpacity>
                 );

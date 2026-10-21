@@ -180,6 +180,7 @@ const OrderCard = ({ order }: { order: Order }) => {
           <Text style={styles.cardTitle}>
             {isService ? def!.name : 'Подбор авто'} · {TIER_NAMES[order.tier]}
             {order.premium ? ' · 💎 выгодный' : ''}
+            {order.kind === 'picking' && order.special ? ' · ⭐ особый контракт' : ''}
           </Text>
           <Text style={styles.muted}>{order.description}</Text>
         </View>

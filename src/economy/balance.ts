@@ -110,7 +110,18 @@ export const PAINTER_SPEED_PER_SEC = 0.25;
 
 // ─── Оборудование ──────────────────────────────────────────────────────────
 
-export type EquipmentId = 'basic_tools' | 'scanner' | 'transmission' | 'paint_booth' | 'engine' | 'pro_tools';
+export type EquipmentId =
+  | 'basic_tools'
+  | 'scanner'
+  | 'transmission'
+  | 'paint_booth'
+  | 'engine'
+  | 'pro_tools'
+  | 'alignment'
+  | 'body_frame'
+  | 'paint_matching'
+  | 'dyno'
+  | 'parking';
 
 export interface EquipmentDef {
   id: EquipmentId;
@@ -153,7 +164,7 @@ export const EQUIPMENT: EquipmentDef[] = [
     id: 'paint_booth',
     name: 'Покрасочная камера',
     description: 'Покраска своими силами или маляром. Постоянно занимает один слот гаража.',
-    requiredLevel: 5,
+    requiredLevel: 18,
     price: 8_000,
     occupiesSlot: true,
   },
@@ -173,13 +184,64 @@ export const EQUIPMENT: EquipmentDef[] = [
     price: 30_000,
     occupiesSlot: false,
   },
+  {
+    id: 'alignment',
+    name: 'Стенд развал-схождения',
+    description: 'Открывает заказы «Развал-схождение»: короткие (1–2 дня) и хорошо оплачиваемые.',
+    requiredLevel: 40,
+    price: 15_000,
+    occupiesSlot: false,
+  },
+  {
+    id: 'body_frame',
+    name: 'Стапель',
+    description: 'Кузовной ремонт клиентских машин идёт в 1,5 раза быстрее (тапы и механики).',
+    requiredLevel: 40,
+    price: 25_000,
+    occupiesSlot: false,
+  },
+  {
+    id: 'paint_matching',
+    name: 'Компьютерный подбор краски',
+    description: 'Материалы для покраски своих машин в камере вдвое дешевле.',
+    requiredLevel: 40,
+    price: 12_000,
+    occupiesSlot: false,
+  },
+  {
+    id: 'dyno',
+    name: 'Диностенд и тюнинг',
+    description: 'Плитка «Тюнинг» на своей машине: технический максимум +8 пунктов (не выше 100), один раз на машину.',
+    requiredLevel: 40,
+    price: 60_000,
+    occupiesSlot: false,
+  },
+  {
+    id: 'parking',
+    name: 'Коммерческая стоянка',
+    description: '6 мест для своих машин вне ремонтных слотов: хранить, переставлять и продавать.',
+    requiredLevel: 60,
+    price: 400_000,
+    occupiesSlot: false,
+  },
 ];
+
+/** Стапель: скорость кузовного ремонта клиентских машин */
+export const BODY_FRAME_SPEED = 1.5;
+/** Компьютерный подбор краски: материалы своей покраски × это */
+export const PAINT_MATCHING_FACTOR = 0.5;
+/** Тюнинг: прибавка к техническому максимуму и цена — доля потенциального прироста стоимости */
+export const TUNING_MAX_BONUS = 8;
+export const TUNING_COST_SHARE = 0.25;
+/** Коммерческая стоянка: мест и номер первого места (индексы слотов стоянки — с PARKING_BASE) */
+export const PARKING_SPOTS = 6;
+export const PARKING_BASE = 100;
 
 export const PRO_TOOLS_REPAIR_BONUS = 1.15;
 
 // ─── Заказы клиентов ───────────────────────────────────────────────────────
 
-export type ServiceOrderType = 'maintenance' | 'suspension' | 'body' | 'engine' | 'transmission' | 'paint';
+export type ServiceOrderType = 'maintenance' | 'suspension' | 'body' | 'engine' | 'transmission' | 'paint' | 'alignment' | 'corporate';
 
 export interface ServiceOrderDef {
   type: ServiceOrderType;
@@ -196,6 +258,8 @@ export interface ServiceOrderDef {
   /** Множитель оплаты работы за пункт */
   laborMult: number;
   descriptions: string[];
+  /** Появляется с этого уровня игрока */
+  minLevel?: number;
 }
 
 export const SERVICE_ORDER_TYPES: ServiceOrderDef[] = [
@@ -205,7 +269,29 @@ export const SERVICE_ORDER_TYPES: ServiceOrderDef[] = [
   { type: 'engine', name: 'Ремонт двигателя', minDays: 8, maxDays: 15, complex: true, equipment: 'engine', partsShare: 0.5, laborMult: 1.1, descriptions: ['Двигатель троит и ест масло', 'Капремонт после перегрева', 'Замена цепи ГРМ'] },
   { type: 'transmission', name: 'Ремонт АКПП', minDays: 10, maxDays: 18, complex: true, equipment: 'transmission', partsShare: 0.5, laborMult: 1.1, descriptions: ['Пинки при переключении', 'Коробка уходит в аварийный режим', 'Переборка АКПП'] },
   { type: 'paint', name: 'Покраска', minDays: 6, maxDays: 12, complex: true, equipment: 'paint_booth', partsShare: 0.3, laborMult: 1, descriptions: ['Перекрасить капот и крышу', 'Полная покраска кузова', 'Убрать сколы и ржавчину'] },
+  { type: 'alignment', name: 'Развал-схождение', minDays: 1, maxDays: 2, complex: false, equipment: 'alignment', partsShare: 0.1, laborMult: 1.5, descriptions: ['Машину тянет в сторону', 'Неровный износ шин', 'Настроить углы после замены подвески'] },
+  { type: 'corporate', name: 'Корпоративный: автопарк', minDays: 20, maxDays: 35, complex: true, equipment: 'basic_tools', partsShare: 0.3, laborMult: 1.25, descriptions: ['Плановое ТО служебного автопарка', 'Подготовка машин компании к сезону', 'Восстановление машин такси-парка'], minLevel: 70 },
 ];
+
+/** Особые контракты (85+): часть заказов на подбор — для коллекционеров, дороже и с запасом по сроку */
+export const SPECIAL_CONTRACT_CHANCE = 0.25;
+export const SPECIAL_CONTRACT_MULT = 1.3;
+export const SPECIAL_CONTRACT_MIN_DAYS = 35;
+export const SPECIAL_CONTRACT_MAX_DAYS = 50;
+export const SPECIAL_CONTRACT_MIN_PAINT = 85;
+
+// ─── Аукцион (30+) ─────────────────────────────────────────────────────────
+
+/** Лот идёт 5 игровых дней, следующий — через 5 дней после окончания; выигранный лот можно забрать 3 дня */
+export const AUCTION_LOT_DAYS = 5;
+export const AUCTION_PAUSE_DAYS = 5;
+export const AUCTION_CLAIM_DAYS = 3;
+/** Стартовая цена — доля рыночной стоимости, шаг ставки — доля стартовой (не меньше $100) */
+export const AUCTION_START_SHARE = 0.55;
+export const AUCTION_STEP_SHARE = 0.05;
+/** Предел ставок бота: рыночная стоимость × [0,85; 1,08] (скрыт) */
+export const AUCTION_BOT_MIN = 0.85;
+export const AUCTION_BOT_MAX = 1.08;
 
 /**
  * Базовая оплата работы: 85% того, сколько тот же пункт состояния добавил бы к цене типичной
@@ -472,3 +558,52 @@ export const LEGACY_PROFIT_MAX = 10;
 /** Множитель опыта = min(MAX, 1 + PER_POINT × P) */
 export const LEGACY_XP_PER_POINT = 0.02;
 export const LEGACY_XP_MAX = 2.5;
+
+// ─── Лестница уровней (до 100 и дальше) ────────────────────────────────────
+
+/** Уровни открытия механик. Классы машин — TIER_UNLOCK_LEVELS (carModels.ts), гаражи — cityBuildings.ts */
+export const LADDER = {
+  garage2: 5,
+  mediumTier: 8,
+  firstBranch: BRANCH_FIRST_LEVEL,
+  paintBooth: 18,
+  premiumTier: 20,
+  garage3: 20,
+  networkBranches: BRANCH_NETWORK_LEVEL,
+  auctions: 30,
+  luxuryTier: 35,
+  advancedEquipment: 40,
+  garage4: 50,
+  sportTier: 55,
+  parking: 60,
+  corporateOrders: 70,
+  hyperTier: 75,
+  specialContracts: 85,
+  extendedAutomation: EXTENDED_AUTOMATION_LEVEL,
+  milestone: 100,
+} as const;
+
+/** Что открывает каждая ступень — для окна «Опыт» и документации */
+export const LEVEL_LADDER: { level: number; text: string }[] = [
+  { level: 1, text: 'Стартовый гараж, класс «Эконом»' },
+  { level: LADDER.garage2, text: 'Гараж 2 (2 места)' },
+  { level: LADDER.mediumTier, text: 'Класс «Средний»' },
+  { level: LADDER.firstBranch, text: 'Первый автоматизированный филиал' },
+  { level: LADDER.paintBooth, text: 'Покрасочная камера' },
+  { level: LADDER.premiumTier, text: 'Гараж 3 (4 места) и класс «Премиум»; перезапуск через «Наследие»' },
+  { level: LADDER.networkBranches, text: 'Следующие филиалы и автоматизация дополнительных слотов' },
+  { level: LADDER.auctions, text: 'Аукцион на авторынке' },
+  { level: LADDER.luxuryTier, text: 'Класс «Люкс»' },
+  { level: LADDER.advancedEquipment, text: 'Продвинутое оборудование: стенд развал-схождения, стапель, компьютерный подбор краски, диностенд и тюнинг' },
+  { level: LADDER.garage4, text: 'Гараж 4 (8 мест)' },
+  { level: LADDER.sportTier, text: 'Класс «Спорт»' },
+  { level: LADDER.parking, text: 'Коммерческая стоянка' },
+  { level: LADDER.corporateOrders, text: 'Корпоративные заказы (обслуживание автопарков)' },
+  { level: LADDER.hyperTier, text: 'Класс «Гипер»' },
+  { level: LADDER.specialContracts, text: 'Особые контракты коллекционеров' },
+  { level: LADDER.extendedAutomation, text: 'Расширенная автоматизация филиалов (кузовной ремонт, все слоты)' },
+  { level: LADDER.milestone, text: '«Легенда автобизнеса» — условие цели «Автомобильный концерн»' },
+];
+
+/** Классы до лестницы (старые сохранения): что уже открыто на их уровне, остаётся открытым */
+export const OLD_TIER_UNLOCK_LEVELS: Record<number, number> = { 1: 0, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25 };

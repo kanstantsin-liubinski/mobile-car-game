@@ -12,6 +12,9 @@ import { ICONS, TIER_ICONS, getMechanicAvatar } from '@img/gameIcons';
 const ICONS_PAINT = ICONS.repair;
 import {
   assetCostCents,
+  clientWorkMultiplier,
+  ownPaintMaterialsShare,
+  parkingSpots,
   clearanceSpeedFactor,
   hasEquipment,
   repairToolsMultiplier,
@@ -136,6 +139,13 @@ export const useGarage = () => {
   // Активный гараж игрока. Гаражи с меньшим рангом считаются неактивными (см. cityBuildings.ts)
   const [garageId, setGarageId] = useState(DEFAULT_GARAGE_ID);
   const garageSlots = getGarageById(garageId)?.slots ?? 1;
+  // Коммерческая стоянка: места с индексами PARKING_BASE…, только хранение и продажа
+  const parkingCount = parkingSpots(economy.state);
+  const parkingSlots = useMemo(() => Array.from({ length: parkingCount }, (_, i) => BAL.PARKING_BASE + i), [parkingCount]);
+  const isParkingSlot = useCallback((i: number) => i >= BAL.PARKING_BASE && i < BAL.PARKING_BASE + parkingCount, [parkingCount]);
+  /** Все места: рабочие слоты гаража и места стоянки */
+  const allSlots = useMemo(() => [...Array.from({ length: garageSlots }, (_, i) => i), ...parkingSlots], [garageSlots, parkingSlots]);
+  const slotLabel = useCallback((i: number) => (i >= BAL.PARKING_BASE ? `P${i - BAL.PARKING_BASE + 1}` : String(i + 1)), []);
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
@@ -186,10 +196,10 @@ export const useGarage = () => {
   useEffect(() => {
     if (!isLoaded || !isConfigLoaded) return;
     setGarage((prev) => {
-      if (!prev.some((c) => c.slotIndex >= garageSlots)) return prev;
+      if (!prev.some((c) => c.slotIndex >= garageSlots && !isParkingSlot(c.slotIndex))) return prev;
       const used = new Set(prev.filter((c) => c.slotIndex >= 0 && c.slotIndex < garageSlots).map((c) => c.slotIndex));
       return prev.map((car) => {
-        if (car.slotIndex < garageSlots) return car;
+        if (car.slotIndex < garageSlots || isParkingSlot(car.slotIndex)) return car;
         let free = -1;
         for (let i = 0; i < garageSlots; i++) {
           if (!used.has(i)) { free = i; break; }
@@ -198,7 +208,7 @@ export const useGarage = () => {
         return { ...car, slotIndex: free };
       });
     });
-  }, [isLoaded, isConfigLoaded, garageSlots]);
+  }, [isLoaded, isConfigLoaded, garageSlots, isParkingSlot]);
 
   const loadGarage = async () => {
     try {
@@ -392,12 +402,7 @@ export const useGarage = () => {
 
       // Если слот не передан или он занят, ищем первый свободный
       if (assignedSlot === undefined || prevGarage.some((c) => c.slotIndex === assignedSlot)) {
-        for (let i = 0; i < garageSlots; i++) {
-          if (!prevGarage.some((c) => c.slotIndex === i)) {
-            assignedSlot = i;
-            break;
-          }
-        }
+        assignedSlot = allSlots.find((i) => !prevGarage.some((c) => c.slotIndex === i));
       }
 
       const garageCar: GarageCar = {
@@ -418,7 +423,7 @@ export const useGarage = () => {
       message: `Заплачено ${formatMoney(toCents(car.price))} · техника ${roundedCondition}% из ${maxCondition}%, ЛКП ${Math.round(paintCondition)}%`,
       icon: tier ? TIER_ICONS[tier] : undefined,
     });
-  }, [garageSlots, showToast]);
+  }, [allSlots, showToast]);
 
   const removeCar = useCallback((carId: string) => {
     setGarage((prev) => prev.filter((car) => car.id !== carId));
@@ -433,10 +438,10 @@ export const useGarage = () => {
   const repairCar = useCallback((carId: string): boolean => {
     const car = storedGarage.find((c) => c.id === carId);
     if (!car || mechanicRepairs[carId] || activeSells[carId] || servicePaints[carId] || car.condition >= car.maxCondition) return false;
-    // В покрасочной камере механический ремонт не ведётся
-    if (boothSlot !== null && car.slotIndex === boothSlot) return false;
+    // В покрасочной камере и на стоянке механический ремонт не ведётся
+    if ((boothSlot !== null && car.slotIndex === boothSlot) || isParkingSlot(car.slotIndex)) return false;
 
-    const repairAmount = PLAYER_TAP_REPAIR * economy.playerTapMultiplier;
+    const repairAmount = PLAYER_TAP_REPAIR * economy.playerTapMultiplier * clientWorkMultiplier(economy.state, car.clientOrderId);
     // Точность до тысячных: +5% навыка не теряются при округлении
     const newCondition = Math.min(
       Math.round(car.maxCondition * 1000) / 1000,
@@ -462,7 +467,7 @@ export const useGarage = () => {
       else economy.awardFullRepair(carId);
     }
     return true;
-  }, [storedGarage, mechanicRepairs, activeSells, servicePaints, boothSlot, economy, showToast]);
+  }, [storedGarage, mechanicRepairs, activeSells, servicePaints, boothSlot, isParkingSlot, economy, showToast]);
 
   const getCar = useCallback((carId: string) => garage.find((car) => car.id === carId), [garage]);
 
@@ -565,8 +570,10 @@ export const useGarage = () => {
   }, [economy, mechanicRepairs, stopRepair]);
 
   const changeCarSlot = useCallback((carId: string, newSlotIndex: number): boolean => {
-    // Проверяем, что слот в допустимом диапазоне
-    if (newSlotIndex !== -1 && (newSlotIndex < 0 || newSlotIndex >= garageSlots)) return false;
+    // Проверяем, что слот в допустимом диапазоне: рабочий слот или место на стоянке (машины клиентов — не на стоянку)
+    const parking = isParkingSlot(newSlotIndex);
+    if (newSlotIndex !== -1 && !parking && (newSlotIndex < 0 || newSlotIndex >= garageSlots)) return false;
+    if (parking && garage.find((c) => c.id === carId)?.clientOrderId) return false;
     // Машину с начатой покраской из камеры не переставить, пока работа не отменена;
     // во время ремонта механиком и покраски в сервисе — тоже (механик привязан к слоту)
     if (boothJob?.carId === carId || mechanicRepairs[carId] || servicePaints[carId]) return false;
@@ -586,7 +593,7 @@ export const useGarage = () => {
       })
     );
     return true;
-  }, [garage, garageSlots, boothJob, mechanicRepairs, servicePaints]);
+  }, [garage, garageSlots, isParkingSlot, boothJob, mechanicRepairs, servicePaints]);
 
   // ─── Ремонт механиком ─────────────────────────────────────────────
   const startMechanicRepair = useCallback((carId: string, mechanicId: string) => {
@@ -596,7 +603,8 @@ export const useGarage = () => {
     const now = economy.getNow();
     const contract = economy.state.contracts[mechanicId];
     const toolsMult = repairToolsMultiplier(economy.state);
-    const clearanceMult = clearanceSpeedFactor(contract, car.tier ?? getCarTier(car));
+    // Допуск к классу × стапель (кузовной ремонт клиента быстрее)
+    const clearanceMult = clearanceSpeedFactor(contract, car.tier ?? getCarTier(car)) * clientWorkMultiplier(economy.state, car.clientOrderId);
     const speedPerSec = MECHANIC_REPAIR_SPEED * workerSpeedMultiplier(contract) * toolsMult * clearanceMult;
     const improvementNeeded = car.maxCondition - car.condition;
     const durationMs = Math.ceil((improvementNeeded / speedPerSec) * 1000);
@@ -804,6 +812,7 @@ export const useGarage = () => {
       const car = storedGarage.find((c) => c.id === carId);
       const quote = servicePaintQuote(carId);
       if (!car || !quote || car.clientOrderId || carBusyReason(carId) || quote.from >= quote.target) return false;
+      if (isParkingSlot(car.slotIndex)) return false;
       const now = economy.getNow();
       // Затраты на свою машину — в её себестоимость
       if (!economy.spendOnCar(carId, quote.costCents, `svcpaint:${carId}:${now}`)) return false;
@@ -819,11 +828,35 @@ export const useGarage = () => {
       }));
       return true;
     },
-    [storedGarage, servicePaintQuote, carBusyReason, economy],
+    [storedGarage, servicePaintQuote, carBusyReason, isParkingSlot, economy],
+  );
+
+  // ─── Тюнинг (диностенд) ───────────────────────────────────────────
+  /** Цена тюнинга: доля прироста стоимости, который даст поднятый технический максимум */
+  const tuningQuote = useCallback(
+    (carId: string) => {
+      const car = storedGarage.find((c) => c.id === carId);
+      if (!car || car.clientOrderId || car.tuned || car.maxCondition >= 100) return null;
+      const to = Math.min(100, Math.round((car.maxCondition + BAL.TUNING_MAX_BONUS) * 10) / 10);
+      const gain = carValue(car.basePrice, { ...car, condition: to }) - carValue(car.basePrice, { ...car, condition: car.maxCondition });
+      return { from: car.maxCondition, to, costCents: Math.max(100, Math.round(gain * BAL.TUNING_COST_SHARE * 100)) };
+    },
+    [storedGarage],
+  );
+
+  const tuneCar = useCallback(
+    (carId: string): boolean => {
+      const quote = tuningQuote(carId);
+      if (!quote || !economy.state.equipment.owned.includes('dyno') || carBusyReason(carId)) return false;
+      if (!economy.spendOnCar(carId, quote.costCents, `tune:${carId}`)) return false;
+      setGarage((prev) => prev.map((c) => (c.id === carId ? { ...c, maxCondition: quote.to, tuned: true } : c)));
+      return true;
+    },
+    [tuningQuote, carBusyReason, economy],
   );
 
   // ─── Своя покрасочная камера ──────────────────────────────────────
-  /** Материалы для покраски в своей камере: OWN_PAINT_MATERIALS_SHARE прироста стоимости (у клиента — уже оплачены деталями заказа) */
+  /** Материалы для покраски в своей камере: доля прироста стоимости (подбор краски — дешевле; у клиента — уже оплачены деталями заказа) */
   const boothPaintQuote = useCallback(
     (carId: string) => {
       const car = storedGarage.find((c) => c.id === carId);
@@ -835,11 +868,11 @@ export const useGarage = () => {
       return {
         from,
         target,
-        materialsCents: Math.round(gain * BAL.OWN_PAINT_MATERIALS_SHARE * 100),
+        materialsCents: Math.round(gain * ownPaintMaterialsShare(economy.state) * 100),
         gainCents: Math.round(gain * 100),
       };
     },
-    [storedGarage],
+    [storedGarage, economy.state],
   );
 
   const startBoothJob = useCallback(
@@ -1222,6 +1255,12 @@ export const useGarage = () => {
     () => ({
       garage,
       garageSlots,
+      parkingSlots,
+      allSlots,
+      isParkingSlot,
+      slotLabel,
+      tuningQuote,
+      tuneCar,
       garageId,
       mechanics: staffMechanics,
       mechanicRepairs,
@@ -1272,6 +1311,12 @@ export const useGarage = () => {
     [
       garage,
       garageSlots,
+      parkingSlots,
+      allSlots,
+      isParkingSlot,
+      slotLabel,
+      tuningQuote,
+      tuneCar,
       garageId,
       staffMechanics,
       mechanicRepairs,

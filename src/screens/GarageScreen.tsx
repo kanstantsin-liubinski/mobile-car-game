@@ -42,6 +42,9 @@ export const GarageScreen: React.FC = () => {
   const {
     garage,
     garageSlots,
+    allSlots,
+    isParkingSlot,
+    slotLabel,
     garageId,
     mechanics,
     mechanicRepairs,
@@ -442,10 +445,11 @@ export const GarageScreen: React.FC = () => {
             gap: 8,
           }}
         >
-          {Array.from({ length: garageSlots }).map((_, slotIndex) => {
+          {allSlots.map((slotIndex) => {
             const carInSlot = garage.find((c) => c.slotIndex === slotIndex);
             const isSelected = selectedSlot === slotIndex;
             const isBooth = boothSlot === slotIndex;
+            const isParking = isParkingSlot(slotIndex);
 
             return (
               <TouchableOpacity
@@ -460,6 +464,7 @@ export const GarageScreen: React.FC = () => {
                       ? "rgba(251, 191, 36, 0.15)"
                       : "rgba(99, 102, 241, 0.08)",
                   borderWidth: 2,
+                  borderStyle: isParking ? "dashed" : "solid",
                   borderColor: isSelected
                     ? colors.primary
                     : carInSlot
@@ -473,11 +478,11 @@ export const GarageScreen: React.FC = () => {
                 <Text
                   style={{
                     color: isSelected ? "#FFF" : colors.textPrimary,
-                    fontSize: 20,
+                    fontSize: isParking ? 16 : 20,
                     fontWeight: "700",
                   }}
                 >
-                  {slotIndex + 1}
+                  {slotLabel(slotIndex)}
                 </Text>
                 {(isBooth || carInSlot?.clientOrderId) && (
                   <Text style={{ position: "absolute", top: 2, right: 4, fontSize: 11 }}>
@@ -488,6 +493,11 @@ export const GarageScreen: React.FC = () => {
             );
           })}
         </ScrollView>
+        {isParkingSlot(selectedSlot) && (
+          <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 6 }}>
+            🅿️ Место на коммерческой стоянке: машину можно хранить, переставить в рабочий слот и продать. Ремонт и покраска — только в рабочих слотах.
+          </Text>
+        )}
         {boothSlot === selectedSlot && (
           <Text style={{ color: colors.textTertiary, fontSize: 11, marginTop: 6 }}>
             🎨 Слот занят покрасочной камерой: здесь красят, механический ремонт не ведётся.

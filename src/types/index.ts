@@ -32,6 +32,8 @@ export interface GarageCar extends Car {
   clientOrderId?: string;
   /** Цель покраски клиентской машины (по заказу на покраску) */
   paintTarget?: number;
+  /** Тюнинг на диностенде уже сделан (технический максимум поднят) */
+  tuned?: boolean;
 }
 
 export interface Mechanic {
