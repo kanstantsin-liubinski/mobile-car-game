@@ -17,7 +17,17 @@ const unlocks = (): { level: number; text: string }[] => {
 };
 
 /** Окно «Опыт»: уровень, прогресс, история начислений, как заработать и что даёт уровень */
-export const ExperienceModal = ({ visible, onClose, onOpenLegacy }: { visible: boolean; onClose: () => void; onOpenLegacy?: () => void }) => {
+export const ExperienceModal = ({
+  visible,
+  onClose,
+  onOpenLegacy,
+  onClosed,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onOpenLegacy?: () => void;
+  onClosed?: () => void;
+}) => {
   const { state } = useEconomy();
   const { level, xp, totalXp } = state.player.xp;
   const required = requiredXp(level);
@@ -26,7 +36,7 @@ export const ExperienceModal = ({ visible, onClose, onOpenLegacy }: { visible: b
   const opened = unlocks().filter((u) => u.level <= level);
 
   return (
-    <InfoSheet visible={visible} title="Опыт" onClose={onClose}>
+    <InfoSheet visible={visible} title="Опыт" onClose={onClose} onClosed={onClosed}>
       <InfoSection title={`Уровень ${level}`}>
         <InfoRow label="До следующего уровня" value={`${xp} / ${required} XP`} />
         <InfoBar progress={xp / required} color={colors.primary} />

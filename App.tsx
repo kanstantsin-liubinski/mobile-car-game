@@ -3,7 +3,7 @@ import { View, Text, Platform } from 'react-native';
 import { preloadAllImages } from './src/img/preloadImages';
 import { colors } from '@styles/colors';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { GarageScreen, MarketScreen, SkillsScreen, CityScreen, DealershipScreen, OrdersScreen } from '@screens';
 import { BottomMenu, TopMenu, MainMenu } from '@components';
@@ -33,6 +33,7 @@ function GameContent() {
   const [financeOpen, setFinanceOpen] = useState(false);
   const [xpOpen, setXpOpen] = useState(false);
   const [legacyOpen, setLegacyOpen] = useState(false);
+  const legacyAfterXp = useRef(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const { paydayPending } = useGameClock();
   useEffect(() => {
@@ -88,7 +89,13 @@ function GameContent() {
             visible={xpOpen && !paydayPending}
             onClose={() => setXpOpen(false)}
             onOpenLegacy={() => {
+              // «Наследие» откроется, когда окно «Опыт» полностью закроется (iOS не показывает Modal поверх закрывающегося)
+              legacyAfterXp.current = true;
               setXpOpen(false);
+            }}
+            onClosed={() => {
+              if (!legacyAfterXp.current) return;
+              legacyAfterXp.current = false;
               setLegacyOpen(true);
             }}
           />

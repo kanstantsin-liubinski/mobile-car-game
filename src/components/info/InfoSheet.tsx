@@ -12,18 +12,21 @@ export const InfoSheet = ({
   visible,
   title,
   onClose,
+  onClosed,
   children,
 }: {
   visible: boolean;
   title: string;
   onClose: () => void;
+  /** Окно полностью закрыто (см. SheetModal) */
+  onClosed?: () => void;
   children: React.ReactNode;
 }) => {
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
   const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
   return (
-    <SheetModal visible={visible} onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose} onClosed={onClosed}>
         <View style={[garageStyles.modalContent, styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
           <SheetHeader title={title} onClose={onClose} flush />
           {visible && <SheetScroll>{children}</SheetScroll>}

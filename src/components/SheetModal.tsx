@@ -14,6 +14,12 @@ interface SheetModalProps {
   align?: 'bottom' | 'center';
   /** Цвет затемнения */
   backdropColor?: string;
+  /**
+   * Окно полностью закрыто и убрано. Только после этого можно открывать другое окно:
+   * на iOS Modal, открытый во время закрытия соседнего, не показывается, а невидимый слой
+   * остаётся поверх игры и перехватывает все нажатия.
+   */
+  onClosed?: () => void;
   children: React.ReactNode;
 }
 
@@ -25,7 +31,14 @@ interface SheetModalProps {
  * через пару кадров после монтирования, и анимация, запущенная раньше, «съедала» начало выезда —
  * окно появлялось рывком с середины пути.
  */
-export const SheetModal = ({ visible, onRequestClose, align = 'bottom', backdropColor = 'rgba(0, 0, 0, 0.7)', children }: SheetModalProps) => {
+export const SheetModal = ({
+  visible,
+  onRequestClose,
+  align = 'bottom',
+  backdropColor = 'rgba(0, 0, 0, 0.7)',
+  onClosed,
+  children,
+}: SheetModalProps) => {
   const { height } = useWindowDimensions();
   const [mounted, setMounted] = useState(visible);
   const backdrop = useRef(new Animated.Value(0)).current;
@@ -33,6 +46,20 @@ export const SheetModal = ({ visible, onRequestClose, align = 'bottom', backdrop
   /** Открытие уже запущено для текущего показа */
   const opening = useRef(false);
   const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onClosedRef = useRef(onClosed);
+  onClosedRef.current = onClosed;
+  const wasMounted = useRef(mounted);
+
+  // Сообщаем о полном закрытии один раз — когда Modal действительно убран
+  useEffect(() => {
+    if (wasMounted.current && !mounted) {
+      // Пара кадров на то, чтобы iOS успел снять нативное окно
+      const t = setTimeout(() => onClosedRef.current?.(), 60);
+      wasMounted.current = mounted;
+      return () => clearTimeout(t);
+    }
+    wasMounted.current = mounted;
+  }, [mounted]);
 
   const startOpen = useCallback(() => {
     if (opening.current) return;
