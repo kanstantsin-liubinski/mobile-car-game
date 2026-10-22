@@ -23,5 +23,16 @@ export const LegacyWatcher = () => {
     });
   }, [isLoaded, level, legacy.reachedLevel100, update, showToast]);
 
+  // Концерн куплен в экономике — отмечаем в «Наследии» (переживает перезапуски)
+  const careers = legacy.careers;
+  useEffect(() => {
+    if (!isLoaded || !state.concernPurchased || legacy.concern.purchased) return;
+    update((l) => ({
+      ...l,
+      concern: { purchased: true, purchasedAtCareer: careers + 1 },
+      achievements: Array.from(new Set([...l.achievements, 'concern'])),
+    }));
+  }, [isLoaded, state.concernPurchased, legacy.concern.purchased, careers, update]);
+
   return null;
 };

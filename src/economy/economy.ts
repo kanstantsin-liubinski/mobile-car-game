@@ -236,6 +236,8 @@ export interface EconomyState {
   ladderVersion: number;
   /** Аукцион на авторынке (с 30 уровня) */
   auction: A.AuctionState;
+  /** Цель «Автомобильный концерн» куплена в этой карьере (дублируется в «Наследии») */
+  concernPurchased?: boolean;
 }
 
 export interface XpEntry {
@@ -1240,6 +1242,21 @@ export const claimAuctionLot = (s: EconomyState, now: number): OpResult => {
   });
   if (!bought.ok) return bought;
   return { ok: true, state: { ...bought.state, auction: A.markClaimed(bought.state.auction) } };
+};
+
+// ─── Цель «Автомобильный концерн» ──────────────────────────────────────────
+
+/**
+ * Покупка концерна: вложение из свободных денег, один раз. Условия «Наследия» (100 уровень,
+ * перезапуски, очки) проверяет вызывающий (concern.ts) — здесь только то, что знает экономика.
+ */
+export const buyConcern = (s: EconomyState): OpResult => {
+  if (s.concernPurchased || s.loan || s.bankruptcy) return { state: s, ok: false };
+  if (Object.keys(s.branches ?? {}).length < B.CONCERN_MIN_BRANCHES) return { state: s, ok: false };
+  const cost = toCents(B.CONCERN_PRICE);
+  const paid = spend(s, cost, (l) => ({ ...l, investmentsCents: l.investmentsCents + cost }), 'concern');
+  if (!paid.ok) return paid;
+  return { ok: true, state: { ...paid.state, concernPurchased: true } };
 };
 
 // ─── Продвинутое оборудование ──────────────────────────────────────────────

@@ -14,6 +14,7 @@ import { garagesValueCents, useLegacy } from '@hooks/LegacyContext';
 import { garageStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
 import * as L from '../../economy/legacy';
+import { ConcernSection } from './ConcernSection';
 import { careerSummary } from '../../economy/economy';
 import { formatMoney } from '../../economy/format';
 
@@ -22,7 +23,7 @@ const END_NAMES: Record<L.CareerEnd, string> = { legacy: '🏛️ Наследи
 
 /**
  * «Наследие»: текущие бонусы, сколько очков даст перезапуск сейчас, перезапуск с явным
- * подтверждением (что сбросится, что останется), история карьер и рекорды.
+ * подтверждением (что сбросится, что останется), история карьер, рекорды и цель «Концерн».
  */
 export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
   const { state } = useEconomy();
@@ -92,6 +93,8 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
               <Text style={styles.restartText}>Начать новую карьеру с наследием</Text>
             </TouchableOpacity>
           </FinanceSection>
+
+          <ConcernSection />
 
           <FinanceSection title="Рекорды">
             <FinanceRow label="Лучший уровень" value={String(Math.max(legacy.records.bestLevel, state.player.xp.level))} />

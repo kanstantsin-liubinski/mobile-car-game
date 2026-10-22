@@ -607,3 +607,14 @@ export const LEVEL_LADDER: { level: number; text: string }[] = [
 
 /** Классы до лестницы (старые сохранения): что уже открыто на их уровне, остаётся открытым */
 export const OLD_TIER_UNLOCK_LEVELS: Record<number, number> = { 1: 0, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25 };
+
+// ─── Цель «Автомобильный концерн» ──────────────────────────────────────────
+
+/** Цена концерна, $ (из свободных денег, без кредита) */
+export const CONCERN_PRICE = 1_000_000_000;
+/** Сколько перезапусков через «Наследие» и очков наследия нужно */
+export const CONCERN_MIN_RESTARTS = 3;
+export const CONCERN_MIN_LEGACY_POINTS = 20;
+/** Развитая сеть: филиалов и автоматизированных слотов в них */
+export const CONCERN_MIN_BRANCHES = 3;
+export const CONCERN_MIN_AUTO_SLOTS = 6;

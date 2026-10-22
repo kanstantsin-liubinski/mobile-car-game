@@ -11,7 +11,8 @@ import { TouchableOpacity } from '@components/Touchable';
 /** Что открывается на каком уровне: лестница до 100 (классы, гаражи, филиалы, оборудование, новые механики) */
 const unlocks = (): { level: number; text: string }[] => {
   const list = LEVEL_LADDER.filter((u) => u.level > 1).map((u) => ({ ...u }));
-  for (const e of EQUIPMENT) if (e.requiredLevel > 1 && e.requiredLevel !== LADDER.advancedEquipment && e.id !== 'paint_booth') list.push({ level: e.requiredLevel, text: e.name });
+  // Камера, продвинутое оборудование и стоянка уже есть в лестнице — из списка оборудования только ранние ступени
+  for (const e of EQUIPMENT) if (e.requiredLevel > 1 && e.requiredLevel < LADDER.paintBooth) list.push({ level: e.requiredLevel, text: e.name });
   return list.sort((a, b) => a.level - b.level);
 };
 

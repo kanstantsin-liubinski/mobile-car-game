@@ -142,6 +142,8 @@ interface EconomyContextType {
   auctionBid: () => boolean;
   /** Выкупить выигранный лот: деньги списываются, машину добавляет гараж */
   claimAuctionLot: () => Car | null;
+  /** Цель «Автомобильный концерн» (условия «Наследия» проверяет окно) */
+  buyConcern: () => boolean;
 }
 
 interface GameClockContextType {
@@ -490,6 +492,8 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return run((s, now) => E.claimAuctionLot(s, now)) ? car : null;
   }, [run]);
 
+  const buyConcern = useCallback(() => run((s) => E.buyConcern(s)), [run]);
+
   // ─── Филиалы ──────────────────────────────────────────────────────
   const openBranch = useCallback(
     (garageId: string, mainGarageId: string) => {
@@ -647,6 +651,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       cancelBranchJob,
       auctionBid,
       claimAuctionLot,
+      buyConcern,
     }),
     [
       isLoaded,
@@ -708,6 +713,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       cancelBranchJob,
       auctionBid,
       claimAuctionLot,
+      buyConcern,
     ],
   );
 

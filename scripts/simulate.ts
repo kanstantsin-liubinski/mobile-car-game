@@ -463,7 +463,7 @@ const legacyRun = (restartLevels: number[]) => {
         (last ? ` ур. 100: ${hours(c.at['ур. 100'])}, $1 млрд: ${hours(c.at['$1 млрд'])}` : ''),
     );
   }
-  return { rows, totalHours: (totalMonths * 5) / 60 };
+  return { rows, totalHours: (totalMonths * 5) / 60, points, restarts: restartLevels.length };
 };
 
 log('');
@@ -478,6 +478,13 @@ for (const plan of [[], [20], [20, 35], [20, 35, 50], [20, 35, 50, 75]]) {
   log('|---:|---:|---|---:|---:|---:|---|---:|---|');
   const r = legacyRun(plan);
   for (const row of r.rows) log(row);
+  const ok = r.restarts >= B.CONCERN_MIN_RESTARTS && r.points >= B.CONCERN_MIN_LEGACY_POINTS;
+  log('');
+  log(
+    `Цель «Концерн» (${B.CONCERN_MIN_RESTARTS}+ перезапусков, ${B.CONCERN_MIN_LEGACY_POINTS}+ очков, 100 уровень, $1 млрд): ${
+      ok ? `выполнима за ≈${r.totalHours.toFixed(0)} ч` : `не выполнена — перезапусков ${r.restarts}, очков ${r.points}`
+    }.`,
+  );
 }
 
 // ─── Филиал с управляющим ──────────────────────────────────────────────────
@@ -669,5 +676,29 @@ for (const tier of [1, 3, 6]) {
     )} |`,
   );
 }
+
+// ─── Итог ──────────────────────────────────────────────────────────────────
+
+log('');
+log('## 12. Итоговые параметры (из balance.ts на момент запуска)');
+log('');
+log('| Параметр | Значение |');
+log('|---|---|');
+for (const [k, v] of [
+  ['Слоты гаражей', GARAGES.map((g) => g.slots).join(' / ')],
+  ['Цены гаражей', GARAGES.map((g) => usd(g.price)).join(' / ')],
+  ['Уровни гаражей', GARAGES.map((g) => g.requiredLevel).join(' / ')],
+  ['Уровни классов', [1, 2, 3, 4, 5, 6].map((t) => TIER_UNLOCK_LEVELS[t]).join(' / ')],
+  ['Кривая XP', `${P.XP_CURVE_BASE} + ${P.XP_CURVE_LINEAR}n + ${P.XP_CURVE_QUADRATIC}n²`],
+  ['Детали своего ремонта', pct(B.OWN_REPAIR_PARTS_SHARE)],
+  ['Материалы своей покраски', `${pct(B.OWN_PAINT_MATERIALS_SHARE)} (с подбором краски ×${B.PAINT_MATCHING_FACTOR})`],
+  ['Оклад сотрудника', `${pct(B.STAFF_SALARY_SHARE)} потенциального прироста; механик Эконом ${usd(B.mechanicBaseSalaryCents(1) / 100)}`],
+  ['Оплата заказов', `репутация до ×${B.REPUTATION_PAY_STEPS[B.REPUTATION_PAY_STEPS.length - 1].mult}, уровень до +${pct(B.ORDER_LEVEL_BONUS_PER_LEVEL * B.ORDER_LEVEL_BONUS_MAX_LEVELS)}`],
+  ['Управляющий', `${usd(B.MANAGER_BASE_SALARY_CENTS / 100)} × (1 + ${pct(B.MANAGER_SALARY_STEP)} за уровень)`],
+  ['Открытие филиалов', Object.values(B.BRANCH_OPEN_COST).map(usd).join(' / ')],
+  ['Наследие', `с ур. ${B.LEGACY_MIN_LEVEL}, бизнес от ${usd(B.LEGACY_MIN_NET_WORTH)}, прибыль ≤ ×${B.LEGACY_PROFIT_MAX}, опыт ≤ ×${B.LEGACY_XP_MAX}`],
+  ['Концерн', `${usd(B.CONCERN_PRICE)}, ${B.CONCERN_MIN_RESTARTS} перезапуска, ${B.CONCERN_MIN_LEGACY_POINTS} очков, ${B.CONCERN_MIN_BRANCHES} филиала / ${B.CONCERN_MIN_AUTO_SLOTS} слотов`],
+] as [string, string][])
+  log(`| ${k} | ${v} |`);
 
 writeFileSync(new URL('../docs/BALANCE_REPORT.md', import.meta.url), out.join('\n') + '\n', 'utf8');
