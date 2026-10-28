@@ -1,6 +1,11 @@
 import { StyleSheet } from 'react-native';
 import { colors } from './colors';
 
+/** Радиус скругления карточек и плашек — один на весь проект */
+export const CARD_RADIUS = 12;
+/** Отступ контента от левого и правого края экрана */
+export const SCREEN_INSET = 16;
+
 export const commonStyles = StyleSheet.create({
   container: {
     flex: 1,
@@ -189,8 +194,12 @@ export const marketStyles = StyleSheet.create({
     position: 'absolute',
   },
   tierTab: {
-    width: 80,
-    height: 64,
+    // Высота по содержимому: иконка + название + уровень в фиксированные 64 не влезали,
+    // и строка уровня обрезалась
+    minWidth: 80,
+    minHeight: 64,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: colors.darkBg,
     borderWidth: 1,
@@ -247,7 +256,7 @@ export const marketStyles = StyleSheet.create({
   },
   carCard: {
     backgroundColor: colors.darkBg,
-    borderRadius: 16,
+    borderRadius: CARD_RADIUS,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
@@ -326,11 +335,6 @@ export const marketStyles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
-  carDescription: {
-    fontSize: 14,
-    color: colors.textTertiary,
-    marginBottom: 12,
-  },
   buyButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
@@ -391,7 +395,7 @@ export const garageStyles = StyleSheet.create({
   },
   carCard: {
     backgroundColor: colors.darkBg,
-    borderRadius: 16,
+    borderRadius: CARD_RADIUS,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
@@ -608,7 +612,7 @@ export const skillsStyles = StyleSheet.create({
   },
   skillCard: {
     backgroundColor: colors.darkBg,
-    borderRadius: 16,
+    borderRadius: CARD_RADIUS,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,

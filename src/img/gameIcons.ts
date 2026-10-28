@@ -34,16 +34,15 @@ export const BUILDING_ICONS: Record<string, ImageSourcePropType> = {
   dealership: require('../../assets/icons/buildings/dealership.png'),
 };
 
-const CLASS_HYPER = require('../../assets/icons/classes/class_hyper.png');
-
 /** Классы авто (тиры из carModels.ts) */
 export const TIER_ICONS: Record<number, ImageSourcePropType> = {
   1: require('../../assets/icons/classes/class_economy.png'),
   2: require('../../assets/icons/classes/class_middle.png'),
   3: require('../../assets/icons/classes/class_premium.png'),
   4: require('../../assets/icons/classes/class_luxury.png'),
-  5: CLASS_HYPER, // TODO: отдельная иконка для класса «Спорт»
-  6: CLASS_HYPER,
+  // Временно: синяя перекраска гиперкара, пока нет своего арта для «Спорта»
+  5: require('../../assets/icons/classes/class_sport.png'),
+  6: require('../../assets/icons/classes/class_hyper.png'),
 };
 
 export const MECHANIC_AVATARS: ImageSourcePropType[] = [

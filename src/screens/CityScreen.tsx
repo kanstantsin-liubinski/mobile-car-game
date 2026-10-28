@@ -153,7 +153,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
   const position = useRef<Point>({ x: 0, y: 0 });
   const dragStart = useRef<Point>({ x: 0, y: 0 });
   const viewport = useRef<{ width: number; height: number } | null>(null);
-  const viewportRef = useRef<View>(null);
+  const viewportRef = useRef<React.ComponentRef<typeof View>>(null);
 
   useEffect(() => {
     const id = pan.addListener((value) => {

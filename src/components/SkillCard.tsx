@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, type ImageSourcePropType } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
+import { CARD_RADIUS } from '@styles/styles';
 import { GameIcon } from '@components/GameIcon';
 import { ICONS } from '@img/gameIcons';
 import { formatGameCooldown, formatMoney } from '../economy/format';
@@ -165,7 +166,7 @@ export const SkillCard = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.cardBg,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,

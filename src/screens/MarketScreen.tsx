@@ -49,7 +49,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
 
   const [selectedTier, setSelectedTier] = useState(focus?.tier ?? 1);
   const [carToBuy, setCarToBuy] = useState<Car | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
   // Каждый новый запрос фокуса переключает вкладку и прокручивает к началу, где стоит горящее предложение
   useEffect(() => {
@@ -136,8 +136,6 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
         )}
 
         <ListingDiagnostics listing={listing} />
-
-        <Text style={marketStyles.carDescription}>{car.description}</Text>
 
         <TouchableOpacity
           style={[marketStyles.buyButton, hot && { backgroundColor: HOT_COLOR }, !canAfford && marketStyles.buyButtonDisabled]}

@@ -126,8 +126,6 @@ export const DealershipScreen = ({ onBack }: DealershipScreenProps) => {
                     <Text style={marketStyles.carPrice}>${price.toLocaleString('ru-RU')}</Text>
                   </View>
 
-                  <Text style={marketStyles.carDescription}>{model.description}</Text>
-
                   <TouchableOpacity
                     style={[marketStyles.buyButton, !canAfford && marketStyles.buyButtonDisabled]}
                     onPress={() => setCarToBuy({ ...createNewCar(model), price })}

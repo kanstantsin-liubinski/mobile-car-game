@@ -39,6 +39,7 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
 
   const career = careerSummary(state, now, garagesValueCents(garageId));
   const preview = L.restartPreview(legacy, career);
+  const blocked = !preview.available && preview.blocks.length > 0;
   const points = state.legacyPoints ?? 0;
 
   const handleRestart = async () => {
@@ -84,9 +85,18 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
               Всего очков = 10 × √(прибыль всех закрытых карьер / $1 000 000); начисляются только новые. Банкротство и «Новая игра» очков не
               дают, но и наследие не стирают.
             </Text>
-            {!preview.available && preview.blocks.map((b) => <Notice key={b} level="info">{b}</Notice>)}
+            {blocked && (
+              <View style={styles.blocks}>
+                {preview.blocks.map((b) => (
+                  <Notice key={b} level="info">
+                    {b}
+                  </Notice>
+                ))}
+              </View>
+            )}
             <TouchableOpacity
-              style={[styles.restart, !preview.available && styles.disabled]}
+              // Под Notice уже есть свои 10 снизу — второй отступ кнопки дал бы двойной зазор
+              style={[styles.restart, blocked && styles.restartAfterNotice, !preview.available && styles.disabled]}
               disabled={!preview.available}
               onPress={() => setConfirming(true)}
             >
@@ -176,6 +186,9 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
 const styles = StyleSheet.create({
   hint: { fontSize: 12, color: colors.textTertiary, lineHeight: 17, marginTop: 4 },
   restart: { backgroundColor: '#B45309', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 10 },
+  restartAfterNotice: { marginTop: 0 },
+  // Тот же зазор 10, что между секциями и уведомлениями в остальных окнах
+  blocks: { marginTop: 10 },
   restartText: { color: '#FFF', fontWeight: '800', fontSize: 14 },
   disabled: { opacity: 0.45 },
   career: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, marginTop: 6 },

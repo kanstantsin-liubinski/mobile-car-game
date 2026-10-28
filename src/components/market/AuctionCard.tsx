@@ -5,6 +5,7 @@ import { CarImage } from '@components/CarImage';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { colors } from '@styles/colors';
+import { SCREEN_INSET } from '@styles/styles';
 import { TIER_NAMES } from '../../data/carModels';
 import * as A from '../../economy/auctions';
 import { LADDER } from '../../economy/balance';
@@ -124,6 +125,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#A855F7',
     padding: 12,
+    // Карточка стоит прямо в ScrollView рынка, у которого нет бокового отступа
+    marginHorizontal: SCREEN_INSET,
     marginBottom: 12,
     gap: 6,
   },

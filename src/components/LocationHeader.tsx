@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, type ImageSourcePropType } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@styles/colors';
+import { CARD_RADIUS, SCREEN_INSET } from '@styles/styles';
 import { GameIcon } from '@components/GameIcon';
 
 interface LocationHeaderProps {
@@ -46,7 +47,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: SCREEN_INSET,
     paddingTop: 12,
     paddingBottom: 8,
   },
@@ -59,7 +60,7 @@ const styles = StyleSheet.create({
   },
   pill: {
     height: PILL_HEIGHT,
-    borderRadius: 14,
+    borderRadius: CARD_RADIUS,
     backgroundColor: 'rgba(30, 41, 59, 0.92)',
     borderWidth: 1,
     borderColor: colors.border,

@@ -1,6 +1,9 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
+// Без этого Expo Go через туннель/прокси вылетает: см. комментарий в файле.
+require('./scripts/normalizeForwardedProto');
+
 const config = getDefaultConfig(__dirname);
 
 // Добавляем поддержку path aliases
