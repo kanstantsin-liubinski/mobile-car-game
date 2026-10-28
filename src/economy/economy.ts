@@ -25,6 +25,7 @@ import { rollBranchMonths, type BranchState } from './branchModel.ts';
 import { legacyMarginBonusCents, legacyXpMultiplier, type CareerSummary } from './legacy.ts';
 import { TIER_UNLOCK_LEVELS, TOTAL_TIERS } from '../data/carModels.ts';
 import * as A from './auctions.ts';
+import { nameMatchingAvatar } from '../data/staffNames.ts';
 
 // ─── Константы ─────────────────────────────────────────────────────────────
 
@@ -106,6 +107,8 @@ export interface Contract {
   clearance?: number;
   /** Филиал, к которому прикреплён сотрудник (нет — основной гараж) */
   branchId?: string;
+  /** Имя сотрудника: штат общий, и имя нужно и гаражу, и филиалам */
+  name?: string;
 }
 
 /** Непроданная машина по себестоимости */
@@ -161,6 +164,8 @@ export interface MonthLedger {
   inspectPractice: number;
   /** Бонус наследия к положительной марже продаж и заказов */
   legacyBonusCents: number;
+  /** Награды за новые уровни (P.levelUpReward) */
+  levelRewardCents: number;
 }
 
 export interface MechanicMonthStat {
@@ -211,6 +216,8 @@ export interface EconomyState {
     netProfitCents: number;
     /** Бонус наследия за всю карьеру (не входит в базу очков наследия) */
     legacyBonusCents: number;
+    /** Награды за уровни за всю карьеру (тоже не входят в базу очков наследия) */
+    levelRewardCents: number;
     bestMonthProfitCents: number;
   };
   /** Контракты для механиков из сохранений до финансовой системы уже созданы */
@@ -305,6 +312,7 @@ export const emptyLedger = (): MonthLedger => ({
   carExtraCostsCents: 0,
   inspectPractice: 0,
   legacyBonusCents: 0,
+  levelRewardCents: 0,
 });
 
 export const createEconomy = (
@@ -325,7 +333,7 @@ export const createEconomy = (
   history: [],
   processedOps: [],
   bankruptcy: null,
-  totals: { carsSold: 0, revenueCents: 0, netProfitCents: 0, legacyBonusCents: 0, bestMonthProfitCents: 0 },
+  totals: { carsSold: 0, revenueCents: 0, netProfitCents: 0, legacyBonusCents: 0, levelRewardCents: 0, bestMonthProfitCents: 0 },
   contractsMigrated,
   player: createPlayerProgress(),
   playerMigrated,
@@ -603,12 +611,23 @@ export interface OpResult {
   ok: boolean;
 }
 
-/** Начисление опыта с записью в журнал: за что и сколько */
+/**
+ * Начисление опыта с записью в журнал: за что и сколько. Новый уровень сразу приносит награду
+ * (P.levelUpReward) — отдельной строкой учёта, на свободные деньги.
+ */
 const awardXp = (s: EconomyState, amount: number, reason = 'Опыт'): EconomyState => {
   if (!(amount > 0)) return s;
   const xp = P.addXp(s.player.xp, amount);
   const entry: XpEntry = { month: currentMonth(s), amount: Math.floor(amount), reason, level: xp.level };
-  return { ...s, player: { ...s.player, xp }, xpLog: [entry, ...(s.xpLog ?? [])].slice(0, XP_LOG_LIMIT) };
+  const rewardCents = toCents(P.levelUpRewardsBetween(s.player.xp.level, xp.level));
+  return {
+    ...s,
+    player: { ...s.player, xp },
+    xpLog: [entry, ...(s.xpLog ?? [])].slice(0, XP_LOG_LIMIT),
+    balanceCents: s.balanceCents + rewardCents,
+    ledger: { ...s.ledger, levelRewardCents: (s.ledger.levelRewardCents ?? 0) + rewardCents },
+    totals: { ...s.totals, levelRewardCents: (s.totals.levelRewardCents ?? 0) + rewardCents },
+  };
 };
 
 // ─── Наследие: бонусы карьеры ─────────────────────────────────────────────
@@ -1012,6 +1031,7 @@ export interface MonthResult {
   serviceProfitCents: number;
   diagnosticsCents: number;
   legacyBonusCents: number;
+  levelRewardCents: number;
   netProfitCents: number;
   carsSold: number;
 }
@@ -1035,8 +1055,10 @@ export const getMonthResult = (s: EconomyState, now: number): MonthResult => {
     serviceProfitCents: l.serviceRevenueCents - l.serviceCostsCents,
     diagnosticsCents: l.diagnosticsCents,
     legacyBonusCents: l.legacyBonusCents,
+    levelRewardCents: l.levelRewardCents ?? 0,
     netProfitCents:
       l.legacyBonusCents +
+      (l.levelRewardCents ?? 0) +
       dealProfitCents +
       (l.serviceRevenueCents - l.serviceCostsCents) -
       salaryCents -
@@ -1277,9 +1299,15 @@ export const parkingSpots = (s: EconomyState): number => (hasEquipment(s, 'parki
 
 // ─── Итоги карьеры (для «Наследия») ────────────────────────────────────────
 
-/** Чистая прибыль карьеры без бонуса наследия: закрытые месяцы + текущий на момент now */
+/**
+ * Чистая прибыль карьеры без бонуса наследия и наград за уровни: закрытые месяцы + текущий на
+ * момент now. Награды — не заработок бизнеса, иначе очки наследия росли бы просто от уровня.
+ */
 export const careerBaseProfitCents = (s: EconomyState, now: number): number =>
-  s.totals.netProfitCents + getMonthResult(s, now).netProfitCents - (s.totals.legacyBonusCents ?? 0);
+  s.totals.netProfitCents +
+  getMonthResult(s, now).netProfitCents -
+  (s.totals.legacyBonusCents ?? 0) -
+  (s.totals.levelRewardCents ?? 0);
 
 /**
  * Стоимость бизнеса: свободные деньги + машины по себестоимости + гаражи (их цены передаёт вызывающий)
@@ -1393,7 +1421,7 @@ export const buildAdvice = (s: EconomyState, input: AdviceInput): Advice[] => {
 
   const last = s.history.slice(-2);
   if (last.length === 2 && last.every((m) => m.netProfitCents < 0)) {
-    advice.push({ id: 'loss-streak', level: 'danger', text: 'Вы работаете в убыток второй месяц подряд.' });
+    advice.push({ id: 'loss-streak', level: 'danger', text: 'Ты работаешь в убыток второй месяц подряд.' });
   }
 
   if (s.loan) {
@@ -1590,8 +1618,20 @@ export const deliverServiceOrder = (s: EconomyState, id: string, now: number): O
   // Маржа заказа: оплата клиента − детали, оплаченные при принятии
   state = creditLegacyBonus(state, paid - o.partsCents);
   state = awardSkill(state, 'management', B.MANAGEMENT_ORDER_PRACTICE);
+  state = awardOrderXp(state, o, outcome.late);
   return { ok: true, state: withProcessed(state, opId) };
 };
+
+/** Доля XP заказа, сданного филиалом без участия игрока */
+export const BRANCH_ORDER_XP_SHARE = 0.5;
+
+/** Опыт за сданный ремонтный заказ (P.orderXp) с множителем наследия; share — для филиалов */
+export const awardOrderXp = (s: EconomyState, o: O.ServiceOrder, late: boolean, share = 1): EconomyState =>
+  awardXp(
+    s,
+    legacyXp(s, P.orderXp(o.tier, O.serviceDef(o.type).complex, late) * share),
+    `Заказ: ${O.serviceDef(o.type).name}`,
+  );
 
 /**
  * Передать машину по заказу на подбор: обычная продажа (себестоимость, прибыль, XP — стандартно)
@@ -1701,7 +1741,12 @@ export const deserializeEconomy = (raw: string): EconomySave | null => {
       branches: Object.fromEntries(
         Object.entries(loaded.branches ?? {}).map(([id, b]) => [
           id,
-          { ...b, jobs: (b.jobs ?? []).map((j) => ({ ...j, busyFromMs: j.busyFromMs ?? j.startAtMs })) },
+          {
+            ...b,
+            jobs: (b.jobs ?? []).map((j) => ({ ...j, busyFromMs: j.busyFromMs ?? j.startAtMs })),
+            // Имена из старых сохранений приводим к полу аватара (раньше были только мужские)
+            staffNames: Object.fromEntries(Object.entries(b.staffNames ?? {}).map(([id, name]) => [id, nameMatchingAvatar(id, name)])),
+          },
         ]),
       ),
       orders: O.restoreOrdersState(loaded.orders, randomSeed(), Math.max(0, save.gameTimeMs || 0)),

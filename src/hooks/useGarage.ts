@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Car, GarageCar, Mechanic } from '@/types';
 import { calculateBasePrice, calculateMaxCondition } from '../utils/priceCalculator';
 import { DEFAULT_GARAGE_ID, getGarageById, getGarageRank } from '../data/cityBuildings';
+import { nameMatchingAvatar, staffFirstName } from '../data/staffNames';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useSoldCarsContext } from '@hooks/SoldCarsContext';
 import { useToast } from '@components/toast/ToastContext';
@@ -23,7 +24,7 @@ import {
 } from '../economy/economy';
 import { saleXp } from '../economy/progression';
 import { formatMoney } from '../economy/format';
-import { carValue, overallCondition, paintValueGain } from '../economy/carCondition';
+import { carValue, overallCondition, paintValueGain, repairPartsCents } from '../economy/carCondition';
 import * as BAL from '../economy/balance';
 import { DAY_MS } from '../economy/time';
 import type { ServiceOrder } from '../economy/orders';
@@ -86,29 +87,9 @@ export interface ActiveSellInfo {
 const GARAGE_KEY = 'game_garage';
 const GARAGE_CONFIG_KEY = 'game_garage_config';
 /** Базовая скорость ремонта механиком: % состояния в секунду игрового времени (×1 на 1-м уровне навыка) */
-const MECHANIC_REPAIR_SPEED = 0.05;
+const MECHANIC_REPAIR_SPEED = BAL.MECHANIC_SPEED_PER_SEC;
 /** Базовая эффективность ручного тапа, % состояния (умножается на навык игрока) */
 const PLAYER_TAP_REPAIR = 0.1;
-
-const MECHANIC_NAMES = [
-  'Иван',
-  'Сергей',
-  'Дмитрий',
-  'Петр',
-  'Анатолий',
-  'Владимир',
-  'Алексей',
-  'Юрий',
-  'Николай',
-  'Валентин',
-];
-
-/** Детали за технический ремонт своей машины с from до to: доля прироста её рыночной стоимости, в центах */
-const repairPartsCents = (car: GarageCar, from: number, to: number): number => {
-  if (to <= from) return 0;
-  const gain = carValue(car.basePrice, { ...car, condition: to }) - carValue(car.basePrice, { ...car, condition: from });
-  return Math.max(1, Math.round(gain * BAL.OWN_REPAIR_PARTS_SHARE * 100));
-};
 
 const paintAt = (run: PainterRun, target: number, now: number): number =>
   Math.min(target, Math.round((run.startPaint + (Math.max(0, now - run.startedAtMs) / 1000) * run.speedPerSec) * 100) / 100);
@@ -163,9 +144,10 @@ export const useGarage = () => {
   const [painterPaused, setPainterPaused] = useState(false);
   const boothSlot = economy.state.equipment.boothSlot;
 
-  const generateMechanicName = (): string => {
-    const randomIndex = Math.floor(Math.random() * MECHANIC_NAMES.length);
-    return MECHANIC_NAMES[randomIndex];
+  /** Кандидат в механики: имя под его аватар (женский портрет — женское имя) */
+  const newMechanicCandidate = (): Mechanic => {
+    const id = generateMechanicId();
+    return { id, name: staffFirstName(id), slotIndex: -1, skillLevel: 1, experience: 0, hired: false };
   };
 
   const generateMechanicId = (): string => {
@@ -268,20 +250,14 @@ export const useGarage = () => {
           const newMechanics: Mechanic[] = [];
 
           for (let i = 0; i < slotsCount; i++) {
-            newMechanics.push({
-              id: generateMechanicId(),
-              name: generateMechanicName(),
-              slotIndex: -1,
-              skillLevel: 1,
-              experience: 0,
-              hired: false,
-            });
+            newMechanics.push(newMechanicCandidate());
           }
 
           setMechanics(newMechanics);
         } else if (Array.isArray(config.mechanics)) {
           const updatedMechanics = config.mechanics.map((m: any) => ({
             ...m,
+            name: nameMatchingAvatar(m.id, m.name ?? ''),
             hired: m.hired !== undefined ? m.hired : false,
           }));
           setMechanics(updatedMechanics);
@@ -299,7 +275,8 @@ export const useGarage = () => {
             >,
           );
         }
-        if (Array.isArray(config.painters)) setPainters(config.painters);
+        // Имена из старых сохранений приводим к полу аватара
+        if (Array.isArray(config.painters)) setPainters(config.painters.map((p: Mechanic) => ({ ...p, name: nameMatchingAvatar(p.id, p.name) })));
         if (config.servicePaints && typeof config.servicePaints === 'object') setServicePaints(config.servicePaints);
         if (config.boothJob) setBoothJob(config.boothJob);
         if (config.painterRun) setPainterRun(config.painterRun);
@@ -454,7 +431,7 @@ export const useGarage = () => {
         // Предупреждаем не чаще раза в 3 секунды, чтобы не засыпать тостами при быстрых тапах
         if (Date.now() - partsWarnAt.current > 3000) {
           partsWarnAt.current = Date.now();
-          showToast({ title: 'Не хватает денег на детали', message: 'Ремонт своей машины требует запчастей — пополните баланс.', icon: ICONS.repair });
+          showToast({ title: 'Не хватает денег на детали', message: 'Ремонт своей машины требует запчастей — пополни баланс.', icon: ICONS.repair });
         }
         return false;
       }
@@ -487,25 +464,47 @@ export const useGarage = () => {
 
       // Если слотов больше, добавляем новых механиков
       while (updatedMechanics.length < garageSlots) {
-        const newMechanic: Mechanic = {
-          id: generateMechanicId(),
-          name: generateMechanicName(),
-          slotIndex: -1,
-          skillLevel: 1,
-          experience: 0,
-          hired: false,
-        };
-        updatedMechanics.push(newMechanic);
+        updatedMechanics.push(newMechanicCandidate());
       }
 
-      // Если слотов меньше, удаляем лишних механиков
-      if (updatedMechanics.length > garageSlots) {
-        updatedMechanics = updatedMechanics.slice(0, garageSlots);
+      // Если слотов меньше, убираем лишних кандидатов. Нанятых не трогаем: штат общий с филиалами,
+      // и сотрудников бывает больше, чем мест в гараже
+      while (updatedMechanics.length > garageSlots) {
+        const lastCandidate = updatedMechanics.map((m) => m.hired).lastIndexOf(false);
+        if (lastCandidate < 0) break;
+        updatedMechanics = updatedMechanics.filter((_, i) => i !== lastCandidate);
       }
 
       return updatedMechanics;
     });
   }, [garageSlots]);
+
+  /**
+   * Общий штат с филиалами: в списке гаража все механики, где бы они ни работали (нанятые прямо в
+   * филиале — тоже). Работающий в филиале не занимает слот гаража.
+   */
+  useEffect(() => {
+    if (!isConfigLoaded) return;
+    const { contracts, branches } = economy.state;
+    setMechanics((prev) => {
+      let next = prev;
+      for (const c of Object.values(contracts)) {
+        if (c.profession && c.profession !== 'mechanic') continue;
+        if (next.some((m) => m.id === c.mechanicId)) continue;
+        const name = c.name ?? (c.branchId ? branches?.[c.branchId]?.staffNames[c.mechanicId] : undefined);
+        if (!name) continue; // контракты механиков гаража создаются вместе с его списком
+        next = [...next, { id: c.mechanicId, name, slotIndex: -1, skillLevel: c.skill.level, experience: 0, hired: true }];
+      }
+      next = next.map((m) => (contracts[m.id]?.branchId && m.slotIndex !== -1 ? { ...m, slotIndex: -1 } : m));
+      // Кандидатов на найм — не больше, чем мест (уволенный через филиал не оставляет лишнего)
+      while (next.length > garageSlots) {
+        const lastCandidate = next.map((m): boolean => m.hired || !!contracts[m.id]).lastIndexOf(false);
+        if (lastCandidate < 0) break;
+        next = next.filter((_, i) => i !== lastCandidate);
+      }
+      return next.length === prev.length && next.every((m, i) => m === prev[i]) ? prev : next;
+    });
+  }, [isConfigLoaded, economy.state.contracts, economy.state.branches, garageSlots]);
 
   // ─── Механики ─────────────────────────────────────────────────────
   const changeMechanicSlot = useCallback((mechanicId: string, newSlotIndex: number): boolean => {
@@ -513,6 +512,8 @@ export const useGarage = () => {
     if (newSlotIndex !== -1 && (newSlotIndex < 0 || newSlotIndex >= garageSlots)) return false;
     // Слот камеры — не место для механика
     if (newSlotIndex !== -1 && newSlotIndex === boothSlot) return false;
+    // Работающего в филиале сначала возвращают в гараж
+    if (newSlotIndex !== -1 && economy.state.contracts[mechanicId]?.branchId) return false;
 
     setMechanics((prev) =>
       prev.map((m) => {
@@ -523,19 +524,26 @@ export const useGarage = () => {
       })
     );
     return true;
-  }, [garageSlots, boothSlot]);
+  }, [garageSlots, boothSlot, economy.state.contracts]);
 
-  /** Наём открывает трудовой контракт: зарплата начисляется с этого момента */
+  /**
+   * Наём открывает трудовой контракт: зарплата начисляется с этого момента. Нанятый сразу встаёт
+   * на первый свободный слот — без этого он висел «без слота» и получал оклад за простой.
+   */
   const hireMechanic = useCallback((mechanicId: string): boolean => {
     const mechanic = mechanics.find((m) => m.id === mechanicId);
     if (!mechanic || mechanic.hired) return false;
 
     economy.hireMechanic(mechanicId);
-    setMechanics((prev) =>
-      prev.map((m) => (m.id === mechanicId ? { ...m, hired: true } : m))
-    );
+    setMechanics((prev) => {
+      const taken = new Set(prev.filter((m) => m.id !== mechanicId && m.slotIndex >= 0).map((m) => m.slotIndex));
+      const freeSlot = Array.from({ length: garageSlots }, (_, i) => i).find((i) => !taken.has(i) && i !== boothSlot);
+      return prev.map((m) =>
+        m.id === mechanicId ? { ...m, hired: true, slotIndex: m.slotIndex >= 0 ? m.slotIndex : (freeSlot ?? -1) } : m,
+      );
+    });
     return true;
-  }, [mechanics, economy]);
+  }, [mechanics, economy, garageSlots, boothSlot]);
 
   /** Останавливает ремонт и сохраняет уже достигнутое состояние машины */
   const stopRepair = useCallback((carId: string, repair: MechanicRepairInfo, now: number) => {
@@ -556,7 +564,10 @@ export const useGarage = () => {
    * освобождает слот, а его прокачка сбрасывается — повторный наём начинается с нуля.
    */
   const fireMechanic = useCallback((mechanicId: string): boolean => {
-    if (!economy.fireMechanic(mechanicId)) return false;
+    // Работающего в филиале увольняем через филиал: его слот там должен освободиться
+    const branchId = economy.state.contracts[mechanicId]?.branchId;
+    const fired = branchId ? economy.fireBranchStaff(branchId, mechanicId) : economy.fireMechanic(mechanicId);
+    if (!fired) return false;
     const now = economy.getNow();
     for (const [carId, repair] of Object.entries(mechanicRepairs)) {
       if (repair.mechanicId === mechanicId) stopRepair(carId, repair, now);
@@ -635,6 +646,29 @@ export const useGarage = () => {
     }));
   }, [storedGarage, mechanicRepairs, economy, showToast]);
 
+  /**
+   * Свободный механик сам берётся за машину на своём слоте: его нанимали ровно для этого, а кнопку
+   * «Механику» новичок не находил и платил оклад за простой. Каждую пару «машина + механик»
+   * запускаем один раз — после «Стоп» или нехватки денег на детали повторов не будет.
+   */
+  const autoStarted = useRef(new Set<string>());
+  useEffect(() => {
+    if (!isLoaded || !isConfigLoaded) return;
+    for (const m of mechanics) {
+      if (!m.hired || m.slotIndex < 0) continue;
+      if (Object.values(mechanicRepairs).some((r) => r.mechanicId === m.id)) continue;
+      const car = storedGarage.find((c) => c.slotIndex === m.slotIndex);
+      if (!car || car.condition >= car.maxCondition || mechanicRepairs[car.id]) continue;
+      if (activeSells[car.id] || servicePaints[car.id] || boothJob?.carId === car.id) continue;
+      const key = `${car.id}:${m.id}`;
+      if (autoStarted.current.has(key)) continue;
+      autoStarted.current.add(key);
+      startMechanicRepair(car.id, m.id);
+      // Одна машина за проход: состояние ремонтов обновится, и эффект продолжит со следующей
+      return;
+    }
+  }, [isLoaded, isConfigLoaded, mechanics, mechanicRepairs, storedGarage, activeSells, servicePaints, boothJob, startMechanicRepair]);
+
   const cancelMechanicRepair = useCallback((carId: string) => {
     const repair = mechanicRepairs[carId];
     if (!repair) return;
@@ -684,13 +718,13 @@ export const useGarage = () => {
       const tier = car ? getCarTier(car) : undefined;
       showToast({
         title: `${mechanicName} закончил работу`,
-        message: 'Теперь он бездействует — назначьте его на следующую машину.',
+        message: 'Теперь он бездействует — назначь его на следующую машину.',
         icon: getMechanicAvatar(repair.mechanicId),
       });
       showToast({
         title: `${car?.name ?? 'Автомобиль'} готов`,
         message: car?.clientOrderId
-          ? 'Работа по заказу клиента готова — сдайте её в разделе «Заказы».'
+          ? 'Работа по заказу клиента готова — сдай её в разделе «Заказы».'
           : `Отремонтирован до ${repair.maxCondition}% — можно продавать.`,
         icon: tier ? TIER_ICONS[tier] : undefined,
         tone: 'success',
@@ -926,7 +960,7 @@ export const useGarage = () => {
       showToast({
         title: `${car?.name ?? 'Автомобиль'} покрашен`,
         message: car?.clientOrderId
-          ? 'Покраска по заказу готова — сдайте её в разделе «Заказы».'
+          ? 'Покраска по заказу готова — сдай её в разделе «Заказы».'
           : `ЛКП ${Math.round(job.targetPaint)}% — машина стала дороже.`,
         icon: painterId ? getMechanicAvatar(painterId) : ICONS_PAINT,
         tone: 'success',
@@ -956,10 +990,11 @@ export const useGarage = () => {
   // Кандидат в маляры один: камера одна, на неё — один маляр
   useEffect(() => {
     if (!isConfigLoaded || painters.length > 0) return;
+    const painterId = `painter_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     setPainters([
       {
-        id: `painter_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        name: generateMechanicName(),
+        id: painterId,
+        name: staffFirstName(painterId),
         slotIndex: -1,
         skillLevel: 1,
         experience: 0,
@@ -1045,7 +1080,7 @@ export const useGarage = () => {
     (slot: number): string | null => {
       if (!hasEquipment(economy.state, 'paint_booth')) return 'Камера не куплена';
       if (boothSlot !== null) return 'Камера уже установлена';
-      if (garageSlots - 1 < 1) return 'Нужно оставить хотя бы один обычный слот — переезжайте в гараж побольше';
+      if (garageSlots - 1 < 1) return 'Нужно оставить хотя бы один обычный слот — переезжай в гараж побольше';
       if (garage.some((c) => c.slotIndex === slot)) return 'Слот занят машиной';
       if (mechanics.some((m) => m.slotIndex === slot)) return 'К слоту прикреплён механик';
       return null;

@@ -11,8 +11,9 @@
  * Бонусы действуют с начала следующей карьеры (очки фиксируются в экономике при её создании):
  *   множитель прибыли = min(10; 1 + 0,04P + 0,0015P²) — только к положительной марже продаж и заказов,
  *     отдельной строкой «Бонус наследия»;
- *   множитель опыта = min(2,5; 1 + 0,02P) — один раз к опыту продаж и восстановлений;
- *     месячный бонус XP считается от базового опыта продаж; за убытки опыта нет.
+ *   множитель опыта = min(2,5; 1 + 0,04P) — один раз к опыту продаж и восстановлений;
+ *     месячный бонус XP считается от базового опыта продаж; за убытки опыта нет;
+ *   стартовый капитал = $25 000 + min($250 000; $5 000 × P).
  */
 import * as B from './balance.ts';
 
@@ -106,6 +107,10 @@ export const legacyProfitMultiplier = (points: number): number =>
 
 export const legacyXpMultiplier = (points: number): number => Math.min(B.LEGACY_XP_MAX, 1 + B.LEGACY_XP_PER_POINT * points);
 
+/** Прибавка к стартовому капиталу новой карьеры, $ */
+export const legacyStartCash = (points: number): number =>
+  Math.min(B.LEGACY_START_CASH_MAX, B.LEGACY_START_CASH_PER_POINT * Math.max(0, points));
+
 /** Бонус наследия к положительной марже, центы (убыток бонуса не получает) */
 export const legacyMarginBonusCents = (points: number, marginCents: number): number =>
   points > 0 && marginCents > 0 ? Math.round(marginCents * (legacyProfitMultiplier(points) - 1)) : 0;
@@ -138,9 +143,15 @@ export interface RestartPreview {
   profitMultAfter: number;
   xpMultNow: number;
   xpMultAfter: number;
+  /** Стартовый капитал следующей карьеры, $ (база + бонус очков) */
+  startCashNow: number;
+  startCashAfter: number;
   resets: string[];
   keeps: string[];
 }
+
+/** Стартовый капитал любой новой карьеры, $ */
+export const BASE_START_CASH = 25_000;
 
 export const RESETS = [
   'Деньги, кредит и все машины',
@@ -153,7 +164,7 @@ export const RESETS = [
 ];
 
 export const KEEPS = [
-  'Очки и бонусы наследия',
+  'Очки и бонусы наследия (в том числе прибавка к стартовому капиталу)',
   'Число карьер и история карьер',
   'Рекорды и статистика',
   'Достижения и цели (концерн)',
@@ -162,7 +173,7 @@ export const KEEPS = [
 export const restartPreview = (legacy: LegacyState, career: CareerSummary): RestartPreview => {
   const blocks: string[] = [];
   if (career.level < B.LEGACY_MIN_LEVEL) blocks.push(`Нужен ${B.LEGACY_MIN_LEVEL} уровень (сейчас ${career.level})`);
-  if (career.hasDebt) blocks.push('Сначала погасите кредит');
+  if (career.hasDebt) blocks.push('Сначала погаси кредит');
   if (career.bankrupt) blocks.push('Бизнес банкрот');
   if (career.netWorthCents < B.LEGACY_MIN_NET_WORTH * 100)
     blocks.push(`Стоимость бизнеса от $${B.LEGACY_MIN_NET_WORTH.toLocaleString('ru-RU')}`);
@@ -181,6 +192,8 @@ export const restartPreview = (legacy: LegacyState, career: CareerSummary): Rest
     profitMultAfter: legacyProfitMultiplier(total),
     xpMultNow: legacyXpMultiplier(legacy.pointsTotal),
     xpMultAfter: legacyXpMultiplier(total),
+    startCashNow: BASE_START_CASH + legacyStartCash(legacy.pointsTotal),
+    startCashAfter: BASE_START_CASH + legacyStartCash(total),
     resets: RESETS,
     keeps: KEEPS,
   };

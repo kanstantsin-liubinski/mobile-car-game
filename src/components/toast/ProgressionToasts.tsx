@@ -3,9 +3,38 @@ import { useEconomy } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useToast } from '@components/toast/ToastContext';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
-import { HOT_OFFER_NOTIFY_LEVEL, hotOfferChance, skillMultiplier } from '../../economy/progression';
+import { HOT_OFFER_NOTIFY_LEVEL, hotOfferChance, levelUpRewardsBetween, skillMultiplier } from '../../economy/progression';
+import { LEVEL_LADDER, PICKER_FORECAST_LEVEL } from '../../economy/balance';
+import { formatMoney } from '../../economy/format';
+import { legacyProfitMultiplier, legacyStartCash, legacyXpMultiplier } from '../../economy/legacy';
+
+const fmtMult = (v: number) => v.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+const pluralPoints = (n: number) => {
+  const d = n % 10;
+  const dd = n % 100;
+  if (d === 1 && dd !== 11) return 'очко';
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return 'очка';
+  return 'очков';
+};
 
 const bonus = (level: number) => `+${Math.round((skillMultiplier(level) - 1) * 100)}%`;
+
+/**
+ * Что дал новый уровень: награда, что открылось и какая следующая цель. Без цели впереди уровень
+ * ощущается пустым — особенно между редкими ступенями лестницы.
+ */
+const levelUpMessage = (from: number, to: number): string => {
+  const reward = `Награда: ${formatMoney(levelUpRewardsBetween(from, to) * 100)}.`;
+  const opened = LEVEL_LADDER.filter((s) => s.level > from && s.level <= to).map((s) => s.text);
+  const next = LEVEL_LADDER.find((s) => s.level > to);
+  return [
+    reward,
+    opened.length ? `Открыто: ${opened.join('; ')}.` : '',
+    next ? `Дальше — на ${next.level} уровне: ${next.text}.` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
 
 /** Тосты о повышениях: общий уровень игрока, навык игрока и навыки механиков (на любом экране) */
 export const ProgressionToasts = () => {
@@ -27,6 +56,23 @@ export const ProgressionToasts = () => {
     workers: Record<string, number>;
   } | null>(null);
 
+  // Новая карьера с наследием: бонусы действуют сразу, но без напоминания их не было видно вовсе
+  const heritageShownFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isLoaded || heritageShownFor.current === state.careerId) return;
+    heritageShownFor.current = state.careerId;
+    const points = state.legacyPoints ?? 0;
+    if (points <= 0 || state.completedMonths > 0 || state.player.xp.totalXp > 0) return;
+    showToast({
+      title: `Наследие: ${points} ${pluralPoints(points)}`,
+      message: `Стартовый капитал +${formatMoney(legacyStartCash(points) * 100)}, прибыль ×${fmtMult(
+        legacyProfitMultiplier(points),
+      )}, опыт ×${fmtMult(legacyXpMultiplier(points))}.`,
+      icon: ICONS.xp,
+      tone: 'success',
+    });
+  }, [isLoaded, state.careerId, state.legacyPoints, state.completedMonths, state.player.xp.totalXp, showToast]);
+
   useEffect(() => {
     if (!isLoaded) return;
     // Контракты, ждущие переноса уровня из старого сохранения, не считаем — их «рост» не повышение
@@ -44,7 +90,7 @@ export const ProgressionToasts = () => {
     if (playerLevel > before.level) {
       showToast({
         title: `Новый уровень: ${playerLevel}`,
-        message: 'Проверьте город — могли открыться новые гаражи и классы машин.',
+        message: levelUpMessage(before.level, playerLevel),
         icon: ICONS.xp,
         tone: 'success',
       });
@@ -71,7 +117,12 @@ export const ProgressionToasts = () => {
     }
     const otherText: Record<string, [string, string]> = {
       painter: ['Маляр', `Ручная покраска ${bonus(painter)} эффективнее.`],
-      picker: ['Подборщик', 'Сканер точнее: интервалы диагностики стали уже.'],
+      picker: [
+        'Подборщик',
+        picker === PICKER_FORECAST_LEVEL
+          ? 'Теперь в объявлениях видна оценка сделки: цена после ремонта и прибыль.'
+          : 'Сканер точнее: интервалы диагностики стали уже.',
+      ],
       trade: ['Торговля', 'Покупки дешевле, продажи выгоднее.'],
     };
     for (const [key, level] of Object.entries(others)) {

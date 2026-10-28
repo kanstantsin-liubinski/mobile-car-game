@@ -7,6 +7,7 @@ import * as Br from '../economy/branches';
 import * as A from '../economy/auctions';
 import { GARAGES } from '../data/cityBuildings';
 import { loadLegacy } from './LegacyContext';
+import { legacyStartCash } from '../economy/legacy';
 import type { EquipmentId } from '../economy/balance';
 import { calculateMaxCondition } from '../utils/priceCalculator';
 import { generateRandomListing, type Rng } from '../utils/marketGenerator';
@@ -64,6 +65,15 @@ const TICK_MS = 250;
 /** Если JS долго не получал тики (зависание, фон без события), дольше секунды за раз не засчитываем */
 const MAX_TICK_MS = 1000;
 const SAVE_EVERY_MS = 1000;
+/**
+ * Ускорение игрового времени для плейтестов: `?timeScale=20` в адресе веб-сборки разработки.
+ * В нативной и прод-сборке всегда 1. Зарплатный день по-прежнему останавливает время.
+ */
+const TIME_SCALE = (() => {
+  if (!__DEV__ || Platform.OS !== 'web' || typeof location === 'undefined') return 1;
+  const value = Number(new URLSearchParams(location.search).get('timeScale'));
+  return Number.isFinite(value) && value > 0 ? Math.min(value, 200) : 1;
+})();
 
 interface EconomyContextType {
   isLoaded: boolean;
@@ -131,6 +141,11 @@ interface EconomyContextType {
   openBranch: (garageId: string, mainGarageId: string) => boolean;
   hireBranchStaff: (garageId: string, role: 'mechanic' | 'manager', slot?: number) => boolean;
   fireBranchStaff: (garageId: string, staffId: string) => boolean;
+  /** Штат общий: перевести механика на слот филиала / вернуть в основной гараж (без увольнения) */
+  transferToBranch: (garageId: string, slot: number, staffId: string, name: string) => boolean;
+  releaseFromBranch: (garageId: string, staffId: string) => boolean;
+  /** Оборудование в филиал: управляющий начнёт брать сложные заказы на нём */
+  buyBranchEquipment: (garageId: string, equipmentId: EquipmentId) => boolean;
   setBranchAutomation: (garageId: string, on: boolean) => void;
   setBranchStrategy: (garageId: string, strategy: Br.ManagerStrategy) => void;
   setBranchReserve: (garageId: string, reserveCents: number) => void;
@@ -218,9 +233,12 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         } else {
           // Сохранение до финансовой системы: переносим баланс, контракты механикам создаст гараж
           const legacy = await AsyncStorage.getItem(LEGACY_BALANCE_KEY);
-          const balanceCents = legacy !== null ? E.toCents(parseFloat(legacy) || 0) : INITIAL_BALANCE_CENTS;
-          // Новая карьера получает очки «Наследия», накопленные к этому моменту
+          // Новая карьера получает очки «Наследия», накопленные к этому моменту, и прибавку к капиталу
           const heritage = await loadLegacy();
+          const balanceCents =
+            legacy !== null
+              ? E.toCents(parseFloat(legacy) || 0)
+              : INITIAL_BALANCE_CENTS + E.toCents(legacyStartCash(heritage.pointsTotal));
           stateRef.current = E.createEconomy(balanceCents, legacy === null, legacy === null, undefined, heritage.pointsTotal);
           timeRef.current = 0;
         }
@@ -266,7 +284,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         lastTickRef.current = null;
         return;
       }
-      const dt = lastTickRef.current === null ? 0 : Math.min(MAX_TICK_MS, wall - lastTickRef.current);
+      const dt = lastTickRef.current === null ? 0 : Math.min(MAX_TICK_MS, wall - lastTickRef.current) * TIME_SCALE;
       lastTickRef.current = wall;
       const next = E.advanceGameTime(s, timeRef.current, dt);
       if (next === timeRef.current) return;
@@ -512,6 +530,20 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     (garageId: string, staffId: string) => run((s, now) => Br.fireBranchStaff(s, garageId, staffId, now)),
     [run],
   );
+  const transferToBranch = useCallback(
+    (garageId: string, slot: number, staffId: string, name: string) =>
+      run((s, now) => Br.transferToBranch(s, garageId, slot, staffId, name, now)),
+    [run],
+  );
+  const releaseFromBranch = useCallback(
+    (garageId: string, staffId: string) => run((s, now) => Br.releaseFromBranch(s, garageId, staffId, now)),
+    [run],
+  );
+  const buyBranchEquipment = useCallback(
+    (garageId: string, equipmentId: EquipmentId) =>
+      run((s, now) => Br.buyBranchEquipment(s, garageId, equipmentId, s.player.xp.level, now)),
+    [run],
+  );
   const setBranchAutomation = useCallback(
     (garageId: string, on: boolean) => commit(Br.setBranchAutomation(stateRef.current, garageId, on, timeRef.current)),
     [commit],
@@ -642,6 +674,9 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       openBranch,
       hireBranchStaff,
       fireBranchStaff,
+      transferToBranch,
+      releaseFromBranch,
+      buyBranchEquipment,
       setBranchAutomation,
       setBranchStrategy,
       setBranchReserve,
@@ -704,6 +739,9 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       openBranch,
       hireBranchStaff,
       fireBranchStaff,
+      transferToBranch,
+      releaseFromBranch,
+      buyBranchEquipment,
       setBranchAutomation,
       setBranchStrategy,
       setBranchReserve,

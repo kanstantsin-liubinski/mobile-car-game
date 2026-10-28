@@ -298,7 +298,7 @@ export const CityScreen = ({ onOpenMarket, onOpenDealership, onOpenGarage }: Cit
     if (building.type === 'fountain') return '';
     switch (getGarageState(building)) {
       case 'active':
-        return `Ваш гараж · ${building.slots} ${pluralizePlaces(building.slots)}`;
+        return `Твой гараж · ${building.slots} ${pluralizePlaces(building.slots)}`;
       case 'inactive': {
         const branch = economyState.branches?.[building.id];
         if (!branch) return level >= branchUnlockLevel(economyState) ? '🏗️ Можно открыть филиал' : 'Неактивен';

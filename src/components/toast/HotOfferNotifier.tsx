@@ -31,7 +31,7 @@ export const HotOfferNotifier = ({ onOpen }: { onOpen: (marketId: string, tier: 
     const { car } = hotOffer.listing;
     showToast({
       title: '🔥 Горящее предложение',
-      message: `${getMarketById(hotOffer.marketId)?.name ?? 'Авторынок'}: ${car.name} за ${formatMoney(hotOffer.price * 100)} вместо ${formatMoney(hotOffer.normalPrice * 100)} (−${Math.round(hotOffer.discount * 100)}%). Нажмите, чтобы посмотреть.`,
+      message: `${getMarketById(hotOffer.marketId)?.name ?? 'Авторынок'}: ${car.name} за ${formatMoney(hotOffer.price * 100)} вместо ${formatMoney(hotOffer.normalPrice * 100)} (−${Math.round(hotOffer.discount * 100)}%). Нажми, чтобы посмотреть.`,
       icon: TIER_ICONS[hotOffer.tier],
       tone: 'hot',
       onPress: () => onOpen(hotOffer.marketId, hotOffer.tier),

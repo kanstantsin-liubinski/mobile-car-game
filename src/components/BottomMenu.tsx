@@ -36,36 +36,49 @@ export const BottomMenu = ({ currentScreen, onScreenChange }: BottomMenuProps) =
 
   return (
     <View style={[menuStyles.bottomMenu, { paddingBottom: insets.bottom }]}>
-      <TouchableOpacity
-        style={[menuStyles.menuButton, currentScreen === 'garage' && menuStyles.menuButtonActive]}
-        onPress={() => onScreenChange('garage')}
-      >
+      <MenuItem label="Гараж" active={currentScreen === 'garage'} onPress={() => onScreenChange('garage')}>
         <GameIcon source={ICONS.navGarage} size={MENU_ICON_SIZE} style={currentScreen !== 'garage' && menuStyles.menuIconInactive} />
-      </TouchableOpacity>
+      </MenuItem>
 
-      <TouchableOpacity
-        style={[menuStyles.menuButton, isCityActive && menuStyles.menuButtonActive]}
-        onPress={() => onScreenChange('city')}
-      >
+      <MenuItem label="Город" active={isCityActive} onPress={() => onScreenChange('city')} alert={cityAlert}>
         <GameIcon source={ICONS.navCity} size={MENU_ICON_SIZE} style={!isCityActive && menuStyles.menuIconInactive} />
-        {cityAlert && <RedDot style={DOT} />}
-      </TouchableOpacity>
+      </MenuItem>
 
-      <TouchableOpacity
-        style={[menuStyles.menuButton, currentScreen === 'orders' && menuStyles.menuButtonActive]}
+      <MenuItem
+        label="Заказы"
+        active={currentScreen === 'orders'}
         onPress={() => onScreenChange('orders')}
-        accessibilityLabel="Заказы"
+        alert={ordersAlert && currentScreen !== 'orders'}
       >
         <Text style={{ fontSize: 30, opacity: currentScreen === 'orders' ? 1 : 0.55 }}>📋</Text>
-        {ordersAlert && currentScreen !== 'orders' && <RedDot style={DOT} />}
-      </TouchableOpacity>
+      </MenuItem>
 
-      <TouchableOpacity
-        style={[menuStyles.menuButton, currentScreen === 'skills' && menuStyles.menuButtonActive]}
-        onPress={() => onScreenChange('skills')}
-      >
+      <MenuItem label="Навыки" active={currentScreen === 'skills'} onPress={() => onScreenChange('skills')}>
         <GameIcon source={ICONS.skills} size={MENU_ICON_SIZE} style={currentScreen !== 'skills' && menuStyles.menuIconInactive} />
-      </TouchableOpacity>
+      </MenuItem>
     </View>
   );
 };
+
+/** Кнопка меню с подписью: одних иконок новичку не хватало, чтобы понять, где что */
+const MenuItem = ({
+  label,
+  active,
+  alert,
+  onPress,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  alert?: boolean;
+  onPress: () => void;
+  children: React.ReactNode;
+}) => (
+  <View style={menuStyles.menuItem}>
+    <TouchableOpacity style={[menuStyles.menuButton, active && menuStyles.menuButtonActive]} onPress={onPress} accessibilityLabel={label}>
+      {children}
+      {alert && <RedDot style={DOT} />}
+    </TouchableOpacity>
+    <Text style={[menuStyles.menuLabel, active && menuStyles.menuLabelActive]}>{label}</Text>
+  </View>
+);

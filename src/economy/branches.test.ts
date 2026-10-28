@@ -192,9 +192,10 @@ describe('работа управляющего', () => {
     const s = staffedBranch();
     const b = s.branches.garage_1;
     const base = { id: 'y', kind: 'service' as const, type: 'maintenance' as const, tier: 1, premium: false, description: '', car: sampleCar(1, () => 0.3), createdAtMs: 0, offerExpiresAtMs: DAY_MS, status: 'offered' as const };
-    const slow: O.ServiceOrder = { ...base, workPoints: 4, partsCents: $(10), rewardCents: $(900), deadlineDays: 5 };
+    // Механик делает B.MECHANIC_POINTS_PER_DAY в день: объём на 8 дней при сроке 5 — не успеть
+    const slow: O.ServiceOrder = { ...base, workPoints: B.MECHANIC_POINTS_PER_DAY * 8, partsCents: $(10), rewardCents: $(900), deadlineDays: 5 };
     assert.match(Br.estimateOrder(s, b, slow, b.slots[0].mechanicId, 12).reject!, /успеть/);
-    const losing: O.ServiceOrder = { ...base, workPoints: 2, partsCents: $(100), rewardCents: $(110), deadlineDays: 20 };
+    const losing: O.ServiceOrder = { ...base, workPoints: 2, partsCents: $(100), rewardCents: $(95), deadlineDays: 20 };
     assert.match(Br.estimateOrder(s, b, losing, b.slots[0].mechanicId, 12).reject!, /Убыточный/);
   });
 
@@ -242,5 +243,60 @@ describe('месяц и сохранение', () => {
     const s = runDays(staffedBranch(), 0, 5 * DAY_MS);
     const round = E.deserializeEconomy(E.serializeEconomy(s, 5 * DAY_MS))!;
     assert.deepEqual(round.state.branches, s.branches);
+  });
+});
+
+describe('общий штат гаража и филиалов', () => {
+  /** Филиал без механика + механик основного гаража */
+  const setup = () => {
+    let s = Br.openBranch(economy(), G1, 1, 0).state;
+    s = E.startContract(s, 'm1', 0);
+    return s;
+  };
+
+  it('механик гаража переводится на слот филиала без увольнения и возвращается обратно', () => {
+    const s0 = setup();
+    const moved = Br.transferToBranch(s0, 'garage_1', 0, 'm1', 'Иван', DAY_MS);
+    assert.ok(moved.ok);
+    assert.equal(moved.state.branches.garage_1.slots[0].mechanicId, 'm1');
+    assert.equal(moved.state.contracts.m1.branchId, 'garage_1');
+    assert.equal(moved.state.contracts.m1.hiredAtMs, s0.contracts.m1.hiredAtMs, 'контракт тот же — это не новый найм');
+    assert.equal(moved.state.balanceCents, s0.balanceCents, 'перевод бесплатный');
+    const back = Br.releaseFromBranch(moved.state, 'garage_1', 'm1', 2 * DAY_MS);
+    assert.ok(back.ok);
+    assert.equal(back.state.branches.garage_1.slots[0].mechanicId, null);
+    assert.equal(back.state.contracts.m1.branchId, undefined);
+    assert.equal(back.state.contracts.m1.name, 'Иван', 'имя остаётся с сотрудником');
+  });
+
+  it('занятого ремонтом не переводим, в занятый слот — тоже', () => {
+    const s0 = setup();
+    const busy = E.setMechanicBusy(s0, 'm1', true, 0);
+    assert.match(Br.transferBlock(busy, 'garage_1', 0, 'm1')!, /ремонтирует/);
+    assert.equal(Br.transferToBranch(busy, 'garage_1', 0, 'm1', 'Иван', 0).ok, false);
+    const hired = Br.hireBranchStaff(s0, 'garage_1', 'mechanic', 0, 0).state;
+    assert.match(Br.transferBlock(hired, 'garage_1', 0, 'm1')!, /занят/);
+  });
+
+  it('нанятый в филиале получает имя в контракте — его видно в общем списке', () => {
+    const s = Br.hireBranchStaff(setup(), 'garage_1', 'mechanic', 0, 0).state;
+    const id = s.branches.garage_1.slots[0].mechanicId!;
+    assert.equal(s.contracts[id].name, s.branches.garage_1.staffNames[id]);
+  });
+});
+
+describe('оборудование филиала', () => {
+  it('открывает управляющему сложные заказы; покупка — вложение, по уровню и один раз', () => {
+    let s = Br.openBranch(economy(12, $(100_000)), G1, 1, 0).state;
+    assert.ok(!Br.managerTypes(12, s.branches.garage_1.equipment).includes('engine'));
+    assert.match(Br.branchEquipmentBlock(s, 'garage_1', 'alignment', 12)!, /40 уровня/);
+    const price = $(B.EQUIPMENT.find((e) => e.id === 'engine')!.price);
+    const bought = Br.buyBranchEquipment(s, 'garage_1', 'engine', 12, 0);
+    assert.ok(bought.ok);
+    s = bought.state;
+    assert.equal(s.balanceCents, $(100_000) - price - $(B.BRANCH_OPEN_COST.garage_1));
+    assert.equal(s.ledger.investmentsCents, price + $(B.BRANCH_OPEN_COST.garage_1));
+    assert.ok(Br.managerTypes(12, s.branches.garage_1.equipment).includes('engine'));
+    assert.equal(Br.buyBranchEquipment(s, 'garage_1', 'engine', 12, 0).ok, false, 'второй раз не продаётся');
   });
 });

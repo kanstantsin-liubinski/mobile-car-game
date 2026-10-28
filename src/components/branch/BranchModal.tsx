@@ -70,7 +70,9 @@ export const BranchModal = ({ garageId, onClose }: { garageId: string | null; on
   const economy = useEconomy();
   const { state } = economy;
   const { gameTimeMs: now, paydayPending } = useGameClock();
-  const { garageId: mainId } = useGarageContext();
+  const { garageId: mainId, mechanics, mechanicRepairs } = useGarageContext();
+  // Штат общий: свободные механики основного гаража и других филиалов можно перевести сюда
+  const busyInGarage = new Set(Object.values(mechanicRepairs).map((r) => r.mechanicId));
   const { showToast } = useToast();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
@@ -99,7 +101,7 @@ export const BranchModal = ({ garageId, onClose }: { garageId: string | null; on
           </Text>
         </View>
         <FinanceSection title="Условия">
-          <Requirement ok={level >= need} text={`Уровень ${need} (у вас ${level})`} />
+          <Requirement ok={level >= need} text={`Уровень ${need} (у тебя ${level})`} />
           <Requirement ok={info.rank < mainRank} text="Основной гараж — новее этого" />
           <Requirement
             ok={Br.branchList(state).length + 1 < B.MAX_BUSINESS_OBJECTS}
@@ -109,9 +111,9 @@ export const BranchModal = ({ garageId, onClose }: { garageId: string | null; on
         </FinanceSection>
         <FinanceSection title="Что дальше">
           <Text style={styles.text}>
-            1. Наймите управляющего ({formatMoney(B.MANAGER_BASE_SALARY_CENTS)}/мес) и механика на слот.{'\n'}
-            2. Включите автоматизацию и выберите стратегию.{'\n'}
-            3. Повысьте механику допуск к классам — без него старшие машины он чинит вдвое медленнее, и филиал зарабатывает мало.
+            1. Найми управляющего ({formatMoney(B.MANAGER_BASE_SALARY_CENTS)}/мес) и механика на слот.{'\n'}
+            2. Включи автоматизацию и выбери стратегию.{'\n'}
+            3. Повысь механику допуск к классам — без него старшие машины он чинит вдвое медленнее, и филиал зарабатывает мало.
           </Text>
         </FinanceSection>
         {block && <Notice level="info">{block}</Notice>}
@@ -155,7 +157,11 @@ export const BranchModal = ({ garageId, onClose }: { garageId: string | null; on
             ))}
           </View>
           <Text style={styles.text}>{strat.description}</Text>
-          <Text style={styles.label}>Резерв — ниже него управляющий не тратит</Text>
+          <Text style={styles.label}>Неприкосновенный запас</Text>
+          <Text style={styles.text}>
+            Управляющий берёт заказ, только если после оплаты деталей у тебя на счету останется не меньше этой суммы. Так
+            филиал не потратит деньги, нужные на зарплаты и покупки. «Нет» — тратит всё.
+          </Text>
           <View style={styles.chips}>
             {B.BRANCH_RESERVE_OPTIONS.map((r) => (
               <Chip
@@ -166,6 +172,29 @@ export const BranchModal = ({ garageId, onClose }: { garageId: string | null; on
               />
             ))}
           </View>
+        </FinanceSection>
+
+        {/* ─── Оборудование филиала: открывает управляющему сложные (дорогие) заказы ─── */}
+        <FinanceSection title="Оборудование филиала">
+          <Text style={styles.text}>
+            Без оборудования управляющий берёт только ТО и подвеску. С оборудованием — ещё и сложные заказы на нём: они дороже
+            и дольше.
+          </Text>
+          {B.BRANCH_EQUIPMENT.map((id) => {
+            const def = B.EQUIPMENT.find((e) => e.id === id)!;
+            const owned = (b.equipment ?? []).includes(id);
+            const block = garageId ? Br.branchEquipmentBlock(state, garageId, id, level) : null;
+            return (
+              <View key={id} style={styles.buttons}>
+                <SmallButton
+                  label={owned ? `✓ ${def.name}` : `${def.name} · ${formatMoney(def.price * 100)}${block && !owned ? ` · ${block}` : ''}`}
+                  tone={owned ? undefined : 'primary'}
+                  disabled={owned || !!block}
+                  onPress={() => garageId && economy.buyBranchEquipment(garageId, id)}
+                />
+              </View>
+            );
+          })}
         </FinanceSection>
 
         {/* ─── Слоты ─── */}
@@ -202,14 +231,34 @@ export const BranchModal = ({ garageId, onClose }: { garageId: string | null; on
                         onPress={() => economy.upgradeClearance(sl.mechanicId!)}
                       />
                     )}
+                    <SmallButton label="В гараж" onPress={() => garageId && economy.releaseFromBranch(garageId, sl.mechanicId!)} />
                     <SmallButton label="Уволить" tone="danger" onPress={() => setFiring(asWorker(sl.mechanicId!, mechName, mech.skill.level))} />
                   </>
                 ) : (
-                  <SmallButton
-                    label={`Нанять механика · ${formatMoney(salaryForLevel(1, 'mechanic', 1))}/мес`}
-                    tone="primary"
-                    onPress={() => garageId && economy.hireBranchStaff(garageId, 'mechanic', i)}
-                  />
+                  <>
+                    {mechanics
+                      .filter(
+                        (m) =>
+                          m.hired &&
+                          !busyInGarage.has(m.id) &&
+                          !!garageId &&
+                          !Br.transferBlock(state, garageId, i, m.id),
+                      )
+                      .map((m) => (
+                        <SmallButton
+                          key={m.id}
+                          label={`Перевести: ${m.name} · ур. ${state.contracts[m.id].skill.level}${
+                            state.contracts[m.id].branchId ? ` (из «${getGarageById(state.contracts[m.id].branchId!)?.name ?? ''}»)` : ''
+                          }`}
+                          onPress={() => garageId && economy.transferToBranch(garageId, i, m.id, m.name)}
+                        />
+                      ))}
+                    <SmallButton
+                      label={`Нанять механика · ${formatMoney(salaryForLevel(1, 'mechanic', 1))}/мес`}
+                      tone="primary"
+                      onPress={() => garageId && economy.hireBranchStaff(garageId, 'mechanic', i)}
+                    />
+                  </>
                 )}
               </View>
               <View style={ui.divider} />
@@ -374,7 +423,7 @@ export const BranchModal = ({ garageId, onClose }: { garageId: string | null; on
   const handleOpen = () => {
     if (!garageId || !garage) return;
     if (!economy.openBranch(garageId, mainId)) return;
-    showToast({ title: `Филиал «${garage.name}» открыт`, message: 'Наймите управляющего и механика.', icon: ICONS.money, tone: 'success' });
+    showToast({ title: `Филиал «${garage.name}» открыт`, message: 'Найми управляющего и механика.', icon: ICONS.money, tone: 'success' });
   };
 
   const openBlock =

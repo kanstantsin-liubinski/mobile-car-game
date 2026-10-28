@@ -15,6 +15,8 @@ import {
   playerCourseCost,
   previewCourse,
   requiredPractice,
+  levelUpReward,
+  levelUpRewardsBetween,
   requiredXp,
   saleXp,
   saleXpMultiplier,
@@ -30,14 +32,14 @@ function must<T>(value: T | null | undefined): T {
 }
 
 describe('уровни игрока', () => {
-  it('пороги по кривой 100 + 10n + 1,5n²', () => {
-    const table: Record<number, number> = { 1: 100, 2: 112, 3: 126, 4: 144, 9: 276, 15: 534, 20: 832, 30: 1652, 50: 4192 };
+  it('пороги по кривой 60 + 10n + 3,5n²', () => {
+    const table: Record<number, number> = { 1: 60, 2: 74, 3: 94, 4: 122, 9: 364, 15: 886, 20: 1514, 30: 3294, 50: 8954 };
     for (const [level, xp] of Object.entries(table)) assert.equal(requiredXp(Number(level)), xp);
   });
 
   it('остаток переносится, большая награда поднимает несколько уровней', () => {
-    const p = addXp(createPlayerXp(), 100 + 112 + 126 + 10);
-    assert.deepEqual(p, { level: 4, xp: 10, totalXp: 348 });
+    const p = addXp(createPlayerXp(), 60 + 74 + 94 + 10);
+    assert.deepEqual(p, { level: 4, xp: 10, totalXp: 238 });
   });
 
   it('нет искусственного максимума и потери точности', () => {
@@ -186,5 +188,15 @@ describe('день недели', () => {
     assert.equal(weekdayOf(1, 30), 'ВТ');
     assert.equal(weekdayOf(2, 1), 'СР');
     assert.equal(weekdayOf(2, 20), 'ПН');
+  });
+});
+
+describe('награда за уровень', () => {
+  it('растёт с уровнем, за 1 уровень ничего, за прыжок — сумма всех пройденных', () => {
+    assert.equal(levelUpReward(1), 0);
+    assert.equal(levelUpReward(2), 1_000);
+    assert.equal(levelUpReward(5), 2_500);
+    assert.equal(levelUpRewardsBetween(1, 5), 1_000 + 1_500 + 2_000 + 2_500);
+    assert.equal(levelUpRewardsBetween(5, 5), 0);
   });
 });

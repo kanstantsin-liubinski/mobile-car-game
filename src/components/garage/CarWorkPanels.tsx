@@ -15,7 +15,7 @@ import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { formatMoney, formatGameDays, pluralDays } from '../../economy/format';
 import { DAY_MS } from '../../economy/time';
 import { MAX_SELL_DAYS_INFO, OWN_REPAIR_PARTS_SHARE, PLAYER_PAINT_PER_TAP } from '../../economy/balance';
-import { overallCondition } from '../../economy/carCondition';
+import { overallCondition, repairPartsCents } from '../../economy/carCondition';
 import { clearanceSpeedFactor, ownPaintMaterialsShare } from '../../economy/economy';
 import { pickingMismatch, serviceDef } from '../../economy/orders';
 import type { GarageCar, Mechanic } from '@/types';
@@ -144,7 +144,7 @@ export const CarStatusPanels = ({ car }: { car: GarageCar }) => {
             Оплата при сдаче: {formatMoney(order.rewardCents)}. Не продаётся.
           </Text>
           {order.completedAtMs !== undefined && (
-            <Text style={[styles.text, { color: '#22C55E', fontWeight: '700' }]}>✓ Работа готова — сдайте заказ в разделе «Заказы».</Text>
+            <Text style={[styles.text, { color: '#22C55E', fontWeight: '700' }]}>✓ Работа готова — сдай заказ в разделе «Заказы».</Text>
           )}
         </View>
       )}
@@ -188,7 +188,7 @@ export const CarStatusPanels = ({ car }: { car: GarageCar }) => {
               </Text>
             </View>
           ) : (
-            <Text style={styles.text}>Красьте плиткой «Покрасить» или поручите маляру.</Text>
+            <Text style={styles.text}>Крась плиткой «Покрасить» или поручи маляру.</Text>
           )}
         </View>
       )}
@@ -221,7 +221,7 @@ const MoveCarModal = ({ car, visible, onClose }: { car: GarageCar; visible: bool
       <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12 }]}>
         <SheetHeader title="Переставить машину" onClose={onClose} />
         <Text style={styles.confirmLine}>
-          {car.name} сейчас {isParkingSlot(car.slotIndex) ? 'на стоянке' : 'в слоте'} {slotLabel(car.slotIndex)}. Выберите свободное место:
+          {car.name} сейчас {isParkingSlot(car.slotIndex) ? 'на стоянке' : 'в слоте'} {slotLabel(car.slotIndex)}. Выбери свободное место:
         </Text>
         <View style={styles.moveSlots}>
           {allSlots.map((i) => {
@@ -292,6 +292,7 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
   const repairing = mechanicRepairs[car.id];
   const paint = car.paintCondition ?? car.condition;
   const atMax = car.condition >= car.maxCondition;
+  const tapPartsCents = repairPartsCents(car, car.condition, Math.min(car.maxCondition, car.condition + tapRepairPercent));
   const busy = carBusyReason(car.id);
   const hiredPainter = painters.find((p) => p.hired);
   const tiles: TileSpec[] = [];
@@ -317,15 +318,23 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         key: 'repair',
         icon: ICONS.repair,
         title: 'Ремонт',
-        subtitle: atMax ? `Максимум ${car.maxCondition}%` : repairing ? 'Чинит механик' : `+${fmtNum(tapRepairPercent)}% за тап`,
+        // Цена тапа видна сразу: раньше детали списывались молча, и новичок не понимал, куда уходят деньги
+        subtitle: atMax
+          ? `Максимум ${car.maxCondition}%`
+          : repairing
+            ? 'Чинит механик'
+            : isClient
+              ? `+${fmtNum(tapRepairPercent)}% за тап`
+              : `+${fmtNum(tapRepairPercent)}% · ${formatMoney(tapPartsCents)}`,
         state: atMax ? 'done' : repairing ? 'locked' : 'ready',
         accent: ACTION_COLORS.repair,
         info: `Ручной ремонт: каждый тап добавляет ${fmtNum(tapRepairPercent)}% технического состояния, до максимума ${car.maxCondition}%.${
-          isClient ? '' : ` За свою машину платите детали — ${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста её стоимости от тапа.`
+          isClient ? '' : ` За свою машину ты платишь за детали — ${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста её стоимости от тапа.`
         } Тап даёт 1 практику навыка «Механик»${
           isClient ? '.' : ', а первое полное восстановление своей машины — бонус XP.'
         }`,
         onPress: onRepair,
+        repeat: true,
       });
 
       if (repairing) {
@@ -349,9 +358,9 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
           accent: ACTION_COLORS.mechanic,
           info: mechanic
             ? `${mechanic.name} сам отремонтирует машину до ${car.maxCondition}%. Детали (${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста стоимости) оплачиваются сразу, неиспользованное вернётся при остановке.${
-                slowMechanic ? ' У механика нет допуска к этому классу — он работает вдвое медленнее; повысьте допуск в окне «Механики».' : ''
+                slowMechanic ? ' У механика нет допуска к этому классу — он работает вдвое медленнее; повысь допуск в окне «Механики».' : ''
               }`
-            : 'Наймите механика и прикрепите его к этому слоту: гараж → «Механики». Он будет ремонтировать сам, пока вы заняты другим.',
+            : 'Найми механика (гараж → «Механики»): он сам встанет на свободный слот и будет ремонтировать, пока ты занят другим.',
           onPress: onMechanic,
         });
       }
@@ -367,7 +376,7 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
           subtitle: 'остановить маляра',
           state: 'ready',
           accent: ACTION_COLORS.paint,
-          info: 'Маляр прервётся (останется в штате), дальше красите тапами сами — это прокачивает ваш навык «Маляр».',
+          info: 'Маляр прервётся (останется в штате), дальше красишь тапами сам — это прокачивает твой навык «Маляр».',
           onPress: () => setPainterPaused(true),
         });
       } else {
@@ -380,6 +389,7 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
           accent: ACTION_COLORS.paint,
           info: `Каждый тап добавляет ${fmtNum(PLAYER_PAINT_PER_TAP * paintTapMultiplier)} п. ЛКП (растёт с навыком «Маляр») и даёт 1 практику. Материалы уже оплачены.`,
           onPress: () => paintTap(),
+          repeat: true,
         });
         if (hiredPainter && painterPaused) {
           tiles.push({
@@ -417,7 +427,7 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         accent: ACTION_COLORS.paint,
         info: `Покраска в своей камере до ${quote?.target ?? 100}%: материалы — ${Math.round(ownPaintMaterialsShare(state) * 100)}% прироста стоимости${
           state.equipment.owned.includes('paint_matching') ? ' (с компьютерным подбором краски)' : ''
-        }, они входят в себестоимость машины. Красите тапами сами или нанятый маляр.`,
+        }, они входят в себестоимость машины. Красишь тапами сам или красит нанятый маляр.`,
         onPress: () => setConfirm({ kind: 'booth' }),
       });
     } else if (!isClient && !parked) {
@@ -547,7 +557,7 @@ const PaintConfirmModal = ({ car, confirm, onClose }: { car: GarageCar; confirm:
               {car.name}: ЛКП {Math.round(quote.from)}% → {quote.target}%
             </Text>
             {service && <Text style={styles.confirmLine}>Срок: {pluralDays(service.days)}, машина в это время занята</Text>}
-            {booth && <Text style={styles.confirmLine}>Красите сами тапами или нанятый маляр</Text>}
+            {booth && <Text style={styles.confirmLine}>Красишь сам тапами или красит нанятый маляр</Text>}
             {costCents > 0 && (
               <>
                 <Text style={styles.confirmLine}>
@@ -555,7 +565,7 @@ const PaintConfirmModal = ({ car, confirm, onClose }: { car: GarageCar; confirm:
                 </Text>
                 <Text style={styles.confirmLine}>Машина подорожает примерно на {formatMoney(gainCents)}</Text>
                 <Text style={[styles.confirmLine, { fontWeight: '800', color: gainCents - costCents >= 0 ? '#22C55E' : '#EF4444' }]}>
-                  Итого заработаете ≈ {formatMoney(gainCents - costCents, { sign: true })}
+                  Итого заработаешь ≈ {formatMoney(gainCents - costCents, { sign: true })}
                 </Text>
               </>
             )}

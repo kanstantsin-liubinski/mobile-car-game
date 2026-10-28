@@ -12,12 +12,12 @@ import { useToast } from '@components/toast/ToastContext';
 import { getMechanicAvatar } from '@img/gameIcons';
 import { DAY_MS, salaryForLevel, workerCurve, workerPracticeAt } from '../economy/economy';
 import { SKILL_MAX_LEVEL, skillMultiplier } from '../economy/progression';
-import { MANAGER_ORDER_PRACTICE, PAINTER_SPEED_PER_SEC, managerDelayDays, managerErrorChance } from '../economy/balance';
+import { MANAGER_ORDER_PRACTICE, MECHANIC_SPEED_PER_SEC, PAINTER_SPEED_PER_SEC, managerDelayDays, managerErrorChance } from '../economy/balance';
 import { formatGameSpan, formatMoney, formatPercent } from '../economy/format';
 import type { Mechanic } from '@/types';
 
 /** Базовая скорость ремонта механика, % состояния в секунду (как в useGarage) */
-const BASE_SPEED = 0.05;
+const BASE_SPEED = MECHANIC_SPEED_PER_SEC;
 
 /** Скорость в игровой день (10 секунд) */
 const speedText = (level: number, painter: boolean) =>

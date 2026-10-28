@@ -39,6 +39,13 @@ export const carValue = (basePrice: number, car: CarPhysical): number =>
     condition: overallCondition(car.condition, car.paintCondition),
   });
 
+/** Детали за технический ремонт своей машины с from до to: доля прироста её рыночной стоимости, в центах */
+export const repairPartsCents = (car: CarPhysical & { basePrice: number }, from: number, to: number): number => {
+  if (to <= from) return 0;
+  const gain = carValue(car.basePrice, { ...car, condition: to }) - carValue(car.basePrice, { ...car, condition: from });
+  return Math.max(1, Math.round(gain * B.OWN_REPAIR_PARTS_SHARE * 100));
+};
+
 /** Сколько $ добавляет к цене один пункт общего состояния этой машины */
 export const valuePerOverallPoint = (basePrice: number, year: number, mileage: number): number =>
   (calculateCarPrice(basePrice, { year, mileage, condition: 100 }) - calculateCarPrice(basePrice, { year, mileage, condition: 0 })) /
@@ -188,11 +195,50 @@ export const readListing = (
     });
     return roundOut(iv, value);
   };
+  const tech = narrow('tech', truth.condition);
+  const max = narrow('max', truth.maxCondition);
+  // Состояние не бывает выше максимума: иначе показывалось «28–59% при максимуме 21–42%». Истина
+  // остаётся внутри обоих интервалов, а нового игрок не узнаёт — только то, что следует из шкал.
+  // Подрезаем только при этом инварианте игры, чтобы истина не могла выпасть из интервала.
+  const consistent = truth.condition <= truth.maxCondition;
   return {
     level,
-    tech: narrow('tech', truth.condition),
-    max: narrow('max', truth.maxCondition),
+    tech: consistent ? { low: tech.low, high: Math.min(tech.high, max.high) } : tech,
+    max: consistent ? { low: Math.max(max.low, tech.low), high: max.high } : max,
     paint: narrow('paint', truth.paintCondition),
+  };
+};
+
+/**
+ * Прогноз сделки по тому, что игрок знает об объявлении: цена после ремонта техники до максимума
+ * (ЛКП как есть) и прибыль после деталей (B.OWN_REPAIR_PARTS_SHARE прироста). Худший вариант — по
+ * нижним границам интервалов, лучший — по верхним; точнее диагностика — уже прогноз.
+ */
+export interface ResaleForecast {
+  valueLow: number;
+  valueHigh: number;
+  profitLow: number;
+  profitHigh: number;
+}
+
+export const resaleForecast = (
+  car: { basePrice: number; year: number; mileage: number },
+  known: { tech: Interval; max: Interval; paint: Interval },
+  buyPrice: number,
+): ResaleForecast => {
+  const scenario = (tech: number, max: number, paint: number) => {
+    const now = carValue(car.basePrice, { year: car.year, mileage: car.mileage, condition: tech, paintCondition: paint });
+    const repaired = carValue(car.basePrice, { year: car.year, mileage: car.mileage, condition: Math.max(tech, max), paintCondition: paint });
+    const parts = (repaired - now) * B.OWN_REPAIR_PARTS_SHARE;
+    return { value: repaired, profit: repaired - parts - buyPrice };
+  };
+  const worst = scenario(known.tech.low, known.max.low, known.paint.low);
+  const best = scenario(Math.min(known.tech.high, known.max.high), known.max.high, known.paint.high);
+  return {
+    valueLow: Math.round(worst.value),
+    valueHigh: Math.round(best.value),
+    profitLow: Math.round(Math.min(worst.profit, best.profit)),
+    profitHigh: Math.round(Math.max(worst.profit, best.profit)),
   };
 };
 

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import * as B from './balance.ts';
 import * as E from './economy.ts';
 import * as L from './legacy.ts';
-import { saleXp } from './progression.ts';
+import { levelUpRewardsBetween, saleXp } from './progression.ts';
 
 const $ = (d: number) => d * 100;
 
@@ -36,10 +36,10 @@ describe('формулы наследия', () => {
     assert.equal(L.legacyPointsTotal(-$(5_000)), 0);
   });
 
-  it('множитель прибыли 1 + 0,04P + 0,0015P², опыта min(2,5; 1 + 0,02P)', () => {
+  it('множитель прибыли 1 + 0,04P + 0,0015P², опыта min(2,5; 1 + 0,04P)', () => {
     assert.equal(L.legacyProfitMultiplier(0), 1);
     assert.ok(Math.abs(L.legacyProfitMultiplier(10) - 1.55) < 1e-12);
-    assert.ok(Math.abs(L.legacyXpMultiplier(10) - 1.2) < 1e-12);
+    assert.ok(Math.abs(L.legacyXpMultiplier(10) - 1.4) < 1e-12);
     assert.equal(L.legacyXpMultiplier(500), B.LEGACY_XP_MAX);
     assert.equal(L.legacyProfitMultiplier(300), B.LEGACY_PROFIT_MAX, 'без разгона: потолок множителя прибыли');
     assert.equal(L.legacyMarginBonusCents(10, -$(100)), 0, 'за убыток бонуса нет');
@@ -103,14 +103,17 @@ describe('бонусы в карьере', () => {
     const sold = E.sellCar(s, { carId: 'car', priceCents: $(7_000), fallbackCostCents: 0, tier: 1 });
     const bonus = L.legacyMarginBonusCents(10, $(2_000));
     assert.equal(sold.ledger.legacyBonusCents, bonus);
-    assert.equal(sold.balanceCents, s.balanceCents + $(7_000) + bonus);
+    // Опыт продажи мог поднять уровень — награда за него приходит отдельной строкой
+    const reward = sold.ledger.levelRewardCents;
+    assert.equal(reward, $(levelUpRewardsBetween(s.player.xp.level, sold.player.xp.level)));
+    assert.equal(sold.balanceCents, s.balanceCents + $(7_000) + bonus + reward);
     const base = saleXp(1, $(7_000), $(5_000), 0);
     assert.equal(sold.ledger.salesXp, base);
-    assert.equal(sold.player.xp.totalXp, Math.round(base * 1.2));
+    assert.equal(sold.player.xp.totalXp, Math.round(base * 1.4));
     const month = E.getMonthResult(sold, 0);
     assert.equal(month.legacyBonusCents, bonus);
-    assert.equal(month.netProfitCents, $(2_000) + bonus);
-    assert.equal(E.careerBaseProfitCents(sold, 0), $(2_000), 'база очков — без бонуса');
+    assert.equal(month.netProfitCents, $(2_000) + bonus + reward);
+    assert.equal(E.careerBaseProfitCents(sold, 0), $(2_000), 'база очков — без бонуса и наград за уровни');
     assert.equal(E.sellCar(sold, { carId: 'car', priceCents: $(7_000), fallbackCostCents: 0 }), sold, 'повтор продажи не начисляет');
   });
 
@@ -134,5 +137,34 @@ describe('бонусы в карьере', () => {
     assert.equal(sum.netWorthCents, s.balanceCents + $(5_000) + $(25_000));
     assert.equal(sum.pointsDuring, 10);
     assert.equal(sum.careerId, s.careerId);
+  });
+});
+
+describe('новые правила баланса', () => {
+  it('стартовый капитал: $5 000 за очко, но не больше $250 000', () => {
+    assert.equal(L.legacyStartCash(0), 0);
+    assert.equal(L.legacyStartCash(4), 20_000);
+    assert.equal(L.legacyStartCash(1_000), B.LEGACY_START_CASH_MAX);
+  });
+
+  it('дешёвые машины продаются быстрее; −10% — сразу, +10% — вдвое дольше', () => {
+    assert.equal(B.saleDays(1, -10), 0);
+    assert.equal(B.saleDays(1, 0), B.SALE_DAYS_AT_MARKET[1]);
+    assert.equal(B.saleDays(1, 10), B.SALE_DAYS_AT_MARKET[1] * 2);
+    assert.ok(B.saleDays(1, 0) < B.saleDays(6, 0));
+    assert.equal(B.saleDays(undefined, 0), B.SALE_DAYS_AT_MARKET[1], 'неизвестный класс — как Эконом');
+    assert.equal(B.MAX_SELL_DAYS_INFO, B.saleDays(6, 10));
+  });
+
+  it('новый уровень сразу приносит награду на свободные деньги отдельной строкой', () => {
+    const s = E.createEconomy($(50_000), true, true, 3, 0);
+    const bought = E.buyCar(s, { carId: 'car', name: 'Lada', tier: 1, priceCents: $(1_000), conditionPct: 40, maxConditionPct: 80 }).state;
+    // Доходность 300% — опыта хватит минимум на один уровень
+    const sold = E.sellCar(bought, { carId: 'car', priceCents: $(4_000), fallbackCostCents: 0, tier: 1 });
+    assert.ok(sold.player.xp.level > 1);
+    const reward = $(levelUpRewardsBetween(1, sold.player.xp.level));
+    assert.equal(sold.ledger.levelRewardCents, reward);
+    assert.equal(sold.totals.levelRewardCents, reward);
+    assert.equal(sold.balanceCents, bought.balanceCents + $(4_000) + reward);
   });
 });

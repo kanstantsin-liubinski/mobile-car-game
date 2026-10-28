@@ -17,15 +17,19 @@ import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { MECHANIC_MONTHLY_SALARY_CENTS, salaryForLevel } from '../../economy/economy';
 import { skillMultiplier } from '../../economy/progression';
 import { formatMoney } from '../../economy/format';
+import { MECHANIC_POINTS_PER_DAY } from '../../economy/balance';
+
+const fmtPct = (v: number) => v.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 import { ACTION_COLORS } from './CarWorkPanels';
 import { clearanceName, clearanceTile } from './clearanceTile';
+import { getGarageById } from '../../data/cityBuildings';
 import type { Mechanic } from '@/types';
 
 type Status = { text: string; color: string };
 
 /** Окно персонала: механики, их слоты, навык и увольнение. Вложенные окна — слоями внутри (iOS) */
 export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
-  const { state, upgradeClearance } = useEconomy();
+  const { state, upgradeClearance, releaseFromBranch } = useEconomy();
   const { mechanics, garageSlots, boothSlot, hireMechanic, fireMechanic, changeMechanicSlot, mechanicRepairs } = useGarageContext();
   const nativeInsets = useSafeAreaInsets();
   const webInsets = useSafeAreaWeb();
@@ -35,8 +39,13 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
 
   const repairingIds = new Set(Object.values(mechanicRepairs).map((r) => r.mechanicId));
 
+  /** Штат общий с филиалами: где сейчас работает механик (null — в этом гараже) */
+  const branchOf = (m: Mechanic) => state.contracts[m.id]?.branchId ?? null;
+
   const statusOf = (m: Mechanic): Status => {
     if (!m.hired) return { text: 'Можно нанять', color: colors.textTertiary };
+    const branch = branchOf(m);
+    if (branch) return { text: `В филиале «${getGarageById(branch)?.name ?? branch}»`, color: '#A855F7' };
     if (repairingIds.has(m.id)) return { text: `Ремонтирует · слот ${m.slotIndex + 1}`, color: '#22C55E' };
     if (m.slotIndex === -1) return { text: 'Без слота', color: '#F59E0B' };
     return { text: `Слот ${m.slotIndex + 1} · ждёт машину`, color: colors.primary };
@@ -72,10 +81,10 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
                   <Text style={styles.info}>
                     {m.hired
                       ? `Скорость ремонта +${Math.round((skillMultiplier(m.skillLevel) - 1) * 100)}% · допуск: ${clearanceName(contract?.clearance)} · оклад ${formatMoney(salary)}/мес`
-                      : `Ремонтирует машины сам, 0,5% в день. Оклад ${formatMoney(salaryForLevel(1))}/мес, платится и в простое.`}
+                      : `Ремонтирует машины сам, ${fmtPct(MECHANIC_POINTS_PER_DAY)}% в день. Оклад ${formatMoney(salaryForLevel(1))}/мес, платится и в простое.`}
                   </Text>
 
-                  {m.hired && (
+                  {m.hired && !branchOf(m) && (
                     <View style={styles.slots}>
                       <Text style={styles.slotsLabel}>Рабочий слот</Text>
                       <View style={styles.slotRow}>
@@ -117,14 +126,25 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
                             ...[clearanceTile(contract, state.balanceCents, () => upgradeClearance(m.id))].filter(
                               (t): t is NonNullable<typeof t> => t !== null,
                             ),
-                            {
+                            branchOf(m)
+                              ? {
+                                  key: 'return',
+                                  emoji: '🏠',
+                                  title: 'Вернуть',
+                                  subtitle: 'в этот гараж',
+                                  state: 'ready' as const,
+                                  accent: '#A855F7',
+                                  info: 'Забрать механика из филиала в основной гараж: навык, допуск и оклад сохраняются. Работа в филиале встанет до прихода другого механика.',
+                                  onPress: () => releaseFromBranch(branchOf(m)!, m.id),
+                                }
+                              : {
                               key: 'unassign',
                               emoji: '↩️',
                               title: 'Открепить',
                               subtitle: m.slotIndex === -1 ? 'нет слота' : `от слота ${m.slotIndex + 1}`,
-                              state: m.slotIndex === -1 || repairingIds.has(m.id) ? 'locked' : 'ready',
+                              state: m.slotIndex === -1 || repairingIds.has(m.id) ? ('locked' as const) : ('ready' as const),
                               accent: '#F59E0B',
-                              info: 'Снять механика со слота. Во время ремонта открепить нельзя — сначала остановите ремонт на карточке машины.',
+                              info: 'Снять механика со слота. Во время ремонта открепить нельзя — сначала останови ремонт на карточке машины.',
                               onPress: () => changeMechanicSlot(m.id, -1),
                             },
                             {
@@ -146,7 +166,7 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
                               subtitle: `${formatMoney(salaryForLevel(1))}/мес`,
                               state: 'ready',
                               accent: ACTION_COLORS.mechanic,
-                              info: 'Оклад начисляется с момента найма и выплачивается в зарплатный день — даже если механик простаивает. Прикрепите его к слоту, чтобы он ремонтировал.',
+                              info: 'Оклад начисляется с момента найма и выплачивается в зарплатный день — даже если механик простаивает. Прикрепи его к слоту, чтобы он ремонтировал.',
                               onPress: () => hireMechanic(m.id),
                             },
                           ]

@@ -5,11 +5,17 @@
 
 // ─── Опыт игрока ───────────────────────────────────────────────────────────
 
-/** XP, нужный на текущем уровне, чтобы перейти на следующий. Уровни бесконечны. */
-export const XP_CURVE_BASE = 100;
+/**
+ * XP, нужный на текущем уровне, чтобы перейти на следующий. Уровни бесконечны.
+ *
+ * Низкая база (60) — первые уровни быстрые; квадратичная часть (3,5) держит поздние уровни
+ * долгими. Квадратичная часть поднята с 1,5, когда механик стал чинить впятеро быстрее: без этого
+ * вся игра проходилась вдвое быстрее. Подобрано симулятором (scripts/simulate.ts): активный игрок
+ * — 5-й уровень за ≈5 мес., 20-й за ≈43, 100-й за ≈467 (≈39 ч).
+ */
+export const XP_CURVE_BASE = 60;
 export const XP_CURVE_LINEAR = 10;
-export const XP_CURVE_QUADRATIC = 1.5;
-/** Кривая подобрана симулятором (scripts/simulate.ts): активный игрок доходит до 20-го уровня за ≈5 ч, до 100-го — за ≈45 ч */
+export const XP_CURVE_QUADRATIC = 3.5;
 export const requiredXp = (level: number): number => {
   const n = Math.max(0, level - 1);
   return Math.round(XP_CURVE_BASE + XP_CURVE_LINEAR * n + XP_CURVE_QUADRATIC * n * n);
@@ -23,6 +29,21 @@ export interface PlayerXp {
 }
 
 export const createPlayerXp = (): PlayerXp => ({ level: 1, xp: 0, totalXp: 0 });
+
+/**
+ * Награда за новый уровень, $: каждый уровень что-то даёт, даже если на нём ничего не открывается.
+ * Линейная — на старте ощутима (к 5-му уровню ≈ треть стартового капитала), а на поздних уровнях
+ * скромна на фоне дохода старших классов, поэтому раскачку не ломает.
+ */
+export const LEVEL_REWARD_PER_LEVEL = 500;
+export const levelUpReward = (level: number): number => (level > 1 ? LEVEL_REWARD_PER_LEVEL * level : 0);
+
+/** Сумма наград за уровни from+1 … to (за одну награду можно подняться на несколько уровней) */
+export const levelUpRewardsBetween = (from: number, to: number): number => {
+  let sum = 0;
+  for (let level = from + 1; level <= to; level++) sum += levelUpReward(level);
+  return sum;
+};
 
 /** Начисление XP: остаток переносится, за одну награду можно подняться на несколько уровней */
 export const addXp = (p: PlayerXp, amount: number): PlayerXp => {
@@ -80,6 +101,16 @@ export const fullRepairXp = (tier: number | undefined, initialWearPct: number): 
   if (!tier || !(initialWearPct > 0)) return 0;
   return Math.round((FULL_REPAIR_XP[tier] ?? 0) * Math.min(1, initialWearPct / 30));
 };
+
+/**
+ * XP за сданный ремонтный заказ клиента: доля базового XP продажи того же класса — меньше
+ * перепродажи (заказ не рискует деньгами игрока), но работа в сервисе тоже двигает уровень.
+ * Сложная работа ценнее, опоздание — вдвое меньше, провал — ничего.
+ */
+export const ORDER_XP_SHARE = 0.3;
+export const ORDER_COMPLEX_XP_MULT = 1.5;
+export const orderXp = (tier: number, complex: boolean, late: boolean): number =>
+  Math.round((SALE_BASE_XP[tier] ?? SALE_BASE_XP[1]) * ORDER_XP_SHARE * (complex ? ORDER_COMPLEX_XP_MULT : 1) * (late ? 0.5 : 1));
 
 /** Бонус за прибыльный месяц: 10% XP продаж месяца, не больше 80 */
 export const monthXp = (netProfitCents: number, salesXpThisMonth: number): number =>

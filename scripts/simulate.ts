@@ -34,16 +34,16 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 const topQuartile = <T,>(xs: T[], key: (x: T) => number) =>
   [...xs].sort((a, b) => key(b) - key(a)).slice(0, Math.max(1, Math.floor(xs.length / 4)));
 
-const MECHANIC_PTS_PER_DAY = 0.5; // 0,05 п./сек × 10 сек
+const MECHANIC_PTS_PER_DAY = B.MECHANIC_POINTS_PER_DAY;
 const TAP_REPAIR = 0.1;
 const PAINTER_PTS_PER_DAY = B.PAINTER_SPEED_PER_SEC * 10;
 const BUY_DAYS = 1;
 const SAMPLES = 3000;
-/** Варианты продажи: ползунок −10% (сразу), 0% (15 дней), +10% (30 дней) */
-const SALE_OPTIONS = [
-  { mult: 0.9, days: 0 },
-  { mult: 1, days: 15 },
-  { mult: 1.1, days: 30 },
+/** Варианты продажи: ползунок −10% (сразу), 0% и +10% — сроки по классу машины (B.saleDays) */
+const saleOptions = (tier: number) => [
+  { mult: 0.9, days: B.saleDays(tier, -10) },
+  { mult: 1, days: B.saleDays(tier, 0) },
+  { mult: 1.1, days: B.saleDays(tier, 10) },
 ];
 
 interface Deal {
@@ -99,7 +99,7 @@ const resaleDeal = (
   const market = carValue(base, { ...before, condition: max, paintCondition: paintTo });
   const salaryPerDay = opts.repair === 'mechanic' ? B.mechanicBaseSalaryCents(clearance) / 100 / 30 : 0;
   let best: Deal | null = null;
-  for (const sale of SALE_OPTIONS) {
+  for (const sale of saleOptions(tier)) {
     // Механик закреплён за слотом и получает оклад весь цикл — и пока машина продаётся
     const days = BUY_DAYS + repairDays + paintDays + sale.days;
     const salePrice = market * sale.mult;
@@ -129,7 +129,7 @@ log('# Car Tycoon — отчёт балансировочного симулят
 log('');
 log(`Сгенерировано \`node --no-warnings scripts/simulate.ts\` на реальных формулах игры, ${SAMPLES} машин на класс и стратегию.`);
 log('«Хорошая сделка» — лучшая четверть объявлений по прибыли на день занятия слота: игрок выбирает, а не покупает всё подряд.');
-log('Продажа — лучший для прибыли/день вариант ползунка (−10% сразу, 0% за 15 дней, +10% за 30 дней). 1 игровой месяц = 5 минут игры.');
+log(`Продажа — лучший для прибыли/день вариант ползунка: −10% сразу, 0% и +10% — за ${[1, 2, 3, 4, 5, 6].map((t) => `${B.saleDays(t, 0)}/${B.saleDays(t, 10)}`).join(', ')} дней по классам. 1 игровой месяц = 5 минут игры.`);
 
 // ─── 1. Перепродажа по классам ─────────────────────────────────────────────
 
@@ -322,6 +322,8 @@ interface CareerOpts {
   maxMonths?: number;
   /** Очки наследия этой карьеры */
   legacyPoints?: number;
+  /** Награды за уровни и прибавка наследия к стартовому капиталу (нет у конфигов до обновления) */
+  rewards?: boolean;
   /** Остановить карьеру (перезапуск), когда условие выполнено */
   stop?: (x: { level: number; cash: number; month: number }) => boolean;
 }
@@ -343,7 +345,8 @@ const addXpWith = (p: P.PlayerXp, amount: number, curve: (level: number) => numb
  * становится доступен по уровню, — по ней подбирается цена.
  */
 const career = (o: CareerOpts) => {
-  let cash = 25_000;
+  const rewards = o.rewards ?? true;
+  let cash = L.BASE_START_CASH + (rewards ? L.legacyStartCash(o.legacyPoints ?? 0) : 0);
   let garage = 0;
   let player = P.createPlayerXp();
   let baseProfit = 0;
@@ -379,7 +382,10 @@ const career = (o: CareerOpts) => {
     const earned = cash - cashBefore;
     baseProfit += earned;
     if (earned > 0) cash += earned * (profitMult - 1);
+    const levelBefore = player.level;
     player = addXpWith(player, xp * xpMult + xp * 0.1, o.xpCurve ?? P.requiredXp); // +10% от базового XP — бонус прибыльного месяца
+    // Награда за уровни: на деньги, но не в базовую прибыль (как в игре — в базу очков наследия не входит)
+    if (rewards) cash += P.levelUpRewardsBetween(levelBefore, player.level);
     const next = garage + 1;
     if (next < GARAGES.length && player.level >= o.garageLevels[next] && cashAt[GARAGES[next].name] === undefined) cashAt[GARAGES[next].name] = cash;
     if (next < GARAGES.length && cash >= o.garagePrices[next] * 1.3 && player.level >= o.garageLevels[next]) {
@@ -418,8 +424,8 @@ log('|---|---:|---:|---:|---:|---:|---:|---:|---:|');
 const OLD_CURVE = (l: number) => 100 + 20 * (l - 1) + 4 * (l - 1) ** 2;
 const OLD = { garagePrices: [0, 25_000, 75_000, 200_000], garageLevels: [0, 2, 5, 10], tierLevels: { 1: 0, 2: 5, 3: 10, 4: 15, 5: 20, 6: 25 }, xpCurve: OLD_CURVE };
 const NEW = { garagePrices: GARAGES.map((g) => g.price), garageLevels: GARAGES.map((g) => g.requiredLevel), tierLevels: TIER_UNLOCK_LEVELS };
-careerRow('До обновления, активный игрок', { ...OLD, active: true });
-careerRow('Лестница + старая кривая XP, активный', { ...NEW, xpCurve: OLD_CURVE, active: true });
+careerRow('До обновления, активный игрок', { ...OLD, active: true, rewards: false });
+careerRow('Лестница + старая кривая XP, активный', { ...NEW, xpCurve: OLD_CURVE, active: true, rewards: false });
 careerRow('Текущий конфиг, активный игрок', { ...NEW, active: true });
 careerRow('Текущий конфиг, только механики', { ...NEW, active: false });
 log('');
@@ -469,7 +475,7 @@ const legacyRun = (restartLevels: number[]) => {
 log('');
 log('## 7. Наследие: серия карьер (активный игрок, новый конфиг)');
 log('');
-log(`Очки = floor(10 × √(прибыль закрытых карьер / $1M)), прибыль × min(${B.LEGACY_PROFIT_MAX}; 1 + 0,04P + 0,0015P²) к положительной марже, опыт × min(2,5; 1 + 0,02P).`);
+log(`Очки = floor(10 × √(прибыль закрытых карьер / $1M)), прибыль × min(${B.LEGACY_PROFIT_MAX}; 1 + 0,04P + 0,0015P²) к положительной марже, опыт × min(${B.LEGACY_XP_MAX}; 1 + ${B.LEGACY_XP_PER_POINT}P), стартовый капитал + min($${B.LEGACY_START_CASH_MAX.toLocaleString("en-US")}; $${B.LEGACY_START_CASH_PER_POINT.toLocaleString("en-US")} × P).`);
 for (const plan of [[], [20], [20, 35], [20, 35, 50], [20, 35, 50, 75]]) {
   log('');
   log(`**Перезапуски на уровнях: ${plan.length ? plan.join(', ') : 'без перезапусков'}**`);

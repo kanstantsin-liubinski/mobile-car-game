@@ -18,7 +18,12 @@ export interface TileSpec {
   /** Цвет рамки готового действия (по умолчанию нейтральная) */
   accent?: string;
   onPress: () => void;
+  /** Удержание повторяет действие (ремонт, покраска тапами) */
+  repeat?: boolean;
 }
+
+/** Темп повтора при удержании: 4 нажатия в секунду — как бодро тапающий игрок, не быстрее */
+const HOLD_REPEAT_MS = 250;
 
 /** Сколько плиток в ряду: до трёх — в один ряд, четыре — 2×2, больше — по три */
 const perRow = (n: number) => (n <= 3 ? Math.max(1, n) : n === 4 ? 2 : 3);
@@ -69,7 +74,13 @@ const Tile = ({ tile, infoOpen, onInfo }: { tile: TileSpec; infoOpen: boolean; o
         state === 'pending' && styles.tilePending,
       ]}
     >
-      <TouchableOpacity style={styles.body} disabled={state !== 'ready'} onPress={tile.onPress} activeOpacity={0.75}>
+      <TouchableOpacity
+        style={styles.body}
+        disabled={state !== 'ready'}
+        onPress={tile.onPress}
+        repeatMs={tile.repeat ? HOLD_REPEAT_MS : undefined}
+        activeOpacity={0.75}
+      >
         {state === 'locked' ? (
           <Text style={styles.emoji}>🔒</Text>
         ) : state === 'done' ? (

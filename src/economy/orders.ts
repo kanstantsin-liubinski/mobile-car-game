@@ -166,6 +166,9 @@ const between = (min: number, max: number, rng: Rng) => min + rng() * (max - min
 /** Суммы заказов — в целых долларах */
 const cents = (dollars: number) => Math.max(1, Math.round(dollars)) * 100;
 
+/** С какого уровня игрока оборудование можно купить */
+const equipmentLevel = (id: B.EquipmentId): number => B.EQUIPMENT.find((e) => e.id === id)?.requiredLevel ?? 1;
+
 export const canPerform = (type: B.ServiceOrderType, owned: B.EquipmentId[]): boolean => {
   const eq = serviceDef(type).equipment;
   return eq === 'basic_tools' || owned.includes(eq);
@@ -174,9 +177,11 @@ export const canPerform = (type: B.ServiceOrderType, owned: B.EquipmentId[]): bo
 const makeServiceOrder = (id: string, now: number, reputation: number, ctx: OrdersContext, rng: Rng): ServiceOrder => {
   const tier = pick(ctx.unlockedTiers, rng);
   const premium = rng() < B.premiumOrderChance(reputation);
-  // Любые типы работ при любой репутации; чаще те, что игрок может выполнить имеющимся оборудованием
+  // Любые типы работ при любой репутации; чаще те, что игрок может выполнить имеющимся оборудованием.
+  // Работа на оборудовании, которое по уровню ещё нельзя купить, не предлагается: взять её нельзя
+  // никак, и на доске она была только шумом (покраска «с 18 уровня» у игрока 3-го).
   const allowed = (ctx.serviceTypes ? B.SERVICE_ORDER_TYPES.filter((d) => ctx.serviceTypes!.includes(d.type)) : B.SERVICE_ORDER_TYPES).filter(
-    (d) => (d.minLevel ?? 0) <= ctx.playerLevel,
+    (d) => (d.minLevel ?? 0) <= ctx.playerLevel && equipmentLevel(d.equipment) <= ctx.playerLevel,
   );
   const doable = allowed.filter((d) => canPerform(d.type, ctx.owned));
   const locked = allowed.filter((d) => !canPerform(d.type, ctx.owned));
@@ -273,7 +278,7 @@ const SPECIAL_PHRASES = [
 const PICKING_PHRASES = [
   'Нужна машина для семьи, без сюрпризов',
   'Ищу автомобиль на каждый день, сам искать некогда',
-  'Подберите машину в хорошем состоянии, заплачу сразу',
+  'Подбери машину в хорошем состоянии, заплачу сразу',
   'Хочу машину к отпуску — главное, чтобы не подвела',
 ];
 

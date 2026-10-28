@@ -11,7 +11,7 @@ import { SheetModal } from "@components/SheetModal";
 import { TouchableOpacity } from "@components/Touchable";
 import Slider from "@react-native-community/slider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { garageStyles } from "@styles/styles";
+import { garageStyles, marketStyles } from "@styles/styles";
 import { useGarageContext } from "@hooks/GarageContext";
 import { useSafeAreaWeb } from "@hooks/useSafeAreaWeb";
 import { useEconomy } from "@hooks/EconomyContext";
@@ -21,9 +21,7 @@ import { WorkerTrainingModal } from "@components/WorkerTrainingModal";
 import { formatGameDays, formatMoney, pluralDays } from "../economy/format";
 import { DAY_MS, MECHANIC_MONTHLY_SALARY_CENTS } from "../economy/economy";
 import { skillMultiplier } from "../economy/progression";
-
-/** Самая долгая продажа (+10% к цене) в игровых днях; −10% — мгновенно */
-const MAX_SELL_DAYS = 30;
+import { saleDays } from "../economy/balance";
 import { colors } from "@styles/colors";
 import { carValue, tradeSaleBonus, tradeSalePrice } from "../economy/carCondition";
 import { ACTION_COLORS, CarActions, CarStatusPanels, PaintBars } from "@components/garage/CarWorkPanels";
@@ -34,11 +32,16 @@ import type { Mechanic } from "@/types";
 import { getGarageById } from "../data/cityBuildings";
 import { LocationHeader } from "@components/LocationHeader";
 import { GameIcon } from "@components/GameIcon";
-import { CarImage } from "@components/CarImage";
+import { CarImage, getCarTier } from "@components/CarImage";
 import { CarSpecs } from "@components/CarSpecs";
 import { ICONS, BUILDING_ICONS, getMechanicAvatar } from "@img/gameIcons";
 
-export const GarageScreen: React.FC = () => {
+interface GarageScreenProps {
+  /** Пустой гараж ведёт прямо на авторынок: новичок не знал, где он */
+  onOpenMarket: () => void;
+}
+
+export const GarageScreen = ({ onOpenMarket }: GarageScreenProps) => {
   const {
     garage,
     garageSlots,
@@ -77,6 +80,8 @@ export const GarageScreen: React.FC = () => {
   const [selectedCarForSale, setSelectedCarForSale] = useState<{
     id: string;
     name: string;
+    /** Класс машины: от него зависит срок продажи */
+    tier: number | undefined;
     boughtPrice: number;
     baseSellPrice: number;
     sellPrice: number;
@@ -144,12 +149,8 @@ export const GarageScreen: React.FC = () => {
     return "#991B1B";
   };
 
-  // Время продажи в игровых днях в зависимости от корректировки цены:
-  // −10% — сразу, 0% — 15 дней, +10% — 30 дней (1 игровой день = 10 сек)
-  const calculateSellDays = (adjustment: number): number => {
-    const normalizedAdjustment = (adjustment + 10) / 20; // 0..1
-    return Math.round(normalizedAdjustment * MAX_SELL_DAYS);
-  };
+  // Время продажи в игровых днях: −10% — сразу, дальше по классу машины (см. SALE_DAYS_AT_MARKET)
+  const calculateSellDays = (adjustment: number): number => saleDays(selectedCarForSale?.tier, adjustment);
   const calculateSellDuration = (adjustment: number): number => calculateSellDays(adjustment) * DAY_MS;
 
   // Ползунок ±10% к рыночной цене, затем один раз бонус навыка «Торговля» к итоговой выручке
@@ -183,6 +184,7 @@ export const GarageScreen: React.FC = () => {
     setSelectedCarForSale({
       id: carId,
       name: car.name,
+      tier: getCarTier(car),
       boughtPrice: cost,
       baseSellPrice,
       sellPrice: finalSellPrice,
@@ -506,9 +508,14 @@ export const GarageScreen: React.FC = () => {
       </View>
 
       {garage.length === 0 ? (
-        <Text style={garageStyles.emptyText}>
-          Ещё нет машин. Купи на авторынке!
-        </Text>
+        <View style={{ alignItems: "center", gap: 14 }}>
+          <Text style={garageStyles.emptyText}>
+            Пока нет машин. Купи подержанную на авторынке, почини и продай дороже.
+          </Text>
+          <TouchableOpacity style={[marketStyles.buyButton, { paddingHorizontal: 24 }]} onPress={onOpenMarket}>
+            <Text style={marketStyles.buyButtonText}>На авторынок</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <View style={garageStyles.carsList}>
           {garage

@@ -150,7 +150,7 @@ const OrderCard = ({ order }: { order: Order }) => {
         showToast({ title: 'Заказ принят', message: 'Машина клиента уже в гараже.', icon: TIER_ICONS[order.tier], tone: 'success' });
       }
     } else if (economy.acceptOrder(order.id)) {
-      showToast({ title: 'Заказ на подбор принят', message: 'Найдите машину на авторынке и подготовьте её.', icon: TIER_ICONS[order.tier] });
+      showToast({ title: 'Заказ на подбор принят', message: 'Найди машину на авторынке и подготовь её.', icon: TIER_ICONS[order.tier] });
     }
   };
 
@@ -230,12 +230,12 @@ const OrderCard = ({ order }: { order: Order }) => {
                 ? wasLate
                   ? '✓ Работа закончена с опозданием — оплата 70%'
                   : '✓ Работа закончена вовремя — можно сдавать'
-                : 'Машина в гараже: отремонтируйте (или покрасьте) её до цели.'}
+                : 'Машина в гараже: отремонтируй (или покрась) её до цели.'}
             </Text>
           )}
           {!isService && (
             <Text style={styles.line}>
-              Подходящую машину передайте из гаража кнопкой «Передать клиенту» на её карточке.
+              Подходящую машину передай из гаража кнопкой «Передать клиенту» на её карточке.
             </Text>
           )}
           <View style={styles.actions}>
@@ -266,7 +266,7 @@ const ServiceDetails = ({ order }: { order: ServiceOrder }) => {
         {equipmentDef(serviceDef(order.type).equipment).name.toLowerCase()}
       </Text>
       <Text style={styles.line}>
-        💵 Оплата {formatMoney(order.rewardCents)} · детали и материалы {formatMoney(order.partsCents)} (платите сразу, клиент
+        💵 Оплата {formatMoney(order.rewardCents)} · детали и материалы {formatMoney(order.partsCents)} (платишь сразу, клиент
         возмещает в оплате) · чистыми {formatMoney(order.rewardCents - order.partsCents)}
       </Text>
     </>
@@ -280,7 +280,7 @@ const PickingDetails = ({ order }: { order: PickingOrder }) => (
       {order.minOverall}%{order.minPaint !== null ? `, ЛКП от ${order.minPaint}%` : ''}
     </Text>
     <Text style={styles.line}>
-      💵 Клиент заплатит {formatMoney(order.priceCents)} сразу при передаче. Машину покупаете сами, ремонт и покраска — за ваш
+      💵 Клиент заплатит {formatMoney(order.priceCents)} сразу при передаче. Машину покупаешь сам, ремонт и покраска — за твой
       счёт. Слот гаража заказ не занимает.
     </Text>
   </>

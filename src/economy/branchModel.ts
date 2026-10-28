@@ -68,6 +68,8 @@ export interface BranchState {
   reserveCents: number;
   /** Автоматизированные слоты */
   slots: BranchSlot[];
+  /** Купленное в филиал оборудование (B.BRANCH_EQUIPMENT): открывает управляющему сложные заказы */
+  equipment?: B.EquipmentId[];
   managerId: string | null;
   /** Имена сотрудников филиала по id контракта */
   staffNames: Record<string, string>;

@@ -136,6 +136,7 @@ const PnlTab = () => {
         <FinanceRow label="Обучение (курсы)" cents={-r.otherExpenseCents} />
         <FinanceRow label="Прочие доходы" cents={r.otherIncomeCents} />
         {r.legacyBonusCents > 0 && <FinanceRow label="Бонус наследия" cents={r.legacyBonusCents} />}
+        {(r.levelRewardCents ?? 0) > 0 && <FinanceRow label="Награды за уровни" cents={r.levelRewardCents} />}
         <View style={ui.divider} />
         <FinanceRow label="Чистая прибыль" cents={r.netProfitCents} signed bold />
         <FinanceRow label="Вложения (гаражи, оборудование)" cents={-r.investmentsCents} muted />
@@ -289,7 +290,7 @@ const BranchesTab = () => {
   if (branches.length === 0) {
     return (
       <Text style={styles.empty}>
-        Филиалов пока нет. С 12 уровня старый гараж можно снова открыть как филиал — нажмите на него в городе.
+        Филиалов пока нет. С 12 уровня старый гараж можно снова открыть как филиал — нажми на него в городе.
       </Text>
     );
   }
@@ -421,7 +422,7 @@ const LoanTab = () => {
         )}
       </FinanceSection>
       <Text style={styles.hint}>
-        Выручка от продаж на кредит автоматически не идёт — вы сами решаете, когда и сколько гасить. Процентов нет.
+        Выручка от продаж на кредит автоматически не идёт — ты сам решаешь, когда и сколько гасить. Процентов нет.
       </Text>
     </>
   );

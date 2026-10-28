@@ -60,7 +60,7 @@ export const ExperienceModal = ({
 
       <InfoSection title="Последние начисления">
         {log.length === 0 ? (
-          <InfoText>Пока пусто. Продайте машину с прибылью — и здесь появится первая запись.</InfoText>
+          <InfoText>Пока пусто. Продай машину с прибылью — и здесь появится первая запись.</InfoText>
         ) : (
           log.map((e, i) => (
             <View key={i} style={styles.logRow}>

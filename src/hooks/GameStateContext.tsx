@@ -71,6 +71,13 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  /**
+   * Сброс карьеры перед новой игрой. Все вызовы (новая игра, «Наследие», банкротство) тут же
+   * начинают новую карьеру, поэтому маркер сохранения ставится здесь же. Раньше он только
+   * удалялся в расчёте на эффект смены экрана в App — но после «Наследия» и банкротства экран
+   * остаётся «game», эффект не срабатывал, и при следующем запуске пропадала кнопка
+   * «Продолжить»: «Новая игра» стёрла бы новую карьеру.
+   */
   const resetGameData = async () => {
     try {
       // Очищаем все игровые данные
@@ -82,11 +89,11 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       await AsyncStorage.removeItem('game_experience');
       await AsyncStorage.removeItem('game_skills');
       await AsyncStorage.removeItem('game_sold_cars');
-      await AsyncStorage.removeItem(SAVE_DATA_MARKER);
-      
+      await AsyncStorage.setItem(SAVE_DATA_MARKER, 'true');
+
       // Триггерим перезагрузку компонентов
       setGameResetTrigger((prev) => prev + 1);
-      setHasSaveData(false);
+      setHasSaveData(true);
     } catch (error) {
       console.error('Error resetting game data:', error);
     }

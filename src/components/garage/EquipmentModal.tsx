@@ -15,6 +15,9 @@ import { ActionTiles } from '@components/ActionTiles';
 import { clearanceName, clearanceTile } from './clearanceTile';
 import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { EQUIPMENT, PAINTER_MONTHLY_SALARY_CENTS, type EquipmentId } from '../../economy/balance';
+
+/** По порядку открытия: список читается как лестница — что уже есть и что откроется следующим */
+const EQUIPMENT_BY_LEVEL = [...EQUIPMENT].sort((a, b) => a.requiredLevel - b.requiredLevel);
 import { equipmentBlock, hasEquipment } from '../../economy/economy';
 import { skillMultiplier } from '../../economy/progression';
 import { formatMoney } from '../../economy/format';
@@ -55,7 +58,7 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
         <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
           <SheetHeader title="Оборудование" onClose={onClose} flush />
           <SheetScroll>
-            {EQUIPMENT.map((eq) => {
+            {EQUIPMENT_BY_LEVEL.map((eq) => {
               const owned = hasEquipment(state, eq.id);
               const block = equipmentBlock(state, eq.id);
               return (
@@ -77,7 +80,7 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
                     >
                       <Text style={styles.buyText}>
                         {block === 'level'
-                          ? `🔒 С ${eq.requiredLevel} уровня (у вас ${level})`
+                          ? `🔒 С ${eq.requiredLevel} уровня (у тебя ${level})`
                           : `Купить · ${formatMoney(eq.price * 100)}`}
                       </Text>
                     </TouchableOpacity>
@@ -100,7 +103,7 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
                         </>
                       ) : (
                         <>
-                          <Text style={styles.desc}>Не установлена. Выберите свободный слот (без машины и механика).</Text>
+                          <Text style={styles.desc}>Не установлена. Выбери свободный слот (без машины и механика).</Text>
                           <View style={styles.slots}>
                               {Array.from({ length: garageSlots }).map((_, i) => {
                                 const reason = boothBlockReason(i);
@@ -118,11 +121,11 @@ export const EquipmentModal = ({ visible, onClose }: { visible: boolean; onClose
                           </View>
                           {garageSlots < 2 && (
                             <Text style={styles.warn}>
-                              В гараже один слот: после камеры не останется места для ремонта. Переезжайте в гараж побольше.
+                              В гараже один слот: после камеры не останется места для ремонта. Переезжай в гараж побольше.
                             </Text>
                           )}
                           {garageSlots >= 2 && boothBlockReason(0) && boothBlockReason(garageSlots - 1) && (
-                            <Text style={styles.warn}>Освободите слот: уберите машину и открепите механика.</Text>
+                            <Text style={styles.warn}>Освободи слот: убери машину и открепи механика.</Text>
                           )}
                         </>
                       )}
@@ -225,7 +228,7 @@ export const PainterModal = ({
                             accent: '#0EA5E9',
                             info:
                               boothSlot === null
-                                ? 'Маляр работает только в покрасочной камере: купите и установите её (гараж → «Оборудование»).'
+                                ? 'Маляр работает только в покрасочной камере: купи и установи её (гараж → «Оборудование»).'
                                 : 'Маляр сам красит машины в камере. Оклад начисляется с найма и платится и в простое.',
                             onPress: () => hirePainter(p.id),
                           },

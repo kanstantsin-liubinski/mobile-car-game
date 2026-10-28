@@ -19,6 +19,7 @@ import * as O from './orders.ts';
 import * as E from './economy.ts';
 import { DAY_MS } from './time.ts';
 import { rngForCheck } from './hotOffers.ts';
+import { staffFullName } from '../data/staffNames.ts';
 import { emptyBranchMonth, BRANCH_LOG_LIMIT, type BranchEvent, type BranchJob, type BranchMonth, type BranchSlot, type BranchState, type ManagerStrategy } from './branchModel.ts';
 
 export * from './branchModel.ts';
@@ -31,7 +32,6 @@ export interface BranchContext {
   sampleCar: O.OrdersContext['sampleCar'];
 }
 
-const STAFF_FIRST = ['Алексей', 'Иван', 'Дмитрий', 'Сергей', 'Михаил', 'Андрей', 'Николай', 'Павел', 'Олег', 'Виктор', 'Егор', 'Роман'];
 const STAFF_LAST = ['Петров', 'Смирнов', 'Кузнецов', 'Попов', 'Соколов', 'Лебедев', 'Козлов', 'Новиков', 'Морозов', 'Волков'];
 
 const hashString = (text: string): number => {
@@ -40,10 +40,8 @@ const hashString = (text: string): number => {
   return h >>> 0;
 };
 
-const staffName = (garageId: string, n: number): string => {
-  const h = hashString(`${garageId}:${n}`);
-  return `${STAFF_FIRST[h % STAFF_FIRST.length]} ${STAFF_LAST[(h >>> 8) % STAFF_LAST.length]}`;
-};
+/** Имя сотрудника филиала: под его аватар (по id), фамилия — в нужном роде */
+const staffName = (id: string): string => staffFullName(id, STAFF_LAST);
 
 
 export const branchList = (s: E.EconomyState): BranchState[] => Object.values(s.branches ?? {});
@@ -76,7 +74,7 @@ export const branchOpenCostCents = (garageId: string): number => E.toCents(B.BRA
 /** Почему нельзя открыть филиал в этом гараже (null — можно) */
 export const branchOpenBlock = (s: E.EconomyState, garage: GarageInfo, mainRank: number): string | null => {
   if (s.branches?.[garage.id]) return 'Филиал уже открыт';
-  if (garage.rank >= mainRank) return 'Филиалом может стать только старый гараж — сначала переезжайте в более крупный';
+  if (garage.rank >= mainRank) return 'Филиалом может стать только старый гараж — сначала переезжай в более крупный';
   if (branchList(s).length + 1 >= B.MAX_BUSINESS_OBJECTS) return `Не больше ${B.MAX_BUSINESS_OBJECTS} объектов бизнеса`;
   const level = s.player.xp.level;
   const need = branchUnlockLevel(s);
@@ -93,6 +91,7 @@ const createBranch = (s: E.EconomyState, garage: GarageInfo, now: number): Branc
   strategy: 'balanced',
   reserveCents: E.toCents(B.BRANCH_DEFAULT_RESERVE),
   slots: [{ mechanicId: null }],
+  equipment: [],
   managerId: null,
   staffNames: {},
   orders: { ...O.createOrdersState((s.orders.seed ^ hashString(garage.id)) >>> 0, now), reputation: s.orders.reputation },
@@ -176,9 +175,9 @@ export const hireBranchStaff = (
   if (role === 'manager' && b.managerId) return { state: s, ok: false };
   if (role === 'mechanic' && (!b.slots[slot] || b.slots[slot].mechanicId)) return { state: s, ok: false };
   const id = `branch:${garageId}:${role}:${b.hires + 1}`;
-  const name = staffName(garageId, b.hires + 1);
+  const name = staffName(id);
   let state = E.startContract(s, id, now, undefined, role);
-  state = { ...state, contracts: { ...state.contracts, [id]: { ...state.contracts[id], branchId: garageId } } };
+  state = { ...state, contracts: { ...state.contracts, [id]: { ...state.contracts[id], branchId: garageId, name } } };
   let branch: BranchState = {
     ...b,
     hires: b.hires + 1,
@@ -192,6 +191,68 @@ export const hireBranchStaff = (
     state = restarted.state;
     branch = restarted.branch;
   }
+  return { ok: true, state: withBranch(state, branch) };
+};
+
+/** Механик со слота филиала уходит: работа на слоте встаёт с остатком до прихода следующего */
+const vacateSlot = (s: E.EconomyState, b: BranchState, id: string, now: number): BranchState => {
+  const slot = b.slots.findIndex((sl) => sl.mechanicId === id);
+  if (slot < 0) return b;
+  let branch = b;
+  const job = b.jobs.find((j) => j.slot === slot && !j.finished && j.doneAtMs !== null);
+  if (job && job.doneAtMs !== null) {
+    const order = b.orders.active.find((o) => o.id === job.orderId);
+    const speed = mechanicPointsPerDay(s.contracts[id], order?.tier ?? 1);
+    const remainingPts = Math.max(0, ((job.doneAtMs - now) / DAY_MS) * speed);
+    branch = { ...branch, jobs: branch.jobs.map((j) => (j === job ? { ...j, doneAtMs: null, remainingPts } : j)) };
+  }
+  return { ...branch, slots: branch.slots.map((sl, i) => (i === slot ? { mechanicId: null } : sl)) };
+};
+
+/**
+ * Штат общий: механика из основного гаража (или другого филиала) можно перевести на слот филиала —
+ * без увольнения, с его навыком, допуском и окладом. Занятого ремонтом не переводим: сначала стоп.
+ */
+export const transferBlock = (s: E.EconomyState, garageId: string, slot: number, id: string): string | null => {
+  const b = s.branches?.[garageId];
+  const c = s.contracts[id];
+  if (!b || !b.slots[slot]) return 'Нет такого слота';
+  if (b.slots[slot].mechanicId) return 'Слот занят';
+  if (!c || (c.profession && c.profession !== 'mechanic')) return 'Не механик';
+  if (c.branchId === garageId) return 'Уже в этом филиале';
+  if (c.busySinceMs !== null) return 'Сейчас ремонтирует — сначала останови работу';
+  return null;
+};
+
+export const transferToBranch = (s: E.EconomyState, garageId: string, slot: number, id: string, name: string, now: number): E.OpResult => {
+  if (transferBlock(s, garageId, slot, id)) return { state: s, ok: false };
+  let state = s;
+  const from = s.contracts[id].branchId;
+  const fromBranch = from ? s.branches?.[from] : undefined;
+  if (fromBranch) state = withBranch(state, logEvent(vacateSlot(state, fromBranch, id, now), now, `${name} переведён в другой филиал`, 'info'));
+  state = { ...state, contracts: { ...state.contracts, [id]: { ...state.contracts[id], branchId: garageId, name } } };
+  const b = state.branches[garageId];
+  let branch: BranchState = logEvent(
+    { ...b, staffNames: { ...b.staffNames, [id]: name }, slots: b.slots.map((sl, i) => (i === slot ? { mechanicId: id } : sl)) },
+    now,
+    `${name} переведён на слот ${slot + 1}`,
+    'info',
+  );
+  const restarted = restartJob(state, branch, slot, now);
+  state = restarted.state;
+  branch = restarted.branch;
+  return { ok: true, state: withBranch(state, branch) };
+};
+
+/** Вернуть механика из филиала в общий штат основного гаража (не увольнение) */
+export const releaseFromBranch = (s: E.EconomyState, garageId: string, id: string, now: number): E.OpResult => {
+  const b = s.branches?.[garageId];
+  const c = s.contracts[id];
+  if (!b || !c || c.branchId !== garageId || b.managerId === id) return { state: s, ok: false };
+  const name = b.staffNames[id] ?? c.name ?? 'Механик';
+  const branch = logEvent(vacateSlot(s, b, id, now), now, `${name} вернулся в основной гараж`, 'info');
+  const { branchId: _left, ...rest } = c;
+  const state = E.setMechanicBusy({ ...s, contracts: { ...s.contracts, [id]: { ...rest, name } } }, id, false, now);
   return { ok: true, state: withBranch(state, branch) };
 };
 
@@ -222,8 +283,8 @@ export const fireBranchStaff = (s: E.EconomyState, garageId: string, id: string,
 // ─── Настройки управляющего ────────────────────────────────────────────────
 
 export const automationBlock = (s: E.EconomyState, b: BranchState): string | null => {
-  if (!b.managerId || !s.contracts[b.managerId]) return 'Наймите управляющего';
-  if (!b.slots.some((sl) => sl.mechanicId && s.contracts[sl.mechanicId])) return 'Наймите механика на слот';
+  if (!b.managerId || !s.contracts[b.managerId]) return 'Найми управляющего';
+  if (!b.slots.some((sl) => sl.mechanicId && s.contracts[sl.mechanicId])) return 'Найми механика на слот';
   return null;
 };
 
@@ -262,8 +323,34 @@ export interface ManagerEstimate {
   reject: string | null;
 }
 
-export const managerTypes = (playerLevel: number): B.ServiceOrderType[] =>
-  playerLevel >= B.EXTENDED_AUTOMATION_LEVEL ? B.MANAGER_EXTENDED_TYPES : B.MANAGER_SIMPLE_TYPES;
+/** Какие заказы берёт управляющий: простые (с 90 уровня и кузов) + работы на оборудовании филиала */
+export const managerTypes = (playerLevel: number, equipment: readonly B.EquipmentId[] = []): B.ServiceOrderType[] => {
+  const base = playerLevel >= B.EXTENDED_AUTOMATION_LEVEL ? B.MANAGER_EXTENDED_TYPES : B.MANAGER_SIMPLE_TYPES;
+  const extra = B.SERVICE_ORDER_TYPES.filter((d) => equipment.includes(d.equipment)).map((d) => d.type);
+  return [...base, ...extra.filter((t) => !base.includes(t))];
+};
+
+/** Почему это оборудование нельзя купить в филиал (null — можно) */
+export const branchEquipmentBlock = (s: E.EconomyState, garageId: string, id: B.EquipmentId, playerLevel: number): string | null => {
+  const b = s.branches?.[garageId];
+  const def = B.EQUIPMENT.find((e) => e.id === id);
+  if (!b || !def || !B.BRANCH_EQUIPMENT.includes(id)) return 'Недоступно для филиала';
+  if ((b.equipment ?? []).includes(id)) return 'Уже есть';
+  if (playerLevel < def.requiredLevel) return `С ${def.requiredLevel} уровня`;
+  if (s.balanceCents < E.toCents(def.price)) return 'Не хватает денег';
+  return null;
+};
+
+/** Купить оборудование в филиал: вложение из свободных денег */
+export const buyBranchEquipment = (s: E.EconomyState, garageId: string, id: B.EquipmentId, playerLevel: number, now: number): E.OpResult => {
+  if (branchEquipmentBlock(s, garageId, id, playerLevel)) return { state: s, ok: false };
+  const def = B.EQUIPMENT.find((e) => e.id === id)!;
+  const cost = E.toCents(def.price);
+  const paid = E.spend(s, cost, (l) => ({ ...l, investmentsCents: l.investmentsCents + cost }), `branch-eq:${garageId}:${id}`);
+  if (!paid.ok) return paid;
+  const b = paid.state.branches[garageId];
+  return { ok: true, state: withBranch(paid.state, logEvent({ ...b, equipment: [...(b.equipment ?? []), id] }, now, `Куплено: ${def.name}`, 'ok')) };
+};
 
 export const estimateOrder = (
   s: E.EconomyState,
@@ -281,7 +368,7 @@ export const estimateOrder = (
   const clearanceOk = !!c && E.clearanceSpeedFactor(c, order.tier) >= 1;
   const strat = B.managerStrategy(b.strategy);
   let reject: string | null = null;
-  if (!managerTypes(playerLevel).includes(order.type)) reject = 'Не простой заказ';
+  if (!managerTypes(playerLevel, b.equipment).includes(order.type)) reject = 'Нет оборудования в филиале';
   else if (!c) reject = 'Нет механика';
   else if (!clearanceOk && !strat.allowNoClearance) reject = 'Нет допуска у механика';
   else if (workDays > order.deadlineDays * strat.deadlineShare) reject = 'Не успеть с запасом';
@@ -292,15 +379,15 @@ export const estimateOrder = (
 // ─── Ход филиала ───────────────────────────────────────────────────────────
 
 /** Каждый автоматизированный слот приводит свой поток клиентов (частота — по общей репутации) */
-const branchOrdersCtx = (ctx: BranchContext, slots: number): O.OrdersContext => ({
+const branchOrdersCtx = (ctx: BranchContext, b: BranchState): O.OrdersContext => ({
   unlockedTiers: ctx.unlockedTiers,
   playerLevel: ctx.playerLevel,
-  owned: ['basic_tools'],
+  owned: ['basic_tools', ...(b.equipment ?? [])],
   sampleCar: ctx.sampleCar,
-  serviceTypes: managerTypes(ctx.playerLevel),
+  serviceTypes: managerTypes(ctx.playerLevel, b.equipment),
   pickingShare: 0,
-  spawnRolls: slots,
-  extraBoard: 2 * (slots - 1),
+  spawnRolls: b.slots.length,
+  extraBoard: 2 * (b.slots.length - 1),
 });
 
 /** Изменения репутации филиала (оценка сдачи, провалы, отказы) переносятся в общую репутацию */
@@ -317,7 +404,7 @@ const syncReputation = (s: E.EconomyState, b: BranchState, garageName: string): 
 /** Доска филиала к моменту t (общая репутация копируется перед генерацией) */
 const advanceBoard = (s: E.EconomyState, b: BranchState, t: number, ctx: BranchContext): BranchState => {
   const synced = b.orders.reputation === s.orders.reputation ? b.orders : { ...b.orders, reputation: s.orders.reputation };
-  const orders = O.advanceOrders(synced, t, branchOrdersCtx(ctx, b.slots.length));
+  const orders = O.advanceOrders(synced, t, branchOrdersCtx(ctx, b));
   return orders === b.orders ? b : { ...b, orders };
 };
 
@@ -378,6 +465,7 @@ const deliverJob = (s: E.EconomyState, b: BranchState, job: BranchJob, now: numb
     opId,
   );
   state = E.creditLegacyBonus(state, paid - order.partsCents);
+  state = E.awardOrderXp(state, order, outcome.late, E.BRANCH_ORDER_XP_SHARE);
   if (b.managerId) state = E.addWorkerPractice(state, b.managerId, B.MANAGER_ORDER_PRACTICE, now);
   // Факт: оклад механика с момента принятия (включая задержки управляющего) до окончания работы
   const workDays = Math.max(0, ((job.doneAtMs ?? now) - (order.acceptedAtMs ?? job.startAtMs)) / DAY_MS);
@@ -572,7 +660,7 @@ export const acceptBranchOrder = (s: E.EconomyState, garageId: string, orderId: 
   const b = s.branches?.[garageId];
   const order = b?.orders.board.find((o) => o.id === orderId);
   if (!b || !order || order.kind !== 'service' || b.jobs.some((j) => j.slot === slot) || s.bankruptcy) return { state: s, ok: false };
-  if (!managerTypes(playerLevel).includes(order.type)) return { state: s, ok: false };
+  if (!managerTypes(playerLevel, b.equipment).includes(order.type)) return { state: s, ok: false };
   const taken = takeOrder(s, b, order, slot, now, { byManager: false, estimate: estimateOrder(s, b, order, b.slots[slot]?.mechanicId ?? null, playerLevel) });
   return taken ? { ok: true, state: withBranch(taken.state, taken.branch) } : { state: s, ok: false };
 };

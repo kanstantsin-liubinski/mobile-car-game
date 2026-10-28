@@ -135,10 +135,22 @@ export const menuStyles = StyleSheet.create({
     backgroundColor: colors.darkBg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 10,
-    paddingTop: 12,
+    paddingTop: 8,
     justifyContent: 'space-around',
+  },
+  menuItem: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  menuLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  menuLabelActive: {
+    color: colors.textPrimary,
   },
   menuButton: {
     width: 60,

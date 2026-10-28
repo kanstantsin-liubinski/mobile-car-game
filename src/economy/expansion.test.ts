@@ -398,13 +398,14 @@ describe('доска заказов и репутация', () => {
     assert.ok(Math.abs(B.orderLevelFactor(101) - 1.15) < 1e-12, 'уровень даёт не больше +15%');
     assert.equal(B.orderLevelFactor(500), B.orderLevelFactor(101));
     assert.ok(Math.abs(B.orderRewardMultiplier(101, 1000) - 1.3 * 1.15) < 1e-12);
-    // Тот же заказ (seed) у сильного сервиса стоит дороже
+    // Тот же заказ (seed) у сильного сервиса стоит дороже. Уровни — после всего оборудования (40) и до
+    // корпоративных заказов (70): набор доступных работ одинаков, и seed даёт тот же заказ
     const first = (rep: number, level: number) => {
       const st = O.advanceOrders({ ...O.createOrdersState(11, 0), reputation: rep, lastOrderAtMs: -10 * DAY_MS }, 0, ctx(['basic_tools'], level));
       return st.board.find((o) => o.kind === 'service') as O.ServiceOrder | undefined;
     };
-    const cheap = first(300, 1);
-    const rich = first(300, 21);
+    const cheap = first(300, 41);
+    const rich = first(300, 69);
     assert.ok(cheap && rich);
     assert.ok(rich.rewardCents - rich.partsCents > (cheap.rewardCents - cheap.partsCents) * 1.02);
   });
@@ -441,7 +442,8 @@ const withServiceOrder = (type: B.ServiceOrderType = 'maintenance', balance = 10
   let s = E.createEconomy($(balance), true, true, 1);
   let orders = s.orders;
   for (let seed = 1; seed < 2000; seed++) {
-    orders = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 600 }, 0, ctx(['basic_tools', 'engine', 'transmission', 'paint_booth']));
+    // Уровень 20: на доске бывают все работы базового оборудования, двигателя, АКПП и покраски
+    orders = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 600 }, 0, ctx(['basic_tools', 'engine', 'transmission', 'paint_booth'], 20));
     if (orders.board.some((o) => o.kind === 'service' && o.type === type)) break;
   }
   s = { ...s, orders };
@@ -587,7 +589,8 @@ describe('заказы на подбор', () => {
     const good = { tier: 1, name: order.modelName, mileage: order.maxMileage, overall: order.minOverall, paintCondition: 100 };
     const res = E.deliverPickingOrder(st, order.id, 'car', good, DAY_MS);
     assert.ok(res.ok);
-    assert.equal(res.state.balanceCents, st.balanceCents + order.priceCents);
+    // Опыт сделки мог поднять уровень: награда за него — отдельной строкой учёта
+    assert.equal(res.state.balanceCents, st.balanceCents + order.priceCents + res.state.ledger.levelRewardCents - st.ledger.levelRewardCents);
     assert.equal(res.state.assets.car, undefined);
     assert.equal(res.state.ledger.carsSold, 1);
     assert.equal(res.state.player.management.practice >= B.MANAGEMENT_ORDER_PRACTICE, true);
@@ -743,5 +746,44 @@ describe('квалификация сотрудников и детали', () =
     assert.equal(s.assets.c.extraCostsCents, $(200));
     assert.equal(s.balanceCents, $(10_000) - $(2000) - $(200));
     assert.equal(E.refundOnCar(s, 'c', $(999), 'refund:c:2').assets.c.extraCostsCents, 0, 'не больше, чем вложено');
+  });
+});
+
+describe('понятность рынка для новичка', () => {
+  it('состояние на шкалах никогда не выше максимума, истина внутри', () => {
+    for (let i = 0; i < 600; i++) {
+      const max = 20 + ((i * 53) % 800) / 10;
+      const t = { condition: (max * ((i * 37) % 100)) / 100, maxCondition: max, paintCondition: (i * 71) % 1001 / 10 };
+      for (const level of ['visual', 'inspected', 'scanned'] as const) {
+        const r = C.readListing(`N${i}`, t, level, 1);
+        assert.ok(r.tech.high <= r.max.high, `${level}: верх состояния не выше верха максимума`);
+        assert.ok(r.max.low >= r.tech.low, `${level}: низ максимума не ниже низа состояния`);
+        assert.ok(r.tech.low <= t.condition && t.condition <= r.tech.high);
+        assert.ok(r.max.low <= t.maxCondition && t.maxCondition <= r.max.high);
+      }
+    }
+  });
+
+  it('прогноз: точная диагностика даёт одно число, худший вариант не лучше лучшего', () => {
+    const car = { basePrice: 14_000, year: 2012, mileage: 200_000 };
+    const exact = (v: number) => ({ low: v, high: v });
+    const f = C.resaleForecast(car, { tech: exact(40), max: exact(70), paint: exact(60) }, 4_000);
+    assert.equal(f.valueLow, f.valueHigh);
+    const repaired = C.carValue(car.basePrice, { ...car, condition: 70, paintCondition: 60 });
+    const now = C.carValue(car.basePrice, { ...car, condition: 40, paintCondition: 60 });
+    assert.equal(f.profitLow, Math.round(repaired - (repaired - now) * B.OWN_REPAIR_PARTS_SHARE - 4_000));
+    const wide = C.resaleForecast(car, { tech: { low: 30, high: 50 }, max: { low: 60, high: 80 }, paint: { low: 40, high: 70 } }, 4_000);
+    assert.ok(wide.valueLow < wide.valueHigh && wide.profitLow < wide.profitHigh);
+  });
+
+  it('заказы на оборудование, которое по уровню ещё не купить, не предлагаются', () => {
+    for (let seed = 1; seed < 200; seed++) {
+      const st = O.advanceOrders({ ...O.createOrdersState(seed, 0), reputation: 600 }, 0, ctx(['basic_tools'], 3));
+      for (const o of st.board) {
+        if (o.kind !== 'service') continue;
+        const eq = O.serviceDef(o.type).equipment;
+        assert.ok((B.EQUIPMENT.find((e) => e.id === eq)?.requiredLevel ?? 1) <= 3, `${o.type} на 3 уровне`);
+      }
+    }
   });
 });

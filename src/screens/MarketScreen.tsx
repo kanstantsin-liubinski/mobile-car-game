@@ -135,7 +135,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
           </Text>
         )}
 
-        <ListingDiagnostics listing={listing} />
+        <ListingDiagnostics listing={listing} buyPrice={finalPrice} />
 
         <TouchableOpacity
           style={[marketStyles.buyButton, hot && { backgroundColor: HOT_COLOR }, !canAfford && marketStyles.buyButtonDisabled]}
@@ -169,7 +169,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
               Класс «{TIER_NAMES[selectedTier]}» откроется на {TIER_UNLOCK_LEVELS[selectedTier]} уровне
             </Text>
             <Text style={[marketStyles.emptyText, { marginTop: 6, fontSize: 13 }]}>
-              Продавайте машины и зарабатывайте опыт, чтобы повысить уровень!
+              Продавай машины и зарабатывай опыт, чтобы повысить уровень!
             </Text>
           </View>
         )}

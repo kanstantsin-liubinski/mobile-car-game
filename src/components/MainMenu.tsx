@@ -151,7 +151,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
           <View style={styles.confirmModalContent}>
             <Text style={styles.confirmModalTitle}>Начать новую игру?</Text>
             <Text style={styles.confirmModalMessage}>
-              Ваше текущее сохранение будет удалено и не сможет быть восстановлено.
+              Твоё текущее сохранение будет удалено, и восстановить его будет нельзя.
             </Text>
 
             <View style={styles.confirmModalButtons}>

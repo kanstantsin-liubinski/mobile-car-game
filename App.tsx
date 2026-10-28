@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { GarageScreen, MarketScreen, SkillsScreen, CityScreen, DealershipScreen, OrdersScreen } from '@screens';
 import { BottomMenu, TopMenu, MainMenu } from '@components';
 import { useNavigation } from '@hooks/useNavigation';
+import { DEFAULT_MARKET_ID } from './src/data/cityBuildings';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { GarageProvider } from '@hooks/GarageContext';
 import { EconomyProvider, useGameClock } from '@hooks/EconomyContext';
@@ -25,6 +26,7 @@ import { BankruptcyScreen } from '@components/finance/BankruptcyScreen';
 import { ToastProvider } from '@components/toast/ToastContext';
 import { ProgressionToasts } from '@components/toast/ProgressionToasts';
 import { HotOfferNotifier } from '@components/toast/HotOfferNotifier';
+import { MentorTutorial } from '@components/tutorial/MentorTutorial';
 import { commonStyles } from '@styles/styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -64,7 +66,7 @@ function GameContent() {
           
           <View style={commonStyles.content}>
             {currentScreen === 'garage' && (
-              <GarageScreen />
+              <GarageScreen onOpenMarket={() => openMarket(DEFAULT_MARKET_ID)} />
             )}
             {/* Город всегда смонтирован (скрыт на других экранах): большая карта не грузится заново при каждом переходе */}
             <View style={[{ flex: 1 }, currentScreen !== 'city' && { display: 'none' }]}>
@@ -80,6 +82,8 @@ function GameContent() {
             {currentScreen === 'orders' && <OrdersScreen />}
           </View>
 
+          {/* Наставник ведёт новичка по первому циклу: над меню, ничего не перекрывая */}
+          <MentorTutorial screen={currentScreen} onOpenMarket={() => openMarket(DEFAULT_MARKET_ID)} />
           <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
 
           {/* Финансы: панель по нажатию на баланс, обязательный отчёт в зарплатный день, банкротство */}

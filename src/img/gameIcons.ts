@@ -1,4 +1,5 @@
 import type { ImageSourcePropType } from 'react-native';
+import { avatarIndex } from '../data/staffNames';
 
 /**
  * Все картинки-иконки игры (assets/icons). Подключайте через <GameIcon source={ICONS.money} />.
@@ -59,10 +60,4 @@ export const MECHANIC_AVATARS: ImageSourcePropType[] = [
 ];
 
 /** Аватар механика: стабильно выбирается по id, поэтому не меняется между запусками */
-export const getMechanicAvatar = (mechanicId: string): ImageSourcePropType => {
-  let hash = 0;
-  for (let i = 0; i < mechanicId.length; i++) {
-    hash = (hash * 31 + mechanicId.charCodeAt(i)) | 0;
-  }
-  return MECHANIC_AVATARS[Math.abs(hash) % MECHANIC_AVATARS.length];
-};
+export const getMechanicAvatar = (mechanicId: string): ImageSourcePropType => MECHANIC_AVATARS[avatarIndex(mechanicId)];

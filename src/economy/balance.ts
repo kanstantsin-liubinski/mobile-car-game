@@ -71,6 +71,11 @@ export const SERVICE_DIAGNOSTICS_DAYS = 1;
 // ─── Практика «Подборщика» ─────────────────────────────────────────────────
 
 export const PICKER_INSPECT_PRACTICE = 5;
+/**
+ * С этого уровня «Подборщика» в объявлениях появляется оценка сделки: цена после ремонта и
+ * прибыль. До него игрок считает сам — это и есть игра в перекупщика, а навык даёт опыт «на глаз».
+ */
+export const PICKER_FORECAST_LEVEL = 3;
 export const PICKER_INSPECT_MONTHLY_CAP = 30;
 export const PICKER_SCAN_PRACTICE = 40;
 
@@ -85,8 +90,34 @@ export const TRADE_PICKING_PRACTICE = 40;
 /** Практика «Менеджмента» за любой успешно выполненный заказ */
 export const MANAGEMENT_ORDER_PRACTICE = 200;
 
+// ─── Продажа ───────────────────────────────────────────────────────────────
+
+/**
+ * Срок продажи по рыночной цене (ползунок 0%), игровых дней, по классам: дешёвые машины
+ * ликвиднее. +10% к цене — вдвое дольше, −10% — сразу, между ними — линейно.
+ *
+ * Раньше срок был один на все классы (15 дней), и на старте машина на продаже полмесяца
+ * держала единственный слот: перепродажа «Эконома» шла раз в два месяца. Короткий срок
+ * дешёвых классов ускоряет именно начало, а старшие классы продаются как прежде.
+ */
+export const SALE_DAYS_AT_MARKET: Record<number, number> = {
+  1: 6,
+  2: 8,
+  3: 10,
+  4: 12,
+  5: 15,
+  6: 15,
+};
+
+/** Срок продажи, игровых дней, для поправки цены ползунком от −10% до +10% */
+export const saleDays = (tier: number | undefined, percentAdjustment: number): number => {
+  const atMarket = SALE_DAYS_AT_MARKET[tier ?? 1] ?? SALE_DAYS_AT_MARKET[1];
+  const share = Math.min(1, Math.max(0, (percentAdjustment + 10) / 20));
+  return Math.round(share * 2 * atMarket);
+};
+
 /** Самая долгая продажа (+10% к цене), игровых дней — для подсказок */
-export const MAX_SELL_DAYS_INFO = 30;
+export const MAX_SELL_DAYS_INFO = Math.max(...Object.values(SALE_DAYS_AT_MARKET)) * 2;
 
 // ─── Покраска ──────────────────────────────────────────────────────────────
 
@@ -466,6 +497,11 @@ export const BRANCH_RESERVE_OPTIONS = [0, 1_000, 2_000, 5_000, 10_000, 25_000, 1
 
 /** Какие заказы управляющий берёт сам */
 export const MANAGER_SIMPLE_TYPES: ServiceOrderType[] = ['maintenance', 'suspension'];
+/**
+ * Оборудование, которое можно поставить в филиал: с ним управляющий берёт и эти сложные заказы
+ * (они дороже и дольше простых). Цена и уровень — как у оборудования основного гаража.
+ */
+export const BRANCH_EQUIPMENT: EquipmentId[] = ['engine', 'transmission', 'alignment'];
 export const MANAGER_EXTENDED_TYPES: ServiceOrderType[] = ['maintenance', 'suspension', 'body'];
 
 /**
@@ -539,8 +575,14 @@ export const MANAGER_STRATEGIES: ManagerStrategyDef[] = [
 export const managerStrategy = (id: ManagerStrategy | undefined): ManagerStrategyDef =>
   MANAGER_STRATEGIES.find((d) => d.id === id) ?? MANAGER_STRATEGIES[1];
 
-/** Скорость механика: 0,05 п. техники в секунду = 0,5 п. в игровой день (× навык × допуск) */
-export const MECHANIC_POINTS_PER_DAY = 0.5;
+/**
+ * Базовая скорость механика: 0,25 п. техники в секунду = 2,5 п. в игровой день (× навык × допуск).
+ * Было 0,05 — машина «Эконома» у механика стояла по 60 дней, а филиал работал в минус. Оклады и
+ * оплата заказов от скорости не зависят (у них свои опоры), поэтому механик просто стал выгоднее;
+ * практика навыка копится по времени работы, как и раньше.
+ */
+export const MECHANIC_SPEED_PER_SEC = 0.25;
+export const MECHANIC_POINTS_PER_DAY = MECHANIC_SPEED_PER_SEC * 10;
 
 // ─── Наследие ──────────────────────────────────────────────────────────────
 
@@ -555,9 +597,18 @@ export const LEGACY_PROFIT_LINEAR = 0.04;
 export const LEGACY_PROFIT_QUADRATIC = 0.0015;
 /** Потолок множителя прибыли: без него после цели «Концерн» бонус разгоняется до ×50–160 (симулятор) */
 export const LEGACY_PROFIT_MAX = 10;
-/** Множитель опыта = min(MAX, 1 + PER_POINT × P) */
-export const LEGACY_XP_PER_POINT = 0.02;
+/**
+ * Множитель опыта = min(MAX, 1 + PER_POINT × P). Было 0,02: перезапуск на 20 уровне давал ×1,08,
+ * и путь к 100 уровню с перезапуском выходил дольше, чем без него (симулятор).
+ */
+export const LEGACY_XP_PER_POINT = 0.04;
 export const LEGACY_XP_MAX = 2.5;
+/**
+ * Стартовый капитал новой карьеры: + PER_POINT за очко наследия, не больше MAX ($). Перезапуск
+ * отбирает всё, и без этого вторая карьера начиналась тем же медленным стартом с одним местом.
+ */
+export const LEGACY_START_CASH_PER_POINT = 5_000;
+export const LEGACY_START_CASH_MAX = 250_000;
 
 // ─── Лестница уровней (до 100 и дальше) ────────────────────────────────────
 

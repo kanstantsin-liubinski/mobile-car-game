@@ -26,7 +26,7 @@ export const ConcernSection = () => {
     if (!available || !buyConcern()) return;
     setConfirm(false);
     showToast({
-      title: '🏆 Автомобильный концерн ваш!',
+      title: '🏆 Автомобильный концерн твой!',
       message: 'Главная цель выполнена. Игра продолжается — бизнес, филиалы и наследие остаются.',
       icon: ICONS.money,
       tone: 'success',
@@ -42,7 +42,7 @@ export const ConcernSection = () => {
       ) : (
         <>
           <Text style={styles.hint}>
-            Купите автомобильный концерн за {formatMoney(CONCERN_PRICE * 100)}. Нужны и «Наследие», и сильная текущая карьера.
+            Купи автомобильный концерн за {formatMoney(CONCERN_PRICE * 100)}. Нужны и «Наследие», и сильная текущая карьера.
           </Text>
           {requirements.map((r) => (
             <View key={r.id} style={styles.req}>

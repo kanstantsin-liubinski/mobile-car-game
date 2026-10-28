@@ -11,9 +11,12 @@ import * as A from '../../economy/auctions';
 import { LADDER } from '../../economy/balance';
 import { formatGameDays, formatMoney } from '../../economy/format';
 
+/** За сколько уровней до открытия аукциона показывать анонс */
+const AUCTION_TEASER_LEVELS = 5;
+
 const LEADER_TEXT: Record<A.AuctionLeader, string> = {
   none: 'ставок ещё нет',
-  player: '🟢 вы лидируете',
+  player: '🟢 ты лидируешь',
   bot: '🔴 лидирует другой покупатель',
 };
 
@@ -28,6 +31,8 @@ export const AuctionCard = () => {
   const { garage, allSlots, addCar } = useGarageContext();
   const level = state.player.xp.level;
 
+  // Анонс — только когда аукцион уже близко: новичку закрытая карточка над рынком лишь мешала
+  if (level < LADDER.auctions - AUCTION_TEASER_LEVELS) return null;
   if (level < LADDER.auctions) {
     return (
       <View style={[styles.card, styles.locked]}>
@@ -87,13 +92,13 @@ export const AuctionCard = () => {
         <Text style={styles.label}>Текущая ставка</Text>
         <Text style={styles.value}>{formatMoney(lot.currentCents)}</Text>
       </View>
-      <Text style={styles.text}>{lot.status === 'won' ? '🏆 Лот ваш — выкупите его, пока не истёк срок' : LEADER_TEXT[lot.leader]}</Text>
+      <Text style={styles.text}>{lot.status === 'won' ? '🏆 Лот твой — выкупи его, пока не истёк срок' : LEADER_TEXT[lot.leader]}</Text>
 
       {lot.status === 'open' ? (
         <TouchableOpacity style={[styles.button, !!block && styles.disabled]} disabled={!!block} onPress={() => auctionBid()}>
           <Text style={styles.buttonText}>
             {block === 'leading'
-              ? 'Вы лидируете'
+              ? 'Ты лидируешь'
               : block === 'money'
                 ? `Не хватает денег на ${formatMoney(next)}`
                 : `Ставка ${formatMoney(next)}`}

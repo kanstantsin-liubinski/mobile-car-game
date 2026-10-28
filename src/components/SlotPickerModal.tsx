@@ -27,9 +27,10 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
 
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
 
-  // Каждое открытие начинаем без выбранного слота
+  // Каждое открытие сразу выбирает первое свободное место (рабочие слоты идут раньше стоянки):
+  // с одним свободным местом выбирать нечего, а лишний тап перед «Купить» только мешал
   useEffect(() => {
-    setSelectedSlot(null);
+    setSelectedSlot(allSlots.find((slotIndex) => !garage.some((c) => c.slotIndex === slotIndex)) ?? null);
   }, [car?.id]);
 
   const hasFreeSlot = allSlots.some((slotIndex) => !garage.some((c) => c.slotIndex === slotIndex));
@@ -62,7 +63,7 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
           {car && (
             <View style={{ marginBottom: 16, paddingBottom: 8 }}>
               <Text style={{ fontSize: 14, color: colors.textTertiary, marginBottom: 4, fontWeight: '500' }}>
-                Покупаете:
+                Покупаешь:
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <CarImage car={car} size={44} />
@@ -76,7 +77,7 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
 
           <View style={{ marginBottom: 16 }}>
             <Text style={{ fontSize: 14, color: colors.textTertiary, marginBottom: 10, fontWeight: '500' }}>
-              ВЫБЕРИТЕ СЛОТ
+              ВЫБЕРИ СЛОТ
             </Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -125,7 +126,7 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
 
             {!hasFreeSlot && (
               <Text style={{ color: '#F59E0B', fontSize: 13, fontWeight: '600', marginTop: 10 }}>
-                Все места в гараже заняты. Продайте машину или купите гараж побольше.
+                Все места в гараже заняты. Продай машину или купи гараж побольше.
               </Text>
             )}
           </View>

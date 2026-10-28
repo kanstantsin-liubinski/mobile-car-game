@@ -65,6 +65,7 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
             <FinanceRow label="Очки наследия" value={String(points)} bold />
             <FinanceRow label="Прибыль (к положительной марже)" value={mult(L.legacyProfitMultiplier(points))} />
             <FinanceRow label="Опыт" value={mult(L.legacyXpMultiplier(points))} />
+            <FinanceRow label="Прибавка к стартовому капиталу" cents={L.legacyStartCash(points) * 100} />
             <FinanceRow label="Карьер всего / перезапусков" value={`${legacy.careers + 1} / ${legacy.restarts}`} />
             {legacy.pointsTotal > points && (
               <Text style={styles.hint}>Накоплено {legacy.pointsTotal} очков — они начнут действовать со следующей карьеры.</Text>
@@ -77,10 +78,14 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
           <FinanceSection title="Перезапуск сейчас">
             <FinanceRow label="Прибыль карьеры (без бонуса)" cents={career.baseProfitCents} signed />
             <FinanceRow label="Стоимость бизнеса" cents={career.netWorthCents} />
-            <FinanceRow label="Очков получите" value={`+${preview.gain}`} bold />
+            <FinanceRow label="Очков получишь" value={`+${preview.gain}`} bold />
             <FinanceRow label="Очков станет" value={`${preview.pointsNow} → ${preview.pointsAfter}`} />
             <FinanceRow label="Прибыль" value={`${mult(preview.profitMultNow)} → ${mult(preview.profitMultAfter)}`} />
             <FinanceRow label="Опыт" value={`${mult(preview.xpMultNow)} → ${mult(preview.xpMultAfter)}`} />
+            <FinanceRow
+              label="Стартовый капитал"
+              value={`${formatMoney(preview.startCashNow * 100)} → ${formatMoney(preview.startCashAfter * 100)}`}
+            />
             <Text style={styles.hint}>
               Всего очков = 10 × √(прибыль всех закрытых карьер / $1 000 000); начисляются только новые. Банкротство и «Новая игра» очков не
               дают, но и наследие не стирают.
@@ -115,7 +120,7 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
           </FinanceSection>
 
           <FinanceSection title="История карьер">
-            {legacy.history.length === 0 && <Text style={styles.hint}>Это ваша первая карьера.</Text>}
+            {legacy.history.length === 0 && <Text style={styles.hint}>Это твоя первая карьера.</Text>}
             {[...legacy.history].reverse().map((c) => (
               <View key={c.careerId} style={styles.career}>
                 <Text style={styles.careerTitle}>
@@ -136,7 +141,7 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
           </TouchableOpacity>
         </SheetFooter>
 
-        {/* Явное подтверждение: что сбросится, что останется, что получите */}
+        {/* Явное подтверждение: что сбросится, что останется, что получишь */}
         <InnerOverlay visible={confirming}>
           <View style={garageStyles.modalOverlay}>
             <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 12, maxHeight: '90%' }]}>
@@ -157,10 +162,11 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
                     </Text>
                   ))}
                 </FinanceSection>
-                <FinanceSection title="Получите">
+                <FinanceSection title="Получишь">
                   <FinanceRow label="Очков наследия" value={`+${preview.gain} (всего ${preview.pointsAfter})`} bold />
                   <FinanceRow label="Множитель прибыли" value={mult(preview.profitMultAfter)} />
                   <FinanceRow label="Множитель опыта" value={mult(preview.xpMultAfter)} />
+                  <FinanceRow label="Стартовый капитал" cents={preview.startCashAfter * 100} />
                 </FinanceSection>
               </SheetScroll>
               <SheetFooter>

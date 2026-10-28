@@ -6,7 +6,7 @@ import { ActionTiles } from '@components/ActionTiles';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useMarketContext } from '@hooks/MarketContext';
 import type { MarketListing } from '../utils/marketGenerator';
-import { describeWear, overallCondition, scannerAccuracy, type Interval } from '../economy/carCondition';
+import { describeWear, overallCondition, resaleForecast, scannerAccuracy, type Interval } from '../economy/carCondition';
 import { hasEquipment, serviceDiagnosticsCents } from '../economy/economy';
 import { formatMoney, formatGameDays } from '../economy/format';
 import { DAY_MS } from '../economy/time';
@@ -17,6 +17,12 @@ const LEVEL_TEXT: Record<string, string> = {
   inspected: 'Внимательный осмотр',
   scanned: 'Компьютерная диагностика',
   exact: 'Полная проверка в сервисе',
+};
+
+/** Диапазон денег для прогноза: «$5 200–6 100», при равных границах — одно число */
+const range = (low: number, high: number, signed = false) => {
+  const one = (v: number) => `${signed && v > 0 ? '+' : ''}${formatMoney(v * 100)}`;
+  return low === high ? one(low) : `${one(low)} … ${one(high)}`;
 };
 
 const fmt = (iv: Interval, exact: boolean) =>
@@ -47,7 +53,7 @@ type ActionKey = 'inspect' | 'scan' | 'service';
  * Что игрок знает о машине на рынке. До покупки — интервалы (каждый содержит реальное значение),
  * точные значения — только после сторонней проверки. Реальные числа в разметку не попадают.
  */
-export const ListingDiagnostics = ({ listing }: { listing: MarketListing }) => {
+export const ListingDiagnostics = ({ listing, buyPrice }: { listing: MarketListing; buyPrice: number }) => {
   const { state, balance } = useEconomy();
   const { gameTimeMs } = useGameClock();
   const { getReadout, getDiag, inspectListing, scanListing, orderServiceDiagnostics } = useMarketContext();
@@ -64,6 +70,19 @@ export const ListingDiagnostics = ({ listing }: { listing: MarketListing }) => {
     low: Math.floor(overallCondition(readout.tech.low, readout.paint.low)),
     high: Math.ceil(overallCondition(readout.tech.high, readout.paint.high)),
   };
+
+  // Оценка сделки — награда навыка «Подборщик»: до него игрок считает выгоду сам
+  const forecast =
+    state.player.picker.level >= B.PICKER_FORECAST_LEVEL && listing.car.basePrice !== undefined
+      ? resaleForecast({ basePrice: listing.car.basePrice, year: listing.car.year, mileage: listing.car.mileage }, readout, buyPrice)
+      : null;
+  const forecastColor = !forecast
+    ? colors.textTertiary
+    : forecast.profitLow > 0
+      ? '#22C55E'
+      : forecast.profitHigh < 0
+        ? '#EF4444'
+        : '#F59E0B';
 
   const INFO: Record<ActionKey, string> = {
     inspect: `Бесплатно и сразу. Внимательный осмотр уточняет интервалы (тех. ±${B.INSPECT_ACCURACY.tech}, максимум ±${B.INSPECT_ACCURACY.max}, ЛКП ±${B.INSPECT_ACCURACY.paint}) и описывает износ. Первый осмотр объявления: +${B.PICKER_INSPECT_PRACTICE} практики «Подборщика» (до ${B.PICKER_INSPECT_MONTHLY_CAP} в месяц).`,
@@ -86,6 +105,11 @@ export const ListingDiagnostics = ({ listing }: { listing: MarketListing }) => {
       <Text style={styles.overall}>
         Общее состояние: {exact ? `${overallCondition(readout.tech.low, readout.paint.low).toFixed(1)}%` : `${overall.low}–${overall.high}%`}
       </Text>
+      {forecast && (
+        <Text style={[styles.forecast, { color: forecastColor }]}>
+          💰 После ремонта: {range(forecast.valueLow, forecast.valueHigh)} · прибыль {range(forecast.profitLow, forecast.profitHigh, true)}
+        </Text>
+      )}
 
       {(readout.level === 'inspected' || readout.level === 'scanned') && (
         <View style={styles.notes}>
@@ -153,6 +177,7 @@ const styles = StyleSheet.create({
   sure: { position: 'absolute', top: 0, bottom: 0, left: 0 },
   unsure: { position: 'absolute', top: 0, bottom: 0, opacity: 0.35 },
   overall: { fontSize: 12, fontWeight: '700', color: colors.textPrimary, marginTop: 2 },
+  forecast: { fontSize: 12, fontWeight: '700' },
   notes: { gap: 2 },
   note: { fontSize: 11, color: colors.textTertiary },
 });
