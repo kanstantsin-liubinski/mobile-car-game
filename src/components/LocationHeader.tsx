@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, type ImageSourcePropType } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@styles/colors';
-import { CARD_RADIUS, SCREEN_INSET } from '@styles/styles';
+import { CARD_RADIUS, LOCATION_BAND, LOCATION_GAP, SCREEN_INSET } from '@styles/styles';
 import { GameIcon } from '@components/GameIcon';
 
 interface LocationHeaderProps {
@@ -43,13 +43,16 @@ export const LocationHeader = ({ title, icon, emoji, onBack, overlay }: Location
 const PILL_HEIGHT = 42;
 
 const styles = StyleSheet.create({
+  // Высота полосы задана жёстко: на всех экранах плашка стоит на одном месте и одной высоты,
+  // что бы ни лежало внутри (кнопка «назад», иконка или emoji)
   wrapper: {
+    height: LOCATION_GAP + PILL_HEIGHT + LOCATION_BAND,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: SCREEN_INSET,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingTop: LOCATION_GAP,
+    paddingBottom: LOCATION_BAND,
   },
   wrapperOverlay: {
     position: 'absolute',

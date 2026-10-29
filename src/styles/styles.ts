@@ -5,11 +5,13 @@ import { colors } from './colors';
 export const CARD_RADIUS = 12;
 /** Отступ контента от левого и правого края экрана */
 export const SCREEN_INSET = 16;
-/**
- * Просвет у краёв прокрутки экрана: под шапкой (вместе с её 8 снизу) и над нижним меню —
- * столько же, сколько между карточками в списках
- */
-export const SCREEN_SCROLL_TOP = 8;
+/** Просвет между шапкой игры и плашкой локации — и столько же от плашки до контента экрана */
+export const LOCATION_GAP = 12;
+/** Под плашкой локации своя полоса в 8: контент при прокрутке уходит под неё, не касаясь плашки */
+export const LOCATION_BAND = 8;
+/** Отступ в начале прокрутки экрана: вместе с полосой под плашкой — ровно LOCATION_GAP */
+export const SCREEN_SCROLL_TOP = LOCATION_GAP - LOCATION_BAND;
+/** Над нижним меню — столько же, сколько между карточками в списках */
 export const SCREEN_SCROLL_BOTTOM = 16;
 
 export const commonStyles = StyleSheet.create({
