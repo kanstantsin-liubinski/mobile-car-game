@@ -5,6 +5,8 @@ import * as E from '../economy/economy';
 import * as O from '../economy/orders';
 import * as Br from '../economy/branches';
 import * as A from '../economy/auctions';
+import { applyOfflineBranches, type OfflineReport } from '../economy/offline';
+import { dayKeyOf } from '../economy/goals';
 import { GARAGES } from '../data/cityBuildings';
 import { loadLegacy } from './LegacyContext';
 import { legacyStartCash } from '../economy/legacy';
@@ -159,6 +161,13 @@ interface EconomyContextType {
   claimAuctionLot: () => Car | null;
   /** Цель «Автомобильный концерн» (условия «Наследия» проверяет окно) */
   buyConcern: () => boolean;
+  /** Что заработали автоматизированные филиалы, пока игры не было (null — нечего показать) */
+  offlineReport: OfflineReport | null;
+  dismissOfflineReport: () => void;
+  // ─── Цели ───
+  claimDailyTask: (taskId: string) => boolean;
+  claimDailyBonus: () => boolean;
+  claimAchievement: (id: string) => boolean;
 }
 
 interface GameClockContextType {
@@ -179,6 +188,9 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [state, setState] = useState<E.EconomyState>(() => E.createEconomy(INITIAL_BALANCE_CENTS));
   const [gameTimeMs, setGameTimeMs] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [offlineReport, setOfflineReport] = useState<OfflineReport | null>(null);
+  /** Когда приложение ушло в фон (реальные часы) */
+  const backgroundAtRef = useRef<number | null>(null);
 
   // Рефы — источник истины для синхронных операций: два быстрых нажатия видят уже обновлённое состояние
   const stateRef = useRef(state);
@@ -193,7 +205,9 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!loadedRef.current) return;
     lastSaveRef.current = Date.now();
     dirtyRef.current = false;
-    AsyncStorage.setItem(ECONOMY_KEY, E.serializeEconomy(stateRef.current, timeRef.current)).catch((error) =>
+    // Отметка «игра была открыта» — с каждым сохранением: от неё считается время отсутствия
+    const seen = { ...stateRef.current, lastSeenAtMs: Date.now() };
+    AsyncStorage.setItem(ECONOMY_KEY, E.serializeEconomy(seen, timeRef.current)).catch((error) =>
       console.error('Error saving economy:', error),
     );
   }, []);
@@ -219,6 +233,25 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     },
     [commit],
   );
+
+  /** Зачислить работу филиалов за время отсутствия и показать отчёт (отчёты за несколько уходов складываются) */
+  const creditOffline = useCallback((awayMs: number) => {
+    const { state: next, report } = applyOfflineBranches(stateRef.current, timeRef.current, awayMs, GARAGE_NAMES);
+    if (!report) return;
+    stateRef.current = next;
+    setOfflineReport((prev) =>
+      prev
+        ? {
+            awayMs: prev.awayMs + report.awayMs,
+            workedMs: prev.workedMs + report.workedMs,
+            totalCents: prev.totalCents + report.totalCents,
+            lines: report.lines.map((l) => ({ ...l, cents: l.cents + (prev.lines.find((p) => p.garageId === l.garageId)?.cents ?? 0) })),
+          }
+        : report,
+    );
+  }, []);
+
+  const dismissOfflineReport = useCallback(() => setOfflineReport(null), []);
 
   // ─── Загрузка и перенос старых сохранений ─────────────────────────
   useEffect(() => {
@@ -260,6 +293,11 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
             skillLevel,
           });
         }
+        // Задания на сегодня (новые сутки — новые задания)
+        stateRef.current = E.refreshDaily(stateRef.current, dayKeyOf(new Date()));
+        // Пока игры не было, автоматизированные филиалы работали (не дольше 4 часов)
+        const seenAt = stateRef.current.lastSeenAtMs;
+        if (seenAt) creditOffline(Date.now() - seenAt);
       } catch (error) {
         console.error('Error loading economy:', error);
       } finally {
@@ -271,7 +309,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     };
     load();
-  }, [persist]);
+  }, [persist, creditOffline]);
 
   // ─── Игровые часы ─────────────────────────────────────────────────
   useEffect(() => {
@@ -310,6 +348,12 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         commit(Br.advanceBranches(s, next, ordersCtx(s), GARAGE_NAMES));
         return;
       }
+      // Полночь по часам устройства — новые задания дня
+      const today = dayKeyOf(new Date(wall));
+      if (s.goals?.daily?.dayKey !== today) {
+        commit(E.refreshDaily(s, today));
+        return;
+      }
       // Зарплатный день наступил — фиксируем сразу, чтобы перезагрузка вернула в него же
       if (E.isPaydayPending(s, next) || wall - lastSaveRef.current >= SAVE_EVERY_MS) persist();
     }, TICK_MS);
@@ -321,7 +365,22 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const sub = AppState.addEventListener('change', (next) => {
       appActiveRef.current = next === 'active';
       lastTickRef.current = null;
-      if (next !== 'active') persist();
+      if (next !== 'active') {
+        backgroundAtRef.current ??= Date.now();
+        persist();
+        return;
+      }
+      // Вернулись из фона: филиалы работали всё это время
+      const since = backgroundAtRef.current;
+      backgroundAtRef.current = null;
+      if (since !== null && loadedRef.current) {
+        const before = stateRef.current;
+        creditOffline(Date.now() - since);
+        if (stateRef.current !== before) {
+          setState(stateRef.current);
+          persist();
+        }
+      }
     });
     const onPageHide = () => persist();
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -335,9 +394,13 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         window.removeEventListener('beforeunload', onPageHide);
       }
     };
-  }, [persist]);
+  }, [persist, creditOffline]);
 
   // ─── Операции ─────────────────────────────────────────────────────
+  const claimDailyTask = useCallback((taskId: string) => run((s) => E.claimDailyTask(s, taskId)), [run]);
+  const claimDailyBonus = useCallback(() => run((s) => E.claimDailyBonus(s)), [run]);
+  const claimAchievement = useCallback((id: string) => run((s) => E.claimAchievement(s, id)), [run]);
+
   const getNow = useCallback(() => timeRef.current, []);
 
   const canAfford = useCallback((dollars: number) => E.canAfford(stateRef.current, E.toCents(dollars)), []);
@@ -365,6 +428,7 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
           priceCents: E.toCents(sellPrice),
           fallbackCostCents: E.toCents(car.price),
           tier: car.tier,
+          name: 'name' in car ? (car as Car).name : undefined,
         }),
       );
     },
@@ -687,6 +751,11 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       auctionBid,
       claimAuctionLot,
       buyConcern,
+      offlineReport,
+      dismissOfflineReport,
+      claimDailyTask,
+      claimDailyBonus,
+      claimAchievement,
     }),
     [
       isLoaded,
@@ -752,6 +821,11 @@ export const EconomyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       auctionBid,
       claimAuctionLot,
       buyConcern,
+      offlineReport,
+      dismissOfflineReport,
+      claimDailyTask,
+      claimDailyBonus,
+      claimAchievement,
     ],
   );
 

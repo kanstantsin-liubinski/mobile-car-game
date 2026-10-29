@@ -22,6 +22,15 @@ export const formatDuration = (ms: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
+/** Реальное время: «3 ч 12 мин», «45 мин», «меньше минуты» */
+export const formatRealSpan = (ms: number): string => {
+  const minutes = Math.floor(Math.max(0, ms) / 60_000);
+  if (minutes < 1) return 'меньше минуты';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? (m > 0 ? `${h} ч ${m} мин` : `${h} ч`) : `${m} мин`;
+};
+
 export const formatPercent = (value: number | null): string =>
   value === null ? '—' : `${Math.round(value * 100)}%`;
 

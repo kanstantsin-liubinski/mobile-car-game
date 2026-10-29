@@ -76,6 +76,7 @@ export const PaydayModal = () => {
               {result.otherIncomeCents > 0 && <FinanceRow label="Прочие доходы" cents={result.otherIncomeCents} />}
               {result.legacyBonusCents > 0 && <FinanceRow label="Бонус наследия" cents={result.legacyBonusCents} />}
               {(result.levelRewardCents ?? 0) > 0 && <FinanceRow label="Награды за уровни" cents={result.levelRewardCents} />}
+              {result.offlineIncomeCents > 0 && <FinanceRow label="Филиалы, пока игра была закрыта" cents={result.offlineIncomeCents} />}
               {result.otherExpenseCents > 0 && (
                 <FinanceRow label="Обучение (курсы)" cents={-result.otherExpenseCents} />
               )}

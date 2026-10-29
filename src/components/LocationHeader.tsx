@@ -5,6 +5,10 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@styles/colors';
 import { CARD_RADIUS, LOCATION_BAND, LOCATION_GAP, SCREEN_INSET } from '@styles/styles';
 import { GameIcon } from '@components/GameIcon';
+import { RedDot } from '@components/RedDot';
+import { useGoals } from '@components/goals/GoalsContext';
+import { useEconomy } from '@hooks/EconomyContext';
+import { pendingGoalRewards } from '../economy/economy';
 
 interface LocationHeaderProps {
   title: string;
@@ -36,7 +40,23 @@ export const LocationHeader = ({ title, icon, emoji, onBack, overlay }: Location
           {title}
         </Text>
       </View>
+      <GoalsButton />
     </View>
+  );
+};
+
+/** Кнопка «Цели» справа: задания дня, достижения, коллекция; красная точка — есть награда */
+const GoalsButton = () => {
+  const goals = useGoals();
+  const { state } = useEconomy();
+  if (!goals) return null;
+  const pending = pendingGoalRewards(state);
+  return (
+    <TouchableOpacity style={[styles.pill, styles.goalsButton]} onPress={goals.openGoals} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      <Text style={styles.goalsIcon}>🎯</Text>
+      <Text style={styles.goalsText}>Цели</Text>
+      {pending > 0 && <RedDot />}
+    </TouchableOpacity>
   );
 };
 
@@ -81,6 +101,20 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 18,
+  },
+  goalsButton: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  goalsIcon: {
+    fontSize: 18,
+  },
+  goalsText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   title: {
     fontSize: 18,

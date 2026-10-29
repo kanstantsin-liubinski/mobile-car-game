@@ -25,6 +25,7 @@ import { rollBranchMonths, type BranchState } from './branchModel.ts';
 import { legacyMarginBonusCents, legacyXpMultiplier, type CareerSummary } from './legacy.ts';
 import { TIER_UNLOCK_LEVELS, TOTAL_TIERS } from '../data/carModels.ts';
 import * as A from './auctions.ts';
+import * as G from './goals.ts';
 import { nameMatchingAvatar } from '../data/staffNames.ts';
 
 // ─── Константы ─────────────────────────────────────────────────────────────
@@ -166,6 +167,8 @@ export interface MonthLedger {
   legacyBonusCents: number;
   /** Награды за новые уровни (P.levelUpReward) */
   levelRewardCents: number;
+  /** Работа автоматизированных филиалов, пока игра была закрыта (offline.ts) */
+  offlineIncomeCents?: number;
 }
 
 export interface MechanicMonthStat {
@@ -245,6 +248,10 @@ export interface EconomyState {
   auction: A.AuctionState;
   /** Цель «Автомобильный концерн» куплена в этой карьере (дублируется в «Наследии») */
   concernPurchased?: boolean;
+  /** Когда игра последний раз была открыта (реальные часы устройства) — для работы филиалов вне игры */
+  lastSeenAtMs?: number;
+  /** Ежедневные задания, достижения, коллекция моделей (goals.ts) */
+  goals?: G.GoalsState;
 }
 
 export interface XpEntry {
@@ -313,6 +320,7 @@ export const emptyLedger = (): MonthLedger => ({
   inspectPractice: 0,
   legacyBonusCents: 0,
   levelRewardCents: 0,
+  offlineIncomeCents: 0,
 });
 
 export const createEconomy = (
@@ -341,6 +349,7 @@ export const createEconomy = (
   orders: O.createOrdersState(seed, 0),
   xpLog: [],
   branches: {},
+  goals: G.createGoals(),
   careerId: `career-${(seed >>> 0).toString(36)}`,
   legacyPoints,
   grandfatheredTiers: [],
@@ -715,7 +724,7 @@ export const buyCar = (s: EconomyState, car: CarPurchase): OpResult => {
     initialWearPct: wearOf(car),
     fullRepairAwarded: false,
   };
-  return { ...res, state: { ...res.state, assets: { ...res.state.assets, [car.carId]: asset } } };
+  return { ...res, state: trackGoal({ ...res.state, assets: { ...res.state.assets, [car.carId]: asset } }, { type: 'buy', tier: car.tier }) };
 };
 
 /** Прямые затраты на конкретную машину увеличивают её себестоимость */
@@ -755,6 +764,8 @@ export interface CarSale {
   /** Себестоимость, если машины почему-то нет в активах (старые сохранения) */
   fallbackCostCents: number;
   tier?: number;
+  /** Модель — для коллекции, если машины нет в активах */
+  name?: string;
 }
 
 /** Продажа: на баланс приходит вся цена, прибыль = выручка − себестоимость. Повтор игнорируется. */
@@ -786,7 +797,14 @@ export const sellCar = (s: EconomyState, sale: CarSale): EconomyState => {
       revenueCents: s.totals.revenueCents + sale.priceCents,
     },
   }, sale.priceCents - cost), xp, `Продажа: ${asset?.name ?? 'машина'} (доходность ${purchase > 0 ? Math.round(((sale.priceCents - cost) / purchase) * 100) : 0}%)`);
-  return withProcessed(awardSkill(awardManagement(withXp, practice), 'trade', practice), opId);
+  const withGoal = trackGoal(withXp, {
+    type: 'sale',
+    name: asset?.name ?? sale.name ?? 'Машина',
+    tier: asset?.tier ?? sale.tier,
+    profitCents: sale.priceCents - cost,
+    roi: purchase > 0 ? (sale.priceCents - cost) / purchase : 0,
+  });
+  return withProcessed(awardSkill(awardManagement(withGoal, practice), 'trade', practice), opId);
 };
 
 /** XP за первое полное восстановление конкретной машины — один раз за экземпляр */
@@ -799,7 +817,7 @@ export const awardFullRepair = (s: EconomyState, carId: string): EconomyState =>
     assets: { ...s.assets, [carId]: { ...asset, fullRepairAwarded: true } },
     ledger: { ...s.ledger, repairXp: s.ledger.repairXp + xp },
   };
-  return awardXp(marked, xp, `Полное восстановление: ${asset.name}`);
+  return awardXp(trackGoal(marked, { type: 'fullRepair' }), xp, `Полное восстановление: ${asset.name}`);
 };
 
 /** Машины из сохранений до финансовой системы попадают в активы по цене покупки */
@@ -856,6 +874,7 @@ export const recordPlayerTap = (s: EconomyState): EconomyState => {
   return {
     ...s,
     player: { ...s.player, skill: P.addPractice(s.player.skill, 1), manualTaps: s.player.manualTaps + 1 },
+    goals: G.trackGoal(s.goals, { type: 'tap' }),
   };
 };
 
@@ -1032,6 +1051,7 @@ export interface MonthResult {
   diagnosticsCents: number;
   legacyBonusCents: number;
   levelRewardCents: number;
+  offlineIncomeCents: number;
   netProfitCents: number;
   carsSold: number;
 }
@@ -1056,9 +1076,11 @@ export const getMonthResult = (s: EconomyState, now: number): MonthResult => {
     diagnosticsCents: l.diagnosticsCents,
     legacyBonusCents: l.legacyBonusCents,
     levelRewardCents: l.levelRewardCents ?? 0,
+    offlineIncomeCents: l.offlineIncomeCents ?? 0,
     netProfitCents:
       l.legacyBonusCents +
       (l.levelRewardCents ?? 0) +
+      (l.offlineIncomeCents ?? 0) +
       dealProfitCents +
       (l.serviceRevenueCents - l.serviceCostsCents) -
       salaryCents -
@@ -1545,7 +1567,7 @@ export const recordInspection = (s: EconomyState, listingId: string): EconomySta
   if (isProcessed(s, opId) || s.bankruptcy) return s;
   const amount = Math.max(0, Math.min(B.PICKER_INSPECT_PRACTICE, B.PICKER_INSPECT_MONTHLY_CAP - s.ledger.inspectPractice));
   const state = awardSkill({ ...s, ledger: { ...s.ledger, inspectPractice: s.ledger.inspectPractice + amount } }, 'picker', amount);
-  return withProcessed(state, opId);
+  return withProcessed(trackGoal(state, { type: 'inspect' }), opId);
 };
 
 /** Первая диагностика объявления своим сканером: +40 «Подборщика» */
@@ -1619,7 +1641,7 @@ export const deliverServiceOrder = (s: EconomyState, id: string, now: number): O
   state = creditLegacyBonus(state, paid - o.partsCents);
   state = awardSkill(state, 'management', B.MANAGEMENT_ORDER_PRACTICE);
   state = awardOrderXp(state, o, outcome.late);
-  return { ok: true, state: withProcessed(state, opId) };
+  return { ok: true, state: withProcessed(trackGoal(state, { type: 'order' }), opId) };
 };
 
 /** Доля XP заказа, сданного филиалом без участия игрока */
@@ -1654,7 +1676,7 @@ export const deliverPickingOrder = (
   state = { ...state, orders: O.completeOrder(state.orders, id, now, outcome, price, carId) };
   state = awardSkill(state, 'management', B.MANAGEMENT_ORDER_PRACTICE);
   state = awardSkill(state, 'trade', B.TRADE_PICKING_PRACTICE);
-  return { ok: true, state: withProcessed(state, opId) };
+  return { ok: true, state: withProcessed(trackGoal(state, { type: 'order' }), opId) };
 };
 
 // ─── Курсы всех навыков игрока ─────────────────────────────────────────────
@@ -1673,6 +1695,74 @@ export const buySkillCourse = (s: EconomyState, key: SkillKey, now: number): OpR
   const paid = spendOtherExpense(s, offer.costCents);
   if (!paid.ok) return paid;
   return { ok: true, state: withPlayerSkill(paid.state, key, skill) };
+};
+
+// ─── Цели: ежедневные задания, достижения, коллекция ──────────────────────
+
+/** Событие для заданий и коллекции (банкротство всё замораживает) */
+export const trackGoal = (s: EconomyState, e: G.GoalEvent): EconomyState =>
+  s.bankruptcy ? s : { ...s, goals: G.trackGoal(s.goals, e) };
+
+/** Новые задания с наступлением суток (dayKey — локальная дата устройства) */
+export const refreshDaily = (s: EconomyState, dayKey: string): EconomyState => {
+  const goals = G.restoreGoals(s.goals);
+  if (goals.daily?.dayKey === dayKey || s.bankruptcy) return s;
+  const topTier = Math.max(...unlockedTiers(s));
+  return { ...s, goals: { ...goals, daily: G.createDaily(dayKey, s.player.xp.level, topTier, s.careerId) } };
+};
+
+/** Награда из целей: деньги — «прочие доходы» месяца, опыт — как обычно (с наградой за уровень) */
+const grantReward = (s: EconomyState, cents: number, xp: number, reason: string): EconomyState =>
+  awardXp(earnOtherIncome(s, cents), xp, reason);
+
+export const claimDailyTask = (s: EconomyState, taskId: string): OpResult => {
+  const goals = G.restoreGoals(s.goals);
+  const task = goals.daily?.tasks.find((t) => t.id === taskId);
+  if (!goals.daily || !task || task.claimed || !G.taskDone(task) || s.bankruptcy) return { state: s, ok: false };
+  const daily = { ...goals.daily, tasks: goals.daily.tasks.map((t) => (t.id === taskId ? { ...t, claimed: true } : t)) };
+  return { ok: true, state: grantReward({ ...s, goals: { ...goals, daily } }, task.rewardCents, task.rewardXp, 'Задание дня') };
+};
+
+export const dailyBonusReady = (s: EconomyState): boolean => {
+  const daily = s.goals?.daily;
+  return !!daily && !daily.bonusClaimed && daily.tasks.length > 0 && daily.tasks.every((t) => t.claimed);
+};
+
+/** Бонус за все задания дня (сначала забрать награды заданий) */
+export const claimDailyBonus = (s: EconomyState): OpResult => {
+  if (!dailyBonusReady(s) || s.bankruptcy) return { state: s, ok: false };
+  const goals = G.restoreGoals(s.goals);
+  const state = earnOtherIncome({ ...s, goals: { ...goals, daily: { ...goals.daily!, bonusClaimed: true } } }, G.dailyBonusCents(s.player.xp.level));
+  return { ok: true, state };
+};
+
+export const achievementStats = (s: EconomyState): G.AchievementStats => {
+  const goals = G.restoreGoals(s.goals);
+  return {
+    carsSold: s.totals.carsSold,
+    level: s.player.xp.level,
+    bestMonthProfitCents: s.totals.bestMonthProfitCents ?? 0,
+    ordersDone: goals.counters.ordersDone,
+    fullRepairs: goals.counters.fullRepairs,
+    branches: Object.keys(s.branches ?? {}).length,
+    collected: G.collectedByTier(goals.collection),
+  };
+};
+
+export const claimAchievement = (s: EconomyState, id: string): OpResult => {
+  const goals = G.restoreGoals(s.goals);
+  const a = G.ACHIEVEMENTS.find((x) => x.id === id);
+  if (!a || goals.achievements.includes(id) || !G.achievementReached(a, achievementStats(s)) || s.bankruptcy) return { state: s, ok: false };
+  return { ok: true, state: earnOtherIncome({ ...s, goals: { ...goals, achievements: [...goals.achievements, id] } }, a.rewardCents) };
+};
+
+/** Сколько наград ждёт: выполненные задания, бонус дня, достигнутые достижения */
+export const pendingGoalRewards = (s: EconomyState): number => {
+  const goals = G.restoreGoals(s.goals);
+  const stats = achievementStats(s);
+  const tasks = goals.daily?.tasks.filter((t) => !t.claimed && G.taskDone(t)).length ?? 0;
+  const achievements = G.ACHIEVEMENTS.filter((a) => !goals.achievements.includes(a.id) && G.achievementReached(a, stats)).length;
+  return tasks + (dailyBonusReady(s) ? 1 : 0) + achievements;
 };
 
 // ─── Сохранение ────────────────────────────────────────────────────────────
@@ -1726,6 +1816,7 @@ export const deserializeEconomy = (raw: string): EconomySave | null => {
         ? { owned: Array.from(new Set<B.EquipmentId>(['basic_tools', ...loaded.equipment.owned])), boothSlot: loaded.equipment.boothSlot ?? null }
         : createEquipment(),
       xpLog: loaded.xpLog ?? [],
+      goals: G.restoreGoals(loaded.goals),
       careerId: loaded.careerId ?? `career-${(loaded.orders?.seed ?? randomSeed()).toString(36)}`,
       legacyPoints: loaded.legacyPoints ?? 0,
       auction: A.restoreAuctionState(loaded.auction, randomSeed(), Math.max(0, save.gameTimeMs || 0)),

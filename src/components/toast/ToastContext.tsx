@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@styles/colors';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { GameIcon } from '@components/GameIcon';
+import { haptics } from '../../utils/haptics';
 
 /** Сколько тост висит на экране (реальное время) */
 const TOAST_DURATION_MS = 5000;
@@ -52,6 +53,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     (toast: ToastOptions) => {
       nextId.current += 1;
       const id = nextId.current;
+      // Хорошие новости и горящие предложения ощущаются и без взгляда на экран
+      if (toast.tone === 'success') haptics.success();
+      else if (toast.tone === 'hot') haptics.warning();
       setToasts((prev) => [...prev, { ...toast, id }]);
       timers.current.set(id, setTimeout(() => dismiss(id), TOAST_DURATION_MS));
     },

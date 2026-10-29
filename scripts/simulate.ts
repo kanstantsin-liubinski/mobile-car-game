@@ -22,6 +22,9 @@ import * as L from '../src/economy/legacy.ts';
 import { DAY_MS, MONTH_MS } from '../src/economy/time.ts';
 import { TIER_NAMES, TIER_UNLOCK_LEVELS } from '../src/data/carModels.ts';
 import { GARAGES } from '../src/data/cityBuildings.ts';
+import * as Off from '../src/economy/offline.ts';
+import * as G from '../src/economy/goals.ts';
+import * as Ev from '../src/economy/events.ts';
 
 const out: string[] = [];
 const log = (line = '') => {
@@ -560,6 +563,8 @@ log('');
 log('| Репутация | Ур. игрока | Управляющий (ур.) | Стратегия | Допуск механика | Загрузка | Заказов/мес | Поздно или провал/мес | Ошибок/мес | Ожидание / факт, $/мес | Чистыми/мес | Окупаемость открытия |');
 log('|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|');
 const STRAT_NAMES: Record<string, string> = { careful: 'Осторожный', balanced: 'Сбалансированный', aggressive: 'Агрессивный' };
+/** Чистая прибыль филиалов в месяц — для раздела о работе вне игры */
+const branchNets: { label: string; level: number; net: number }[] = [];
 for (const r of [
   { rep: 150, level: 12, managerLevel: 1, strategy: 'careful', clearance: 1 },
   { rep: 150, level: 12, managerLevel: 1, strategy: 'balanced', clearance: 1 },
@@ -571,6 +576,7 @@ for (const r of [
   { rep: 1000, level: 50, managerLevel: 20, strategy: 'aggressive', clearance: 4 },
 ] as BranchRun[]) {
   const x = simulateBranch(r);
+  if (r.strategy !== 'careful') branchNets.push({ label: `1 слот, реп. ${r.rep}, ${TIER_NAMES[r.clearance]}, ${STRAT_NAMES[r.strategy]}`, level: r.level, net: x.netPerMonth });
   const cost = B.BRANCH_OPEN_COST.garage_1;
   log(
     `| ${r.rep} | ${r.level} | ${r.managerLevel} → ${x.managerLevelEnd} | ${STRAT_NAMES[r.strategy]} | ${TIER_NAMES[r.clearance]} | ${pct(x.load)} | ${x.ordersPerMonth.toFixed(1)} | ${x.failed.toFixed(2)} | ${x.errors.toFixed(1)} | ${usd(x.expected)} / ${usd(x.actual)} | ${usd(x.netPerMonth)} | ${x.netPerMonth > 0 ? `${Math.ceil(cost / x.netPerMonth)} мес.` : 'не окупается'} |`,
@@ -586,6 +592,7 @@ for (const r of [
   { rep: 1000, level: 60, managerLevel: 20, strategy: 'balanced', clearance: 4, slots: 4 },
 ] as BranchRun[]) {
   const x = simulateBranch(r);
+  branchNets.push({ label: `4 слота, реп. ${r.rep}, ${TIER_NAMES[r.clearance]}`, level: r.level, net: x.netPerMonth });
   log(`| ${r.rep} | ${r.level} | ${r.managerLevel} → ${x.managerLevelEnd} | ${TIER_NAMES[r.clearance]} | ${pct(x.load)} | ${x.ordersPerMonth.toFixed(1)} | ${usd(x.netPerMonth)} | ${usd(x.netPerMonth / 4)} |`);
 }
 
@@ -686,7 +693,40 @@ for (const tier of [1, 3, 6]) {
 // ─── Итог ──────────────────────────────────────────────────────────────────
 
 log('');
-log('## 12. Итоговые параметры (из balance.ts на момент запуска)');
+log('## 12. Филиалы вне игры, ежедневные задания, события сделок');
+log('');
+const offlineMonths = Off.OFFLINE_MAX_MS / MONTH_MS;
+log(`Пока игра закрыта, автоматизированный филиал работает со своей средней скоростью (чистыми, после окладов) до ${Off.OFFLINE_MAX_MS / 3_600_000} ч — это ${offlineMonths} игровых месяцев.`);
+log('');
+log('| Филиал | Ур. игрока | Чистыми/мес | За 4 часа вне игры |');
+log('|---|---:|---:|---:|');
+for (const b of branchNets) log(`| ${b.label} | ${b.level} | ${usd(b.net)} | ${usd(Math.max(0, b.net) * offlineMonths)} |`);
+log('');
+log('Ежедневные задания: 3 в сутки (по часам устройства), бонус за все три — ещё две награды деньгами.');
+log('');
+log('| Ур. | За задание | Опыт за задание | Доля уровня | Максимум за день (деньги) | Награда за уровень, для сравнения |');
+log('|---:|---:|---:|---:|---:|---:|');
+for (const lv of [1, 5, 12, 20, 35, 50, 75, 100]) {
+  const cents = G.taskRewardCents(lv);
+  log(
+    `| ${lv} | ${usd(cents / 100)} | ${G.taskRewardXp(lv)} XP | ${pct(G.taskRewardXp(lv) / P.requiredXp(lv))} | ${usd((cents * G.DAILY_TASK_COUNT + G.dailyBonusCents(lv)) / 100)} | ${usd(P.levelUpReward(lv))} |`,
+  );
+}
+log('');
+const achievementSum = G.ACHIEVEMENTS.reduce((sum, a) => sum + a.rewardCents, 0) / 100;
+log(`Достижений: ${G.ACHIEVEMENTS.length}, награды за все вместе — ${usd(achievementSum)} (из них коллекции классов — ${usd(G.ACHIEVEMENTS.filter((a) => a.id.startsWith('collection')).reduce((s, a) => s + a.rewardCents, 0) / 100)}).`);
+log('');
+log('События сделок (со 2 уровня):');
+log('');
+log('| Событие | Шанс | Эффект |');
+log('|---|---:|---|');
+log(`| Скрытый дефект при покупке с рук | без осмотра ${pct(Ev.DEFECT_CHANCE.visual)} · осмотр ${pct(Ev.DEFECT_CHANCE.inspected)} · сканер ${pct(Ev.DEFECT_CHANCE.scanned)} · сервис 0% | технический максимум −${Ev.DEFECT_LOSS.min}…${Ev.DEFECT_LOSS.max} п. (не ниже текущего состояния) |`);
+log(`| Находка в купленной машине | ${pct(Ev.FIND_CHANCE)} | +${pct(Ev.FIND_SHARE.min)}…${pct(Ev.FIND_SHARE.max)} цены покупки |`);
+log(`| Покупатель торгуется (во время продажи) | ${pct(Ev.SALE_OFFER_CHANCE)} продаж | продать сразу за ×${Ev.QUICK_MULT.min}…${Ev.QUICK_MULT.max} цены или отказать |`);
+log(`| Коллекционер (Премиум и выше) | ${pct(Ev.COLLECTOR_SHARE)} предложений | продать сразу за ×${Ev.COLLECTOR_MULT.min}…${Ev.COLLECTOR_MULT.max} цены |`);
+
+log('');
+log('## 13. Итоговые параметры (из balance.ts на момент запуска)');
 log('');
 log('| Параметр | Значение |');
 log('|---|---|');

@@ -138,6 +138,7 @@ const PnlTab = () => {
         <FinanceRow label="Прочие доходы" cents={r.otherIncomeCents} />
         {r.legacyBonusCents > 0 && <FinanceRow label="Бонус наследия" cents={r.legacyBonusCents} />}
         {(r.levelRewardCents ?? 0) > 0 && <FinanceRow label="Награды за уровни" cents={r.levelRewardCents} />}
+        {r.offlineIncomeCents > 0 && <FinanceRow label="Филиалы, пока игра была закрыта" cents={r.offlineIncomeCents} />}
         <View style={ui.divider} />
         <FinanceRow label="Чистая прибыль" cents={r.netProfitCents} signed bold />
         <FinanceRow label="Вложения (гаражи, оборудование)" cents={-r.investmentsCents} muted />

@@ -7,6 +7,7 @@ import { nameMatchingAvatar, staffFirstName } from '../data/staffNames';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useSoldCarsContext } from '@hooks/SoldCarsContext';
 import { useToast } from '@components/toast/ToastContext';
+import { useGameEvents } from '@components/events/GameEvents';
 import { getCarTier } from '@components/CarImage';
 import { ICONS, TIER_ICONS, getMechanicAvatar } from '@img/gameIcons';
 
@@ -28,6 +29,7 @@ import { carValue, overallCondition, paintValueGain, repairPartsCents } from '..
 import * as BAL from '../economy/balance';
 import { DAY_MS } from '../economy/time';
 import type { ServiceOrder } from '../economy/orders';
+import { offerPrice, rollSaleOffer, type SaleOffer } from '../economy/events';
 
 /** Ремонт механиком. Время — игровое (мс активной игры), поэтому в фоне и на паузе ремонт стоит. */
 export interface MechanicRepairInfo {
@@ -87,6 +89,8 @@ export interface ActiveSellInfo {
   boughtPrice: number;
   startedAtMs: number;
   durationMs: number;
+  /** Покупатель с предложением придёт посреди продажи (events.ts) */
+  offer?: SaleOffer;
 }
 
 const GARAGE_KEY = 'game_garage';
@@ -122,6 +126,7 @@ export const useGarage = () => {
   const { gameTimeMs } = useGameClock();
   const { markAsSold } = useSoldCarsContext();
   const { showToast } = useToast();
+  const { pushEvent } = useGameEvents();
 
   // Машины как они сохранены; во время ремонта состояние машины вычисляется из времени
   const [storedGarage, setGarage] = useState<GarageCar[]>([]);
@@ -696,20 +701,35 @@ export const useGarage = () => {
   const startSell = useCallback((carId: string, sellPrice: number, duration: number) => {
     const car = storedGarage.find((c) => c.id === carId);
     if (!car || activeSells[carId] || car.clientOrderId || servicePaints[carId] || boothJob?.carId === carId) return;
+    const startedAtMs = economy.getNow();
+    const durationMs = Math.max(0, Math.round(duration));
+    // Иногда посреди продажи придёт покупатель со своим предложением
+    const offer = rollSaleOffer(Math.random, { level: economy.state.player.xp.level, tier: getCarTier(car), startedAtMs, durationMs });
     setActiveSells((prev) => ({
       ...prev,
-      [carId]: {
-        sellPrice,
-        boughtPrice: car.price,
-        startedAtMs: economy.getNow(),
-        durationMs: Math.max(0, Math.round(duration)),
-      },
+      [carId]: { sellPrice, boughtPrice: car.price, startedAtMs, durationMs, ...(offer ? { offer } : {}) },
     }));
   }, [storedGarage, activeSells, servicePaints, boothJob, economy]);
 
   const cancelSell = useCallback((carId: string) => {
     setActiveSells((prev) => without(prev, carId));
   }, []);
+
+  /** Ответ на предложение покупателя: согласие — продажа сразу по его цене */
+  const answerSaleOffer = useCallback((carId: string, accept: boolean) => {
+    const now = economy.getNow();
+    setActiveSells((prev) => {
+      const sell = prev[carId];
+      if (!sell?.offer || sell.offer.answered) return prev;
+      const offer = { ...sell.offer, answered: true };
+      return {
+        ...prev,
+        [carId]: accept
+          ? { ...sell, offer, sellPrice: offerPrice(sell.sellPrice, sell.offer), durationMs: Math.max(0, now - sell.startedAtMs) }
+          : { ...sell, offer },
+      };
+    });
+  }, [economy]);
 
   // ─── Завершение ремонтов и продаж по игровому времени ─────────────
   useEffect(() => {
@@ -792,6 +812,29 @@ export const useGarage = () => {
     }
 
     for (const [carId, sell] of Object.entries(activeSells)) {
+      // Покупатель пришёл с предложением — спросить игрока (после перезапуска спросит снова)
+      const offer = sell.offer;
+      if (offer && !offer.answered && gameTimeMs >= offer.atMs && gameTimeMs < sell.startedAtMs + sell.durationMs) {
+        const car = storedGarage.find((c) => c.id === carId);
+        if (car) {
+          const price = offerPrice(sell.sellPrice, offer);
+          const tier = getCarTier(car);
+          pushEvent({
+            id: `offer:${carId}:${sell.startedAtMs}`,
+            title: offer.kind === 'collector' ? 'Пришёл коллекционер' : 'Покупатель торгуется',
+            message:
+              offer.kind === 'collector'
+                ? `Коллекционер давно ищет ${car.name} и готов забрать её прямо сейчас за ${formatMoney(toCents(price))} — это на ${formatMoney(toCents(price - sell.sellPrice))} больше твоей цены.`
+                : `Покупатель готов забрать ${car.name} прямо сейчас за ${formatMoney(toCents(price))} — на ${formatMoney(toCents(sell.sellPrice - price))} меньше твоей цены. Откажешься — продажа продолжится как шла.`,
+            icon: tier ? TIER_ICONS[tier] : undefined,
+            accent: offer.kind === 'collector' ? '#F59E0B' : '#38BDF8',
+            buttons: [
+              { label: 'Отказать', tone: 'secondary', onPress: () => answerSaleOffer(carId, false) },
+              { label: `Продать · ${formatMoney(toCents(price))}`, onPress: () => answerSaleOffer(carId, true) },
+            ],
+          });
+        }
+      }
       if (gameTimeMs < sell.startedAtMs + sell.durationMs) continue;
       const car = storedGarage.find((c) => c.id === carId);
       setActiveSells((prev) => without(prev, carId));

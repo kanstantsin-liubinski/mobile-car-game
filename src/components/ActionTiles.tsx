@@ -3,6 +3,7 @@ import { Animated, Easing, Platform, View, Text, StyleSheet, type ImageSourcePro
 import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 import { GameIcon } from '@components/GameIcon';
+import { haptics } from '../utils/haptics';
 
 /** active — работа идёт сама (механик чинит): выглядит как готовая, но не нажимается */
 export type TileState = 'ready' | 'done' | 'locked' | 'pending' | 'active';
@@ -160,7 +161,10 @@ const Tile = ({ tile, infoOpen, onInfo }: { tile: TileSpec; infoOpen: boolean; o
       <TouchableOpacity
         style={styles.body}
         disabled={!ready}
-        onPress={tile.onPress}
+        onPress={() => {
+          haptics.select();
+          tile.onPress();
+        }}
         repeatMs={tile.repeat ? HOLD_REPEAT_MS : undefined}
         activeOpacity={0.75}
       >
@@ -214,7 +218,8 @@ const HeroTile = ({ tile, infoOpen, onInfo }: { tile: TileSpec; infoOpen: boolea
   };
 
   const celebrate = (reward: string | null) => {
-    // Вся кнопка коротко сжимается и пружинит обратно
+    // Вся кнопка коротко сжимается и пружинит обратно, телефон щёлкает вибрацией
+    haptics.tap();
     press.stopAnimation();
     press.setValue(0.95);
     Animated.spring(press, { toValue: 1, friction: 4, tension: 220, useNativeDriver: NATIVE }).start();

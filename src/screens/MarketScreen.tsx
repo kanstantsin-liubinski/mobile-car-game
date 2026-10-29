@@ -11,7 +11,11 @@ import { useMarketContext, type HotOffer } from '@hooks/MarketContext';
 import type { MarketFocus } from '@hooks/useNavigation';
 import { colors } from '@styles/colors';
 import { ListingDiagnostics } from '@components/ListingDiagnostics';
-import { tradePurchaseBonus, tradePurchasePrice } from '../economy/carCondition';
+import { tradePurchaseBonus, tradePurchasePrice, type DiagnosticsLevel } from '../economy/carCondition';
+import { rollPurchaseEvent } from '../economy/events';
+import { calculateMaxCondition } from '../utils/priceCalculator';
+import { haptics } from '../utils/haptics';
+import { useGameEvents } from '@components/events/GameEvents';
 import type { MarketListing } from '../utils/marketGenerator';
 import { TIER_NAMES, TIER_UNLOCK_LEVELS } from '../data/carModels';
 import { useExperienceContext } from '@hooks/ExperienceContext';
@@ -38,18 +42,23 @@ interface MarketScreenProps {
   focus?: MarketFocus | null;
 }
 
+const pct = (v: number) => v.toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+
 export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => {
-  const { balance, buyCar, state: economy } = useEconomy();
+  const { balance, buyCar, addOtherIncome, state: economy } = useEconomy();
+  const { pushEvent } = useGameEvents();
   const tradeLevel = economy.player.trade.level;
   /** Цена для игрока: цена объявления (уже с коэффициентом продавца и скидкой горящего) × навык «Торговля» */
   const priceFor = (car: Car) => tradePurchasePrice(car.price, tradeLevel);
   const { addCar, hasCar } = useGarageContext();
   const { isSold } = useSoldCarsContext();
-  const { getListingsForTier, removeListing, getTimeRemaining, hotOffer, getHotListing } = useMarketContext();
+  const { getListingsForTier, removeListing, getTimeRemaining, hotOffer, getHotListing, getReadout } = useMarketContext();
   const { isTierUnlocked } = useExperienceContext();
 
   const [selectedTier, setSelectedTier] = useState(focus?.tier ?? 1);
   const [carToBuy, setCarToBuy] = useState<Car | null>(null);
+  /** Насколько тщательно проверено покупаемое объявление — от этого зависит риск скрытого дефекта */
+  const buyDiag = useRef<DiagnosticsLevel>('visual');
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
   // Каждый новый запрос фокуса переключает вкладку и прокручивает к началу, где стоит горящее предложение
@@ -60,9 +69,11 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
   }, [focus?.nonce]);
 
   // В покупку уходит машина с итоговой ценой: скидка навыка применяется один раз, здесь
-  const handleBuyCar = (car: Car) => {
+  const handleBuyCar = (listing: MarketListing) => {
+    const { car } = listing;
     const finalPrice = priceFor(car);
     if (balance >= finalPrice) {
+      buyDiag.current = getReadout(listing).level;
       setCarToBuy({ ...car, price: finalPrice });
     }
   };
@@ -71,9 +82,39 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
   const confirmPurchase = (car: Car, slotIndex: number) => {
     // Деньги уходят, машина становится активом бизнеса
     if (!buyCar(car)) return;
-    addCar(car, slotIndex);
+    haptics.success();
+    // Машина с рук: при приёмке может вскрыться дефект или найтись что-то ценное
+    const maxCondition = car.maxCondition ?? calculateMaxCondition(car.year, car.mileage);
+    const event = rollPurchaseEvent(Math.random, {
+      level: economy.player.xp.level,
+      diag: buyDiag.current,
+      priceCents: Math.round(car.price * 100),
+      condition: car.condition,
+      maxCondition,
+    });
+    addCar(event?.kind === 'defect' ? { ...car, maxCondition: event.maxCondition } : car, slotIndex);
     removeListing(car.id);
     setCarToBuy(null);
+    if (event?.kind === 'defect') {
+      pushEvent({
+        id: `defect:${car.id}`,
+        title: 'Скрытый дефект',
+        message: `При приёмке ${car.name} механик нашёл то, что продавец не показал: технический максимум ${pct(maxCondition)}% → ${pct(event.maxCondition)}%. Осмотр и сканер перед покупкой снижают такой риск, после диагностики в сервисе его нет.`,
+        emoji: '🔧',
+        accent: '#EF4444',
+        buttons: [{ label: 'Понятно', onPress: () => {} }],
+      });
+    } else if (event?.kind === 'find') {
+      addOtherIncome(event.cents / 100);
+      pushEvent({
+        id: `find:${car.id}`,
+        title: 'Приятная находка',
+        message: `В ${car.name} нашёлся ${event.item}. Продал сразу: +${formatMoney(event.cents)}.`,
+        emoji: '🎁',
+        accent: '#22C55E',
+        buttons: [{ label: 'Отлично', onPress: () => {} }],
+      });
+    }
   };
 
   const tierListings = getListingsForTier(marketId, selectedTier);
@@ -140,7 +181,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
 
         <TouchableOpacity
           style={[marketStyles.buyButton, hot && { backgroundColor: HOT_COLOR }, !canAfford && marketStyles.buyButtonDisabled]}
-          onPress={() => handleBuyCar(car)}
+          onPress={() => handleBuyCar(listing)}
           disabled={!canAfford}
         >
           <Text style={[marketStyles.buyButtonText, !canAfford && { color: colors.textTertiary }]}>

@@ -7,6 +7,7 @@ import { colors } from '@styles/colors';
 import { useEconomy } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import { useExperienceContext } from '@hooks/ExperienceContext';
+import { haptics } from '../utils/haptics';
 import { LocationHeader } from '@components/LocationHeader';
 import { SlotPickerModal } from '@components/SlotPickerModal';
 import { TierTabs } from '@components/TierTabs';
@@ -83,6 +84,7 @@ export const DealershipScreen = ({ onBack }: DealershipScreenProps) => {
 
   const confirmPurchase = (car: Car, slotIndex: number) => {
     if (!buyCar(car)) return;
+    haptics.success();
     addCar(car, slotIndex);
     setCarToBuy(null);
   };

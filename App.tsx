@@ -27,9 +27,19 @@ import { ToastProvider } from '@components/toast/ToastContext';
 import { ProgressionToasts } from '@components/toast/ProgressionToasts';
 import { HotOfferNotifier } from '@components/toast/HotOfferNotifier';
 import { MentorTutorial } from '@components/tutorial/MentorTutorial';
+import { OfflineReportDialog } from '@components/info/OfflineReportDialog';
+import { GoalsProvider, useGoals } from '@components/goals/GoalsContext';
+import { GoalsModal } from '@components/goals/GoalsModal';
+import { GameEventsProvider } from '@components/events/GameEvents';
 import { TutorialInsetProvider } from '@hooks/TutorialInset';
 import { commonStyles } from '@styles/styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+/** Окно «Цели» (открывается кнопкой в плашке локации); в зарплатный день закрывается */
+function GoalsSheet({ paydayPending }: { paydayPending: boolean }) {
+  const goals = useGoals()!;
+  return <GoalsModal visible={goals.open && !paydayPending} onClose={goals.closeGoals} />;
+}
 
 function GameContent() {
   const { currentScreen, goToScreen, activeMarketId, marketFocus, openMarket } = useNavigation();
@@ -55,8 +65,10 @@ function GameContent() {
 
   return (
     <ToastProvider>
+    <GameEventsProvider>
     <MarketProvider>
       <GarageProvider>
+      <GoalsProvider>
         <View style={commonStyles.container}>
           <TopMenu
             insets={insets}
@@ -107,16 +119,22 @@ function GameContent() {
           />
           <LegacyModal visible={legacyOpen && !paydayPending} onClose={() => setLegacyOpen(false)} />
           <CalendarModal visible={calendarOpen && !paydayPending} onClose={() => setCalendarOpen(false)} />
+          {/* Отчёт «пока тебя не было» — под зарплатным днём: сначала выплата, потом новости */}
+          <OfflineReportDialog />
           <PaydayModal />
           <BankruptcyScreen />
           <ProgressionToasts />
           <LegacyWatcher />
           <HotOfferNotifier onOpen={openMarket} />
 
+          <GoalsSheet paydayPending={paydayPending} />
+
           <StatusBar style="auto" />
         </View>
+      </GoalsProvider>
       </GarageProvider>
     </MarketProvider>
+    </GameEventsProvider>
     </ToastProvider>
   );
 }
