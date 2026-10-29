@@ -4,7 +4,8 @@ import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
 import { GameIcon } from '@components/GameIcon';
 
-export type TileState = 'ready' | 'done' | 'locked' | 'pending';
+/** active — работа идёт сама (механик чинит): выглядит как готовая, но не нажимается */
+export type TileState = 'ready' | 'done' | 'locked' | 'pending' | 'active';
 
 /** Показатель на большой кнопке: цветная плашка «подпись — значение» */
 export interface TileStat {
@@ -43,6 +44,8 @@ export interface TileSpec {
   cheers?: string[];
   /** …и фразы на финише (прогресс почти у максимума) */
   finishCheers?: string[];
+  /** Большая кнопка: icon — аватар, на весь квадрат значка (механик) */
+  avatar?: boolean;
 }
 
 /** Темп повтора при удержании: 4 нажатия в секунду — как бодро тапающий игрок, не быстрее */
@@ -193,7 +196,8 @@ const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)]
  */
 const HeroTile = ({ tile, infoOpen, onInfo }: { tile: TileSpec; infoOpen: boolean; onInfo: () => void }) => {
   const { state } = tile;
-  const ready = state === 'ready';
+  // «Идёт работа» выглядит как готовая кнопка — та же вёрстка и цвета, просто без нажатия
+  const ready = state === 'ready' || state === 'active';
   const accent = tile.accent ?? colors.primary;
   const [popups, setPopups] = useState<Popup[]>([]);
   const nextId = useRef(0);
@@ -245,10 +249,16 @@ const HeroTile = ({ tile, infoOpen, onInfo }: { tile: TileSpec; infoOpen: boolea
         state === 'pending' && styles.tilePending,
       ]}
     >
-      <TouchableOpacity style={styles.heroBody} disabled={!ready} onPress={handlePress} repeatMs={tile.repeat ? HOLD_REPEAT_MS : undefined} noPressEffect>
+      <TouchableOpacity
+        style={styles.heroBody}
+        disabled={state !== 'ready'}
+        onPress={handlePress}
+        repeatMs={tile.repeat ? HOLD_REPEAT_MS : undefined}
+        noPressEffect
+      >
         <View style={styles.heroTop}>
           <View style={[styles.heroIcon, { backgroundColor: ready ? accent : 'rgba(148, 163, 184, 0.15)' }]}>
-            <TileIcon tile={tile} size={26} />
+            {tile.avatar && tile.icon ? <GameIcon source={tile.icon} size={44} /> : <TileIcon tile={tile} size={26} />}
           </View>
           <View style={{ flex: 1 }}>
             {/* Проценты — в одной строке с названием, подпись под ними на всю ширину (влезает и длинная) */}
@@ -352,7 +362,7 @@ const styles = StyleSheet.create({
   },
   heroBody: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 12, gap: 10 },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  heroIcon: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  heroIcon: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   // Справа место под (i): оно нужно только строке с названием, подпись идёт на всю ширину
   heroTitleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, paddingRight: 18 },
   heroTitle: { flexShrink: 1, fontSize: 19, lineHeight: 23, fontWeight: '900', color: colors.textPrimary, letterSpacing: 0.3 },

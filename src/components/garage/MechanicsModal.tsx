@@ -3,7 +3,7 @@ import { Modal, View, Text, StyleSheet, Platform } from 'react-native';
 import { SheetModal } from '@components/SheetModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@components/Touchable';
-import { garageStyles } from '@styles/styles';
+import { garageStyles, marketStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { useEconomy } from '@hooks/EconomyContext';
@@ -60,6 +60,7 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
               const contract = state.contracts[m.id];
               const status = statusOf(m);
               const salary = contract?.monthlyCents ?? MECHANIC_MONTHLY_SALARY_CENTS;
+              if (!m.hired) return <CandidateCard key={m.id} mechanic={m} onHire={() => hireMechanic(m.id)} />;
               return (
                 <View key={m.id} style={styles.card}>
                   <View style={styles.head}>
@@ -197,7 +198,72 @@ export const MechanicsModal = ({ visible, onClose }: { visible: boolean; onClose
   );
 };
 
+/** Цветная плашка показателя — как на кнопке «Ремонт» */
+const Stat = ({ label, value, color }: { label: string; value: string; color: string }) => (
+  <View style={[styles.stat, { backgroundColor: `${color}24`, borderColor: `${color}73` }]}>
+    <Text style={styles.statLabel} numberOfLines={1}>
+      {label}
+    </Text>
+    <Text style={[styles.statValue, { color }]} numberOfLines={1}>
+      {value}
+    </Text>
+  </View>
+);
+
+/**
+ * Кандидат в механики — в стиле карточки машины: крупно кто и сколько стоит, цветные показатели
+ * и компактная кнопка найма, как «Купить» на авторынке.
+ */
+const CandidateCard = ({ mechanic, onHire }: { mechanic: Mechanic; onHire: () => void }) => {
+  const salary = salaryForLevel(1);
+  return (
+    <View style={[styles.card, styles.candidate]}>
+      <View style={styles.head}>
+        <GameIcon source={getMechanicAvatar(mechanic.id)} size={56} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={styles.name} numberOfLines={1}>
+            {mechanic.name}
+          </Text>
+          <View style={[styles.chip, { borderColor: ACTION_COLORS.mechanic }]}>
+            <View style={[styles.dot, { backgroundColor: ACTION_COLORS.mechanic }]} />
+            <Text style={[styles.chipText, { color: ACTION_COLORS.mechanic }]}>Ищет работу</Text>
+          </View>
+        </View>
+        <View style={styles.priceBox}>
+          <Text style={styles.price}>{formatMoney(salary)}</Text>
+          <Text style={styles.priceUnit}>в месяц</Text>
+        </View>
+      </View>
+
+      <View style={styles.stats}>
+        <Stat label="Скорость" value={`${fmtPct(MECHANIC_POINTS_PER_DAY)}%/день`} color="#60A5FA" />
+        <Stat label="Допуск" value={clearanceName(1)} color="#A78BFA" />
+        <Stat label="Навык" value="ур. 1" color="#4ADE80" />
+      </View>
+
+      <Text style={styles.info}>
+        Сам ремонтирует машину на своём слоте и платит за детали по ходу работы. Оклад начисляется с найма и платится в зарплатный
+        день — даже в простое.
+      </Text>
+
+      <TouchableOpacity style={[marketStyles.buyButton, styles.hireButton]} onPress={onHire}>
+        <GameIcon source={ICONS.hireMechanic} size={20} />
+        <Text style={marketStyles.buyButtonText}>Нанять · {formatMoney(salary)}/мес</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
+  candidate: { borderColor: `${ACTION_COLORS.mechanic}66` },
+  priceBox: { alignItems: 'flex-end' },
+  price: { fontSize: 20, fontWeight: '800', color: colors.primary, fontVariant: ['tabular-nums'] },
+  priceUnit: { fontSize: 11, color: colors.textTertiary },
+  stats: { flexDirection: 'row', gap: 6 },
+  stat: { flex: 1, borderRadius: 9, borderWidth: 1, paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center' },
+  statLabel: { fontSize: 9, fontWeight: '700', color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: 0.4 },
+  statValue: { fontSize: 13, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  hireButton: { flexDirection: 'row', justifyContent: 'center', gap: 8, backgroundColor: ACTION_COLORS.mechanic },
   card: {
     backgroundColor: colors.cardBg,
     borderRadius: 12,

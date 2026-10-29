@@ -42,10 +42,15 @@ export interface MechanicRepairInfo {
   skillLevel?: number;
   /** Множитель инструментов, с которым считается скорость */
   toolsMult?: number;
-  /** Детали, оплаченные за весь запланированный ремонт (своя машина) */
+  /** Старые сохранения: детали, оплаченные сразу за весь ремонт (возвращаются при остановке) */
   partsCents?: number;
   /** С какого состояния считался план деталей — для возврата неиспользованного при остановке */
   partsFromCondition?: number;
+  /**
+   * До какого состояния детали уже оплачены (своя машина). Механик платит за детали по ходу работы,
+   * как игрок за тапы; нет денег — останавливается на оплаченном.
+   */
+  billedCondition?: number;
   /** Множитель допуска (вдвое медленнее, если класс машины выше допуска механика) */
   clearanceMult?: number;
 }
@@ -93,6 +98,9 @@ const PLAYER_TAP_REPAIR = 0.1;
 
 const paintAt = (run: PainterRun, target: number, now: number): number =>
   Math.min(target, Math.round((run.startPaint + (Math.max(0, now - run.startedAtMs) / 1000) * run.speedPerSec) * 100) / 100);
+
+/** Механик оплачивает детали порциями — каждые столько пунктов состояния (как ручной тап) */
+const MECHANIC_BILL_STEP = PLAYER_TAP_REPAIR;
 
 const repairConditionAt = (repair: MechanicRepairInfo, now: number): number => {
   const elapsedSec = Math.max(0, now - repair.startedAtMs) / 1000;
@@ -547,7 +555,13 @@ export const useGarage = () => {
 
   /** Останавливает ремонт и сохраняет уже достигнутое состояние машины */
   const stopRepair = useCallback((carId: string, repair: MechanicRepairInfo, now: number) => {
-    const reached = repairConditionAt(repair, now);
+    let reached = repairConditionAt(repair, now);
+    // Работа, сделанная с последней оплаты, оплачивается сейчас; не хватает денег — состояние остаётся на оплаченном
+    if (repair.billedCondition !== undefined && reached > repair.billedCondition) {
+      const car = storedGarage.find((c) => c.id === carId);
+      const cents = car ? repairPartsCents(car, repair.billedCondition, reached) : 0;
+      if (cents > 0 && !economy.payTapParts(carId, cents)) reached = repair.billedCondition;
+    }
     setGarage((prev) => prev.map((car) => (car.id === carId ? { ...car, condition: reached } : car)));
     setMechanicRepairs((prev) => without(prev, carId));
     // Неиспользованные детали возвращаются: оплачено только фактически сделанное
@@ -557,7 +571,7 @@ export const useGarage = () => {
       const refund = planned > 0 ? Math.floor((repair.partsCents * left) / planned) : 0;
       if (refund > 0) economy.refundOnCar(carId, refund, `refund:${carId}:${repair.startedAtMs}:${repair.partsFromCondition}`);
     }
-  }, [economy]);
+  }, [economy, storedGarage]);
 
   /**
    * Увольнение: расчёт (долг по зарплате + оклад) через экономику, затем механик
@@ -620,10 +634,11 @@ export const useGarage = () => {
     const improvementNeeded = car.maxCondition - car.condition;
     const durationMs = Math.ceil((improvementNeeded / speedPerSec) * 1000);
 
-    // Детали на весь ремонт своей машины — сразу; при остановке неиспользованное вернётся. Нет денег — ремонт не начнётся
-    const partsCents = car.clientOrderId || !economy.state.assets[carId] ? 0 : repairPartsCents(car, car.condition, car.maxCondition);
-    if (partsCents > 0 && !economy.spendOnCar(carId, partsCents, `parts:${carId}:${now}`)) {
-      showToast({ title: 'Не хватает денег на детали', message: `Нужно ${formatMoney(partsCents)} на запчасти для ремонта.`, icon: ICONS.repair });
+    // Детали своей машины механик оплачивает по ходу работы (как тапы). Начать можно, если хватает на первую порцию
+    const ownCar = !car.clientOrderId && !!economy.state.assets[carId];
+    const firstPortion = ownCar ? repairPartsCents(car, car.condition, Math.min(car.maxCondition, car.condition + MECHANIC_BILL_STEP)) : 0;
+    if (firstPortion > economy.state.balanceCents) {
+      showToast({ title: 'Не хватает денег на детали', message: 'Механик платит за запчасти по ходу ремонта — пополни баланс.', icon: ICONS.repair });
       return;
     }
 
@@ -640,8 +655,7 @@ export const useGarage = () => {
         skillLevel: contract?.skill.level ?? 1,
         toolsMult,
         clearanceMult,
-        partsCents,
-        partsFromCondition: car.condition,
+        billedCondition: ownCar ? car.condition : undefined,
       },
     }));
   }, [storedGarage, mechanicRepairs, economy, showToast]);
@@ -703,7 +717,31 @@ export const useGarage = () => {
 
     for (const [carId, repair] of Object.entries(mechanicRepairs)) {
       const finishedAt = repair.startedAtMs + repair.durationMs;
-      if (gameTimeMs < finishedAt) continue;
+      const finished = gameTimeMs >= finishedAt;
+      // Детали по ходу ремонта: каждые 0,1 п. состояния (и остаток в конце) — как тапы игрока
+      if (repair.billedCondition !== undefined) {
+        const current = finished ? repair.maxCondition : repairConditionAt(repair, gameTimeMs);
+        if (finished ? current > repair.billedCondition : current - repair.billedCondition >= MECHANIC_BILL_STEP) {
+          const car = storedGarage.find((c) => c.id === carId);
+          const cents = car ? repairPartsCents(car, repair.billedCondition, current) : 0;
+          if (cents > 0 && !economy.payTapParts(carId, cents)) {
+            // Денег нет — механик останавливается на оплаченном состоянии и освобождается
+            const billed = repair.billedCondition;
+            setGarage((prev) => prev.map((c) => (c.id === carId ? { ...c, condition: billed } : c)));
+            setMechanicRepairs((prev) => without(prev, carId));
+            economy.setMechanicBusy(repair.mechanicId, false, gameTimeMs);
+            const mechanicName = mechanics.find((m) => m.id === repair.mechanicId)?.name ?? 'Механик';
+            showToast({
+              title: `${mechanicName} остановился`,
+              message: 'Не хватает денег на детали. Пополни баланс и снова нажми «Механику».',
+              icon: ICONS.repair,
+            });
+            continue;
+          }
+          setMechanicRepairs((prev) => (prev[carId] === repair ? { ...prev, [carId]: { ...repair, billedCondition: current } } : prev));
+        }
+      }
+      if (!finished) continue;
       setGarage((prev) => prev.map((car) => (car.id === carId ? { ...car, condition: repair.maxCondition } : car)));
       setMechanicRepairs((prev) => without(prev, carId));
       economy.setMechanicBusy(repair.mechanicId, false, finishedAt);

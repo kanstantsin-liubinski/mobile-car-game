@@ -124,16 +124,6 @@ export const CarStatusPanels = ({ car }: { car: GarageCar }) => {
         />
       )}
 
-      {repair && (
-        <ProcessPanel
-          color={ACTION_COLORS.mechanic}
-          avatar={getMechanicAvatar(repair.mechanicId)}
-          title={`${mechanics.find((m) => m.id === repair.mechanicId)?.name ?? 'Механик'} ремонтирует до ${repair.maxCondition}%`}
-          text={`Осталось ${formatGameDays(mechanicRepairsRemaining[car.id] ?? 0, DAY_MS)}`}
-          progress={mechanicRepairsProgress[car.id] ?? 0}
-        />
-      )}
-
       {order && order.kind === 'service' && (
         <View style={[styles.panel, { borderColor: ACTION_COLORS.client }]}>
           <Text style={styles.title}>👤 Машина клиента · {serviceDef(order.type).name}</Text>
@@ -268,6 +258,9 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
     servicePaints,
     activeSells,
     mechanicRepairs,
+    mechanicRepairsCondition,
+    mechanicRepairsRemaining,
+    mechanics,
     servicePaintQuote,
     boothPaintQuote,
     paintTap,
@@ -321,14 +314,64 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
       onPress: () => cancelSell(car.id),
     });
   } else {
-    // ─ Технический ремонт: тапом и механиком (не в камере, не на стоянке и не во время покраски в сервисе)
-    if (!inBooth && !servicePaint && !parked) {
+    // ─ Технический ремонт: тапом и механиком (не в камере, не на стоянке и не во время покраски в сервисе).
+    //   Пока чинит механик — на том же месте та же кнопка, но с его аватаром, именем и живой шкалой
+    if (!inBooth && !servicePaint && !parked && repairing) {
+      const worker = mechanics.find((m) => m.id === repairing.mechanicId);
+      const live = mechanicRepairsCondition[car.id] ?? car.condition;
+      const perDay = (repairing.speedPerSec ?? 0) * (DAY_MS / 1000);
+      const dayTo = Math.min(car.maxCondition, live + perDay);
+      tiles.push({
+        key: 'repair',
+        icon: getMechanicAvatar(repairing.mechanicId),
+        avatar: true,
+        title: worker?.name ?? 'Механик',
+        subtitle: 'ремонтирует',
+        state: 'active',
+        accent: ACTION_COLORS.mechanic,
+        info: `${worker?.name ?? 'Механик'} сам ремонтирует машину до ${car.maxCondition}%: ${fmtNum(perDay)}% в игровой день.${
+          isClient ? '' : ` Детали (${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста стоимости) он оплачивает по ходу работы, как ты за тапы; не хватит денег — остановится.`
+        } Остановить можно плиткой «Стоп».`,
+        onPress: () => {},
+        hero: true,
+        progress: { value: live, max: car.maxCondition },
+        // Те же показатели, что у ручного ремонта, но за игровой день работы механика
+        stats: isClient
+          ? [
+              { label: 'за день', value: `+${fmtNum(perDay)}%`, color: '#60A5FA' },
+              { label: 'до цели', value: `${fmtNum(Math.max(0, car.maxCondition - live), 1)}%`, color: '#A78BFA' },
+            ]
+          : [
+              { label: 'за день', value: `+${fmtNum(perDay)}%`, color: '#60A5FA' },
+              { label: 'детали', value: formatMoney(-repairPartsCents(car, live, dayTo)), color: '#F59E0B' },
+              {
+                label: 'цена',
+                value: formatMoney(
+                  Math.round((carValue(car.basePrice, { ...car, condition: dayTo }) - carValue(car.basePrice, { ...car, condition: live })) * 100),
+                  { sign: true },
+                ),
+                color: '#4ADE80',
+              },
+            ],
+      });
+      // «Стоп» — на месте плитки «Механику», набор плиток не меняется
+      tiles.push({
+        key: 'stoprepair',
+        emoji: '✕',
+        title: 'Стоп',
+        subtitle: 'остановить механика',
+        state: 'ready',
+        accent: STOP,
+        info: 'Механик прекратит ремонт и освободит слот. Уже сделанный и оплаченный ремонт сохранится.',
+        onPress: () => cancelMechanicRepair(car.id),
+      });
+    } else if (!inBooth && !servicePaint && !parked) {
       tiles.push({
         key: 'repair',
         icon: ICONS.repair,
         title: 'Ремонт',
-        subtitle: atMax ? 'Машина максимально отремонтирована' : repairing ? 'Чинит механик' : 'Тапай или держи палец',
-        state: atMax ? 'done' : repairing ? 'locked' : 'ready',
+        subtitle: atMax ? 'Машина максимально отремонтирована' : 'Тапай или держи палец',
+        state: atMax ? 'done' : 'ready',
         accent: ACTION_COLORS.repair,
         info: `Ручной ремонт: каждый тап добавляет ${fmtNum(tapRepairPercent)}% технического состояния, до максимума ${car.maxCondition}%.${
           isClient ? '' : ` За свою машину ты платишь за детали — ${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста её стоимости от тапа.`
@@ -354,27 +397,25 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         popup: () => (tapGainCents > 0 ? formatMoney(tapGainCents, { sign: true }) : `+${fmtNum(tapRepairPercent)}%`),
       });
 
-      if (repairing) {
-        tiles.push({
-          key: 'stoprepair',
-          emoji: '✕',
-          title: 'Стоп',
-          subtitle: 'остановить механика',
-          state: 'ready',
-          accent: STOP,
-          info: 'Механик прекратит ремонт и освободит слот. Уже сделанный ремонт сохранится.',
-          onPress: () => cancelMechanicRepair(car.id),
-        });
-      } else if (!atMax) {
+      {
+        // На максимуме плитка остаётся (неактивной) — набор плиток не меняется, вёрстка не скачет
         tiles.push({
           key: 'mechanic',
           icon: mechanic ? getMechanicAvatar(mechanic.id) : ICONS.hireMechanic,
           title: 'Механику',
-          subtitle: mechanic ? (slowMechanic ? `${mechanic.name} · ×0,5, нет допуска` : mechanic.name) : 'нет на слоте',
-          state: mechanic ? 'ready' : 'locked',
+          subtitle: atMax
+            ? 'чинить нечего'
+            : mechanic
+              ? slowMechanic
+                ? `${mechanic.name} · ×0,5, нет допуска`
+                : mechanic.name
+              : 'нет на слоте',
+          state: mechanic && !atMax ? 'ready' : 'locked',
           accent: ACTION_COLORS.mechanic,
-          info: mechanic
-            ? `${mechanic.name} сам отремонтирует машину до ${car.maxCondition}%. Детали (${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста стоимости) оплачиваются сразу, неиспользованное вернётся при остановке.${
+          info: atMax
+            ? 'Машина уже на техническом максимуме — механику здесь чинить нечего.'
+            : mechanic
+            ? `${mechanic.name} сам отремонтирует машину до ${car.maxCondition}%. Детали (${Math.round(OWN_REPAIR_PARTS_SHARE * 100)}% прироста стоимости) он оплачивает по ходу работы, как ты за тапы; не хватит денег — остановится.${
                 slowMechanic ? ' У механика нет допуска к этому классу — он работает вдвое медленнее; повысь допуск в окне «Механики».' : ''
               }`
             : 'Найми механика (гараж → «Механики»): он сам встанет на свободный слот и будет ремонтировать, пока ты занят другим.',
