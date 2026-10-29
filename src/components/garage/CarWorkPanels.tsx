@@ -15,7 +15,7 @@ import { ICONS, getMechanicAvatar } from '@img/gameIcons';
 import { formatMoney, formatGameDays, pluralDays } from '../../economy/format';
 import { DAY_MS } from '../../economy/time';
 import { MAX_SELL_DAYS_INFO, OWN_REPAIR_PARTS_SHARE, PLAYER_PAINT_PER_TAP } from '../../economy/balance';
-import { overallCondition, repairPartsCents } from '../../economy/carCondition';
+import { carValue, overallCondition, repairPartsCents } from '../../economy/carCondition';
 import { clearanceSpeedFactor, ownPaintMaterialsShare } from '../../economy/economy';
 import { pickingMismatch, serviceDef } from '../../economy/orders';
 import type { GarageCar, Mechanic } from '@/types';
@@ -203,7 +203,8 @@ interface CarActionsProps {
   /** Механик, прикреплённый к слоту машины (нанятый) */
   mechanic: Mechanic | null;
   tapRepairPercent: number;
-  onRepair: () => void;
+  /** false — тап не выполнился (нет денег на детали, максимум) */
+  onRepair: () => void | boolean;
   onSell: () => void;
   onMechanic: () => void;
 }
@@ -335,6 +336,14 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         }`,
         onPress: onRepair,
         repeat: true,
+        hero: true,
+        // Что всплывёт над кнопкой: на сколько подорожает своя машина от этого тапа
+        popup: () => {
+          if (isClient) return `+${fmtNum(tapRepairPercent)}%`;
+          const to = Math.min(car.maxCondition, car.condition + tapRepairPercent);
+          const gain = carValue(car.basePrice, { ...car, condition: to }) - carValue(car.basePrice, car);
+          return gain > 0 ? formatMoney(Math.round(gain * 100), { sign: true }) : `+${fmtNum(tapRepairPercent)}%`;
+        },
       });
 
       if (repairing) {
@@ -390,6 +399,8 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
           info: `Каждый тап добавляет ${fmtNum(PLAYER_PAINT_PER_TAP * paintTapMultiplier)} п. ЛКП (растёт с навыком «Маляр») и даёт 1 практику. Материалы уже оплачены.`,
           onPress: () => paintTap(),
           repeat: true,
+          hero: true,
+          popup: () => `+${fmtNum(PLAYER_PAINT_PER_TAP * paintTapMultiplier)} ЛКП`,
         });
         if (hiredPainter && painterPaused) {
           tiles.push({
@@ -522,7 +533,10 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
 
   return (
     <>
-      <ActionTiles tiles={tiles} />
+      {/* Действия отделены от цены и статусов: линия и воздух */}
+      <View style={styles.actions}>
+        <ActionTiles tiles={tiles} />
+      </View>
       <PaintConfirmModal car={car} confirm={confirm} onClose={() => setConfirm(null)} />
       <MoveCarModal car={car} visible={moving} onClose={() => setMoving(false)} />
     </>
@@ -586,6 +600,7 @@ const PaintConfirmModal = ({ car, confirm, onClose }: { car: GarageCar; confirm:
 };
 
 const styles = StyleSheet.create({
+  actions: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
   bars: { gap: 4, marginTop: 6, marginBottom: 12 },
   barHead: { flexDirection: 'row', justifyContent: 'space-between' },
   barLabel: { fontSize: 12, color: colors.textTertiary },
