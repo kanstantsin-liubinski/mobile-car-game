@@ -13,7 +13,8 @@ interface GameStateContextType {
   checkSaveData: () => Promise<void>;
   clearSaveData: () => Promise<void>;
   isLoading: boolean;
-  resetGameData: () => Promise<void>;
+  /** Сброс карьеры. «Новая игра» сбрасывает и обучение; перезапуск через «Наследие» — нет (keepTutorial) */
+  resetGameData: (options?: { keepTutorial?: boolean }) => Promise<void>;
   gameResetTrigger: number; // Используется для триггера перезагрузки
 }
 
@@ -78,7 +79,7 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
    * остаётся «game», эффект не срабатывал, и при следующем запуске пропадала кнопка
    * «Продолжить»: «Новая игра» стёрла бы новую карьеру.
    */
-  const resetGameData = async () => {
+  const resetGameData = async (options: { keepTutorial?: boolean } = {}) => {
     try {
       // Очищаем все игровые данные
       await AsyncStorage.removeItem('game_balance');
@@ -89,6 +90,8 @@ export const GameStateProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       await AsyncStorage.removeItem('game_experience');
       await AsyncStorage.removeItem('game_skills');
       await AsyncStorage.removeItem('game_sold_cars');
+      // Обучение начинается заново в новой игре; «Наследие» его не повторяет
+      if (!options.keepTutorial) await AsyncStorage.removeItem('game_tutorial');
       await AsyncStorage.setItem(SAVE_DATA_MARKER, 'true');
 
       // Триггерим перезагрузку компонентов

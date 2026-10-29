@@ -52,7 +52,7 @@ export const LegacyModal = ({ visible, onClose }: { visible: boolean; onClose: (
       return;
     }
     setCurrentScreen('menu');
-    await resetGameData();
+    await resetGameData({ keepTutorial: true });
     setCurrentScreen('game');
   };
 
