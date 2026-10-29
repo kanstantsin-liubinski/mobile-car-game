@@ -238,7 +238,8 @@ const CollectionTab = () => {
 const styles = StyleSheet.create({
   // Фиксированная высота: окно не прыгает при переключении вкладок
   sheet: { height: '82%' },
-  tabs: { flexGrow: 0, marginHorizontal: -14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Не сжимается: длинный список на «Достижениях» иначе сплющивал вкладки и обрезал их текст
+  tabs: { flexGrow: 0, flexShrink: 0, marginHorizontal: -14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   tabsContent: { gap: 8, paddingHorizontal: 14 },
   tab: {
     paddingHorizontal: 12,

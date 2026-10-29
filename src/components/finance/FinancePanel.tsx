@@ -465,6 +465,7 @@ const styles = StyleSheet.create({
   // Вкладки — часть шапки: серая линия под ними, прокрутка содержимого начинается вплотную к ней
   tabs: {
     flexGrow: 0,
+    flexShrink: 0,
     marginHorizontal: -14,
     paddingBottom: 10,
     borderBottomWidth: 1,
