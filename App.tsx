@@ -80,10 +80,9 @@ function GameContent() {
             {currentScreen === 'dealership' && <DealershipScreen onBack={() => goToScreen('city')} />}
             {currentScreen === 'skills' && <SkillsScreen />}
             {currentScreen === 'orders' && <OrdersScreen />}
+            {/* Наставник ведёт новичка по первому циклу: карточка поверх экрана над меню */}
+            <MentorTutorial screen={currentScreen} onOpenMarket={() => openMarket(DEFAULT_MARKET_ID)} />
           </View>
-
-          {/* Наставник ведёт новичка по первому циклу: над меню, ничего не перекрывая */}
-          <MentorTutorial screen={currentScreen} onOpenMarket={() => openMarket(DEFAULT_MARKET_ID)} />
           <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
 
           {/* Финансы: панель по нажатию на баланс, обязательный отчёт в зарплатный день, банкротство */}

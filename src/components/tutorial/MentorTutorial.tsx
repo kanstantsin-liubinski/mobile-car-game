@@ -9,6 +9,8 @@ import { MECHANIC_AVATARS } from '@img/gameIcons';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
 import type { Screen } from '@/types';
+import { LEGACY_MIN_LEVEL, LEGACY_MIN_NET_WORTH } from '../../economy/balance';
+import { formatMoney } from '../../economy/format';
 
 const TUTORIAL_KEY = 'game_tutorial';
 /** Наставник — седой механик в очках из набора аватаров */
@@ -25,7 +27,8 @@ interface World {
   screen: Screen;
   inspected: boolean;
   carsInGarage: number;
-  repairing: boolean;
+  /** Хотя бы один тап «Ремонт» или ремонт механиком */
+  repaired: boolean;
   atMax: boolean;
   selling: boolean;
   sold: boolean;
@@ -69,7 +72,7 @@ const STEPS: Step[] = [
   {
     text: 'Машина в гараже. Чини её: каждый тап «Ремонт» поднимает состояние, а детали стоят денег — цена тапа написана на кнопке. Палец можно просто держать.',
     hint: 'Гараж → «Ремонт»',
-    doneWhen: (w) => w.repairing || w.atMax || w.selling || w.sold,
+    doneWhen: (w) => w.repaired || w.atMax || w.selling || w.sold,
   },
   {
     text: 'Дотяни до максимума — дальше чинить некуда — и выставляй на продажу. Ползунок: дешевле — уйдёт быстрее, дороже — придётся подождать.',
@@ -80,7 +83,12 @@ const STEPS: Step[] = [
     text: 'Пока машина продаётся, загляни в «Заказы»: клиенты платят за ремонт, и это тоже опыт. А когда устанешь тапать — найми механика. Он чинит сам, но оклад платишь каждый месяц, даже если он скучает.',
   },
   {
-    text: 'За прибыльные сделки растёт уровень — значок XP наверху. Каждый уровень даёт награду и открывает новое: второй гараж, классы машин, филиалы. Ну всё, напарник, дальше сам — удачи!',
+    text: 'За прибыльные сделки растёт уровень — значок XP наверху. Уровни открывают новое: гаражи побольше, классы машин, филиалы, аукцион. В гараже загляни в «Оборудование»: сканер для точного осмотра на рынке, покрасочная камера, инструменты для сложных заказов. А во вкладке «Навыки» — твои пять умений: Механик, Маляр, Подборщик, Торговля и Менеджмент. Они растут от практики, а курсы помогают быстрее.',
+  },
+  {
+    text: `И про «Наследие». С ${LEGACY_MIN_LEVEL} уровня, если нет кредита, а бизнес стоит от ${formatMoney(
+      LEGACY_MIN_NET_WORTH * 100,
+    )}, карьеру можно начать заново. Деньги, гаражи, машины, персонал, уровень и навыки сбросятся, зато за прибыль этой карьеры ты получишь очки наследия — они навсегда увеличат прибыль со сделок и заказов и опыт. Чем больше заработаешь до перезапуска, тем больше очков. Без нескольких перезапусков не купить главную цель — автомобильный концерн за $1 млрд. Открывается через значок XP → «Наследие». Ну всё, напарник, дальше сам — удачи!`,
   },
 ];
 
@@ -111,7 +119,7 @@ export const MentorTutorial = ({ screen, onOpenMarket }: { screen: Screen; onOpe
     screen,
     inspected: state.ledger.inspectPractice > 0 || state.player.picker.practice > 0 || state.player.picker.level > 1,
     carsInGarage: garage.filter((c) => !c.clientOrderId).length,
-    repairing: Object.keys(mechanicRepairs).length > 0 || state.player.manualTaps >= 20,
+    repaired: Object.keys(mechanicRepairs).length > 0 || state.player.manualTaps >= 1,
     atMax: garage.some((c) => !c.clientOrderId && c.condition >= c.maxCondition),
     selling: Object.keys(activeSells).length > 0,
     sold: state.totals.carsSold + state.ledger.carsSold > 0,
@@ -131,7 +139,7 @@ export const MentorTutorial = ({ screen, onOpenMarket }: { screen: Screen; onOpe
   const last = progress!.step === STEPS.length - 1;
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.card}>
         <GameIcon source={MENTOR_AVATAR} size={48} />
         <View style={styles.body}>
@@ -141,7 +149,7 @@ export const MentorTutorial = ({ screen, onOpenMarket }: { screen: Screen; onOpe
           <Text style={styles.text}>{step.text}</Text>
           {step.hint && <Text style={styles.hint}>👉 {step.hint}</Text>}
           <View style={styles.buttons}>
-            <TouchableOpacity onPress={() => save({ step: progress!.step, done: true })} hitSlop={8}>
+            <TouchableOpacity style={styles.skipButton} onPress={() => save({ step: progress!.step, done: true })} hitSlop={8}>
               <Text style={styles.skip}>Пропустить обучение</Text>
             </TouchableOpacity>
             {step.action && (
@@ -165,7 +173,8 @@ export const MentorTutorial = ({ screen, onOpenMarket }: { screen: Screen; onOpe
 };
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: SCREEN_INSET, paddingBottom: 8 },
+  // Карточка лежит поверх экрана над меню: за её рамкой нет полосы фона, углы не обрезаны
+  wrap: { position: 'absolute', left: 0, right: 0, bottom: 8, paddingHorizontal: SCREEN_INSET },
   card: {
     flexDirection: 'row',
     gap: 10,
@@ -179,8 +188,10 @@ const styles = StyleSheet.create({
   name: { fontSize: 12, fontWeight: '800', color: '#F59E0B' },
   text: { fontSize: 13, lineHeight: 18, color: colors.textPrimary },
   hint: { fontSize: 12, fontWeight: '700', color: colors.textTertiary },
-  buttons: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  // Не помещаются в строку — основная кнопка переносится вниз и остаётся справа
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 8, marginTop: 4 },
+  skipButton: { flexShrink: 1 },
   skip: { fontSize: 12, color: colors.textTertiary, textDecorationLine: 'underline' },
-  next: { backgroundColor: '#F59E0B', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 7 },
+  next: { marginLeft: 'auto', backgroundColor: '#F59E0B', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 7 },
   nextText: { fontSize: 13, fontWeight: '800', color: '#111827' },
 });
