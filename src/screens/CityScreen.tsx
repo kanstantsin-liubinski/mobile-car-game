@@ -539,7 +539,6 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 12,
   },
   infoCell: {
     flex: 1,
@@ -564,12 +563,14 @@ const styles = StyleSheet.create({
     color: '#EF4444',
   },
   noteText: {
+    marginTop: 12,
     color: colors.textTertiary,
     fontSize: 13,
     fontWeight: '500',
     textAlign: 'center',
   },
   warningText: {
+    marginTop: 12,
     color: '#F59E0B',
     fontSize: 13,
     fontWeight: '600',

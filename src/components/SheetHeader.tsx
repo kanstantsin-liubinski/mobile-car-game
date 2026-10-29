@@ -5,6 +5,15 @@ import { colors } from '@styles/colors';
 
 /** Внутренний отступ нижних окон (garageStyles.modalContent) — хедер, футер и прокрутка выходят на всю ширину */
 export const SHEET_PADDING = 14;
+/** Просвет между линией шапки/футера и содержимым прокрутки */
+export const SHEET_GAP = 12;
+/** Нижний отступ карточек и блоков внутри окон (ui.section, Notice, карточки списков) */
+export const ITEM_GAP = 10;
+/**
+ * Отступ в конце прокрутки: у последней карточки уже есть свои ITEM_GAP снизу,
+ * поэтому над футером остаётся ровно SHEET_GAP — как под шапкой
+ */
+export const SHEET_SCROLL_END = SHEET_GAP - ITEM_GAP;
 
 /**
  * Заголовок нижнего окна с крестиком закрытия и серой линией снизу, как у шапки игры.
@@ -90,5 +99,5 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   scroll: { flexShrink: 1, marginHorizontal: -SHEET_PADDING },
-  scrollContent: { paddingHorizontal: SHEET_PADDING, paddingTop: 12, paddingBottom: 12 },
+  scrollContent: { paddingHorizontal: SHEET_PADDING, paddingTop: SHEET_GAP, paddingBottom: SHEET_SCROLL_END },
 });

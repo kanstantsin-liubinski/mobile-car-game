@@ -712,7 +712,7 @@ export const GarageScreen = ({ onOpenMarket }: GarageScreenProps) => {
 
             {/* Price Adjustment Slider */}
             <View style={garageStyles.modalInfoBlock}>
-              <View style={{ marginBottom: 12 }}>
+              <View>
                 <Text style={garageStyles.modalLabel}>Регулировка цены:</Text>
                 <Text
                   style={[
@@ -783,8 +783,8 @@ export const GarageScreen = ({ onOpenMarket }: GarageScreenProps) => {
                 {
                   borderTopWidth: 1,
                   borderTopColor: colors.border,
-                  paddingTop: 12,
-                  marginTop: 12,
+                  paddingTop: 14,
+                  marginBottom: 0,
                 },
               ]}
             >
@@ -850,7 +850,7 @@ export const GarageScreen = ({ onOpenMarket }: GarageScreenProps) => {
       </PainterModal>
       {/* Нижний отступ экрана и списка машин уже дают часть просвета над карточкой обучения */}
       <TutorialSpacer
-        slack={Number(garageStyles.scrollContent.paddingBottom) + (garage.length > 0 ? Number(garageStyles.carsList.paddingBottom) : 0)}
+        slack={garageStyles.scrollContent.paddingBottom}
       />
     </ScrollView>
     </View>

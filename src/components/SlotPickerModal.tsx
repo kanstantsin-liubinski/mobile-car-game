@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Modal, Platform } from 'react-native';
 import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
+import { SheetHeader } from '@components/SheetHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { colors } from '@styles/colors';
@@ -37,31 +38,12 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
 
   return (
     <SheetModal visible={car !== null} onRequestClose={onCancel}>
-        <View
-          style={{
-            backgroundColor: colors.cardBg,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            padding: 14,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            paddingBottom: insets.bottom + 14,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 24,
-              fontWeight: '700',
-              color: colors.textPrimary,
-              marginBottom: 14,
-              textAlign: 'center',
-            }}
-          >
-            Покупка автомобиля
-          </Text>
+        {/* Как остальные нижние окна: шапка с линией и крестиком, ровные 12 до линий шапки и футера */}
+        <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 14 }]}>
+          <SheetHeader title="Покупка автомобиля" onClose={onCancel} />
 
           {car && (
-            <View style={{ marginBottom: 16, paddingBottom: 8 }}>
+            <View style={{ marginBottom: 14 }}>
               <Text style={{ fontSize: 14, color: colors.textTertiary, marginBottom: 4, fontWeight: '500' }}>
                 Покупаешь:
               </Text>
@@ -75,8 +57,8 @@ export const SlotPickerModal = ({ car, onCancel, onConfirm }: SlotPickerModalPro
             </View>
           )}
 
-          <View style={{ marginBottom: 16 }}>
-            <Text style={{ fontSize: 14, color: colors.textTertiary, marginBottom: 10, fontWeight: '500' }}>
+          <View>
+            <Text style={{ fontSize: 14, color: colors.textTertiary, marginBottom: 8, fontWeight: '500' }}>
               ВЫБЕРИ СЛОТ
             </Text>
 

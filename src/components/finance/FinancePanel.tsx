@@ -4,6 +4,7 @@ import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SHEET_GAP, SHEET_SCROLL_END } from '@components/SheetHeader';
 import { colors } from '@styles/colors';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
@@ -65,7 +66,7 @@ export const FinancePanel = ({ visible, onClose }: FinancePanelProps) => {
           </ScrollView>
 
           {visible && (
-            <ScrollView style={styles.body} contentContainerStyle={{ paddingTop: 12, paddingBottom: 12, paddingHorizontal: 14 }}>
+            <ScrollView style={styles.body} contentContainerStyle={{ paddingTop: SHEET_GAP, paddingBottom: SHEET_SCROLL_END, paddingHorizontal: 14 }}>
               {tab === 'overview' && <OverviewTab />}
               {tab === 'pnl' && <PnlTab />}
               {tab === 'assets' && <AssetsTab />}
@@ -259,7 +260,7 @@ const MechanicsTab = () => {
             <FinanceRow label="Ремонтов" value={`${c.jobsDoneMonth} в этом месяце · ${c.jobsDoneTotal} всего`} />
             <FinanceRow label="Занят" value={formatGameSpan(activity.busyMs)} />
             <FinanceRow label="Простой" value={formatGameSpan(activity.idleMs)} />
-            <Text style={styles.hint}>Загрузка — доля времени в ремонте от времени в штате в этом месяце.</Text>
+            <Text style={[styles.hint, styles.hintInCard]}>Загрузка — доля времени в ремонте от времени в штате в этом месяце.</Text>
           </View>
         );
       })}
@@ -303,7 +304,7 @@ const BranchesTab = () => {
           <View key={b.garageId}>
             <FinanceSection title={`${name} · этот месяц`}>
               <BranchReportRows r={current} />
-              <Text style={styles.hint}>
+              <Text style={[styles.hint, styles.hintInCard]}>
                 {b.automation ? 'Автоматизация включена' : 'Автоматизация выключена'} · слотов {b.slots.length} · всего выполнено{' '}
                 {b.totals.completed}, выручка {formatMoney(b.totals.revenueCents)}
               </Text>
@@ -498,6 +499,11 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginBottom: 10,
     lineHeight: 16,
+  },
+  // Подсказка последней строкой карточки: отступ сверху, а снизу — только padding карточки
+  hintInCard: {
+    marginTop: 6,
+    marginBottom: 0,
   },
   empty: {
     fontSize: 14,

@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
   tileTitle: { flexShrink: 1, fontSize: 14, fontWeight: '800', color: '#FFF' },
   tileSub: { fontSize: 11, fontWeight: '600', color: 'rgba(255, 255, 255, 0.85)' },
   note: { fontSize: 12, color: '#F59E0B', fontWeight: '600', marginTop: 6 },
-  confirmBox: { gap: 6, marginBottom: 14 },
+  confirmBox: { gap: 6 },
   moveSlots: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 12 },
   moveSlot: {
     width: 52,

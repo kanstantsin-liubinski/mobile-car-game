@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Modal, BackHandler, Platform } from 'react-native';
 import { SheetModal } from '@components/SheetModal';
 import { TouchableOpacity } from '@components/Touchable';
+import { SheetFooter, SheetHeader } from '@components/SheetHeader';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
 import { colors } from '@styles/colors';
+import { garageStyles } from '@styles/styles';
 
 interface MainMenuProps {
   hasSaveData: boolean;
@@ -26,6 +30,9 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   const [settings, setSettings] = useState<SettingsState>({
     difficulty: 'normal',
   });
+  const nativeInsets = useSafeAreaInsets();
+  const webInsets = useSafeAreaWeb();
+  const insets = Platform.OS === 'web' ? webInsets : nativeInsets;
 
   const handleNewGame = () => {
     if (hasSaveData) {
@@ -97,16 +104,9 @@ export const MainMenu: React.FC<MainMenuProps> = ({
 
       {/* Settings Modal */}
       <SheetModal visible={showSettings} onRequestClose={() => setShowSettings(false)}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Настройки</Text>
-              <TouchableOpacity
-                onPress={() => setShowSettings(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Как остальные нижние окна: шапка с линией, содержимое, футер с кнопкой */}
+          <View style={[garageStyles.modalContent, { paddingBottom: insets.bottom + 14 }]}>
+            <SheetHeader title="Настройки" onClose={() => setShowSettings(false)} />
 
             <View style={styles.settingGroup}>
               <Text style={styles.settingLabel}>Сложность для новой игры:</Text>
@@ -136,12 +136,14 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               </View>
             </View>
 
-            <TouchableOpacity
-              style={styles.closeSettingsButton}
-              onPress={() => setShowSettings(false)}
-            >
-              <Text style={styles.closeSettingsButtonText}>Готово</Text>
-            </TouchableOpacity>
+            <SheetFooter style={{ marginTop: 12 }}>
+              <TouchableOpacity
+                style={[garageStyles.modalButton, garageStyles.confirmButton]}
+                onPress={() => setShowSettings(false)}
+              >
+                <Text style={[garageStyles.modalButtonText, { color: '#FFF' }]}>Готово</Text>
+              </TouchableOpacity>
+            </SheetFooter>
           </View>
       </SheetModal>
 
@@ -241,44 +243,12 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
 
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.darkBg,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    paddingBottom: 40,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  closeButton: {
-    fontSize: 28,
-    color: colors.textTertiary,
-    fontWeight: '300',
-  },
-  settingGroup: {
-    marginBottom: 32,
-  },
+  settingGroup: {},
   settingLabel: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   difficultyOptions: {
     flexDirection: 'row',
@@ -306,18 +276,6 @@ const styles = StyleSheet.create({
   difficultyButtonTextActive: {
     color: colors.textPrimary,
   },
-  closeSettingsButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  closeSettingsButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-
   // Confirm modal styles
   confirmModalOverlay: {
     flex: 1,
@@ -329,8 +287,7 @@ const styles = StyleSheet.create({
   confirmModalContent: {
     backgroundColor: colors.darkBg,
     borderRadius: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 32,
+    padding: 24,
     alignItems: 'center',
   },
   confirmModalTitle: {
@@ -343,7 +300,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
   },
   confirmModalButtons: {
     flexDirection: 'row',

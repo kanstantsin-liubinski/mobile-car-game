@@ -1,7 +1,7 @@
 import React from 'react';
 import { TutorialSpacer } from '@hooks/TutorialInset';
 import { View, Text, ScrollView } from 'react-native';
-import { skillsStyles } from '@styles/styles';
+import { SCREEN_SCROLL_BOTTOM, skillsStyles } from '@styles/styles';
 import { LocationHeader } from '@components/LocationHeader';
 import { SkillCard } from '@components/SkillCard';
 import { useToast } from '@components/toast/ToastContext';
@@ -81,7 +81,11 @@ export const SkillsScreen = () => {
   return (
     <View style={{ flex: 1 }}>
       <LocationHeader title="Навыки" icon={ICONS.skills} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={skillsStyles.scrollContent}>
+      {/* Подпись последнего навыка уже даёт свой отступ — в сумме над меню ровно SCREEN_SCROLL_BOTTOM */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[skillsStyles.scrollContent, { paddingBottom: SCREEN_SCROLL_BOTTOM - noteStyle.marginBottom }]}
+      >
         {card(
           'mechanic',
           {
@@ -155,8 +159,8 @@ export const SkillsScreen = () => {
           },
           'Практика: +80 за продажу с доходностью от 10%, +20 — с меньшей прибылью, +160 за прибыльный месяц, +200 за выполненный заказ клиента. Раз в 10 игровых дней на авторынке может появиться горящее предложение — машина на 15–30% дешевле, всего на 2–4 игровых дня.',
         )}
-        {/* Просвет над карточкой обучения: нижний отступ экрана и подписи последнего навыка */}
-        <TutorialSpacer slack={Number(skillsStyles.scrollContent.paddingBottom) + noteStyle.marginBottom} />
+        {/* Просвет над карточкой обучения: нижний отступ экрана уже даёт часть места */}
+        <TutorialSpacer slack={SCREEN_SCROLL_BOTTOM} />
     </ScrollView>
     </View>
   );

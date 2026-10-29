@@ -90,7 +90,7 @@ export const DealershipScreen = ({ onBack }: DealershipScreenProps) => {
   return (
     <View style={{ flex: 1 }}>
       <LocationHeader title={DEALERSHIP.name} icon={BUILDING_ICONS[DEALERSHIP.id]} emoji={DEALERSHIP.emoji} onBack={onBack} />
-      <ScrollView style={[marketStyles.container, { paddingTop: 8 }]}>
+      <ScrollView style={marketStyles.container} contentContainerStyle={marketStyles.scrollContent}>
         <TierTabs selectedTier={selectedTier} onSelect={setSelectedTier} />
 
         <View style={marketStyles.carsList}>
@@ -143,7 +143,7 @@ export const DealershipScreen = ({ onBack }: DealershipScreenProps) => {
 
         <SlotPickerModal car={carToBuy} onCancel={() => setCarToBuy(null)} onConfirm={confirmPurchase} />
         {/* Просвет над карточкой обучения: отступы экрана и списка уже дают часть места */}
-      <TutorialSpacer slack={Number(marketStyles.container.paddingVertical) + Number(marketStyles.carsList.paddingBottom)} />
+      <TutorialSpacer slack={marketStyles.scrollContent.paddingBottom} />
     </ScrollView>
     </View>
   );

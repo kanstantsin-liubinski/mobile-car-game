@@ -154,7 +154,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
   return (
     <View style={{ flex: 1 }}>
     <LocationHeader title={market?.name ?? 'Авторынок'} icon={BUILDING_ICONS[marketId]} emoji={market?.emoji ?? '🏪'} onBack={onBack} />
-    <ScrollView ref={scrollRef} style={[marketStyles.container, { paddingTop: 8 }]}>
+    <ScrollView ref={scrollRef} style={marketStyles.container} contentContainerStyle={marketStyles.scrollContent}>
       {/* Аукцион (с 30 уровня) — над классами */}
       <AuctionCard />
 
@@ -190,7 +190,7 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
 
       <SlotPickerModal car={carToBuy} onCancel={() => setCarToBuy(null)} onConfirm={confirmPurchase} />
       {/* Просвет над карточкой обучения: отступы экрана и списка уже дают часть места */}
-      <TutorialSpacer slack={Number(marketStyles.container.paddingVertical) + Number(marketStyles.carsList.paddingBottom)} />
+      <TutorialSpacer slack={marketStyles.scrollContent.paddingBottom} />
     </ScrollView>
     </View>
   );

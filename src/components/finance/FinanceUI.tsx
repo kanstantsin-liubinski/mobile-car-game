@@ -72,6 +72,8 @@ export const ui = StyleSheet.create({
     color: colors.textTertiary,
   },
   rowValue: {
+    flexShrink: 1,
+    textAlign: 'right',
     fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,

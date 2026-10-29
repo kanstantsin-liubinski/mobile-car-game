@@ -63,7 +63,7 @@ export const ExperienceModal = ({
           <InfoText>Пока пусто. Продай машину с прибылью — и здесь появится первая запись.</InfoText>
         ) : (
           log.map((e, i) => (
-            <View key={i} style={styles.logRow}>
+            <View key={i} style={[styles.logRow, i === log.length - 1 && { borderBottomWidth: 0 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.logReason}>{e.reason}</Text>
                 <Text style={styles.logMeta}>

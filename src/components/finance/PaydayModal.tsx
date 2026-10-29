@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Platform, StyleSheet } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SHEET_GAP, SHEET_SCROLL_END } from '@components/SheetHeader';
 import { colors } from '@styles/colors';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
@@ -52,7 +53,7 @@ export const PaydayModal = () => {
         <View style={[styles.sheet, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 }]}>
           <Text style={styles.title}>Финансовый отчёт — Месяц {preview.month}</Text>
 
-          <ScrollView style={styles.scroll} contentContainerStyle={{ paddingTop: 12, paddingBottom: 12, paddingHorizontal: 14 }}>
+          <ScrollView style={styles.scroll} contentContainerStyle={{ paddingTop: SHEET_GAP, paddingBottom: SHEET_SCROLL_END, paddingHorizontal: 14 }}>
             {preview.isLoanDeadline && (
               <Notice level={preview.canContinue ? 'warning' : 'danger'}>
                 Это последний месяц кредита: долг {formatMoney(loan?.principalCents ?? 0)} нужно вернуть полностью.
@@ -89,7 +90,7 @@ export const PaydayModal = () => {
               <FinanceRow label="XP за продажи в этом месяце" value={`${state.ledger.salesXp} XP`} />
               <FinanceRow
                 label="Бонус за прибыльный месяц"
-                value={monthBonusXp > 0 ? `+${monthBonusXp} XP` : 'нет — месяц без прибыли'}
+                value={monthBonusXp > 0 ? `+${monthBonusXp} XP` : 'нет'}
                 bold={monthBonusXp > 0}
               />
               <FinanceRow

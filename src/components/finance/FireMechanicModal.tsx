@@ -4,6 +4,7 @@ import { TouchableOpacity } from '@components/Touchable';
 import { InnerOverlay } from '@components/InnerOverlay';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
+import { SHEET_SCROLL_END } from '@components/SheetHeader';
 import { colors } from '@styles/colors';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useSafeAreaWeb } from '@hooks/useSafeAreaWeb';
@@ -65,7 +66,7 @@ export const FireMechanicModal = ({ mechanic, onCancel, onConfirm }: FireMechani
                 {mechanic.skillLevel > 1 ? ` (сейчас ${mechanic.skillLevel})` : ''}.
               </Notice>
 
-              <View style={garageStyles.modalButtonsContainer}>
+              <View style={[garageStyles.modalButtonsContainer, { marginTop: SHEET_SCROLL_END }]}>
                 <TouchableOpacity style={[garageStyles.modalButton, garageStyles.cancelButton]} onPress={onCancel}>
                   <Text style={garageStyles.modalButtonText}>Отмена</Text>
                 </TouchableOpacity>

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, Platform } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
 import { InnerOverlay } from '@components/InnerOverlay';
-import { SheetFooter, SheetHeader, SheetScroll } from '@components/SheetHeader';
+import { ITEM_GAP, SheetFooter, SheetHeader, SheetScroll } from '@components/SheetHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { garageStyles } from '@styles/styles';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
@@ -93,7 +93,7 @@ export const WorkerTrainingModal = ({ mechanic, onClose }: WorkerTrainingModalPr
                   ...(isMax ? [] : [{ label: 'Оклад после повышения', value: `${formatMoney(salaryForLevel(level + 1, profession))}/мес` }]),
                 ]}
               />
-              <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8 }}>
+              <Text style={{ color: '#94A3B8', fontSize: 12, lineHeight: 17, marginBottom: ITEM_GAP }}>
                 {manager
                   ? `Практика: +${MANAGER_ORDER_PRACTICE} за каждый выполненный заказ филиала. Курс даёт до половины порога, раз в 3 месяца. Оклад +3% за уровень.`
                   : `Практика копится только во время ${painter ? 'покраски' : 'ремонта'}: 20 единиц за игровой день работы. Оклад — около 37,5% того, что сотрудник приносит при полной загрузке на машинах своего допуска, и растёт вместе со скоростью.`}

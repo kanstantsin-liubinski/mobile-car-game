@@ -67,7 +67,7 @@ export const ConcernSection = () => {
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={[styles.button, styles.gold, !available && styles.disabled]} disabled={!available} onPress={() => setConfirm(true)}>
+            <TouchableOpacity style={[styles.button, styles.single, styles.gold, !available && styles.disabled]} disabled={!available} onPress={() => setConfirm(true)}>
               <Text style={styles.buttonText}>Приобрести концерн · {formatMoney(CONCERN_PRICE * 100)}</Text>
             </TouchableOpacity>
           )}
@@ -87,7 +87,8 @@ const styles = StyleSheet.create({
   bar: { height: 5, borderRadius: 3, backgroundColor: colors.border, overflow: 'hidden', marginTop: 3 },
   fill: { height: 5, backgroundColor: '#F59E0B' },
   buttons: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  button: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 10 },
+  button: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  single: { marginTop: 10 },
   gold: { backgroundColor: '#B45309' },
   secondary: { borderWidth: 1, borderColor: colors.border },
   buttonText: { color: '#FFF', fontWeight: '800', fontSize: 14 },

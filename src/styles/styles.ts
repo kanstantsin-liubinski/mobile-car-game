@@ -5,6 +5,12 @@ import { colors } from './colors';
 export const CARD_RADIUS = 12;
 /** Отступ контента от левого и правого края экрана */
 export const SCREEN_INSET = 16;
+/**
+ * Просвет у краёв прокрутки экрана: под шапкой (вместе с её 8 снизу) и над нижним меню —
+ * столько же, сколько между карточками в списках
+ */
+export const SCREEN_SCROLL_TOP = 8;
+export const SCREEN_SCROLL_BOTTOM = 16;
 
 export const commonStyles = StyleSheet.create({
   container: {
@@ -175,7 +181,10 @@ export const menuStyles = StyleSheet.create({
 export const marketStyles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingVertical: 20,
+  },
+  scrollContent: {
+    paddingTop: SCREEN_SCROLL_TOP,
+    paddingBottom: SCREEN_SCROLL_BOTTOM,
   },
   title: {
     fontSize: 28,
@@ -264,7 +273,6 @@ export const marketStyles = StyleSheet.create({
   carsList: {
     gap: 16,
     paddingHorizontal: 16,
-    paddingBottom: 24,
   },
   carCard: {
     backgroundColor: colors.darkBg,
@@ -386,8 +394,8 @@ export const garageStyles = StyleSheet.create({
   /** Отступы внутри прокрутки — полоса прокрутки идёт по краю экрана, а не поверх карточек */
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 20,
+    paddingTop: SCREEN_SCROLL_TOP,
+    paddingBottom: SCREEN_SCROLL_BOTTOM,
   },
   title: {
     fontSize: 28,
@@ -403,7 +411,6 @@ export const garageStyles = StyleSheet.create({
   },
   carsList: {
     gap: 16,
-    paddingBottom: 24,
   },
   carCard: {
     backgroundColor: colors.darkBg,
@@ -548,9 +555,9 @@ export const garageStyles = StyleSheet.create({
     marginBottom: 14,
     textAlign: 'center',
   },
+  // Блоки окна продажи идут через ровные 14; у последнего отступа нет — до футера 12, как под шапкой
   modalInfoBlock: {
-    marginBottom: 12,
-    paddingBottom: 8,
+    marginBottom: 14,
   },
   modalLabel: {
     fontSize: 14,
@@ -572,11 +579,12 @@ export const garageStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  // Футер окна с кнопками: серая линия сверху на всю ширину окна (как нижнее меню игры)
+  // Футер окна с кнопками: серая линия сверху на всю ширину окна (как нижнее меню игры),
+  // над линией тот же просвет, что под линией шапки (SheetHeader)
   modalButtonsContainer: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 16,
+    marginTop: 12,
     marginHorizontal: -14,
     paddingHorizontal: 14,
     paddingTop: 12,
@@ -613,8 +621,8 @@ export const skillsStyles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 20,
+    paddingTop: SCREEN_SCROLL_TOP,
+    paddingBottom: SCREEN_SCROLL_BOTTOM,
   },
   title: {
     fontSize: 28,

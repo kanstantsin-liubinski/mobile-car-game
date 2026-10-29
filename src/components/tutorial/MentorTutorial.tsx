@@ -157,31 +157,34 @@ export const MentorTutorial = ({ screen, onOpenMarket }: { screen: Screen; onOpe
       onLayout={(e) => setInset(Math.ceil(e.nativeEvent.layout.height) + 2 * WRAP_BOTTOM)}
     >
       <View style={styles.card}>
-        <GameIcon source={MENTOR_AVATAR} size={48} />
-        <View style={styles.body}>
-          <Text style={styles.name}>
-            {MENTOR_NAME} · {progress!.step + 1}/{STEPS.length}
-          </Text>
-          <Text style={styles.text}>{step.text}</Text>
-          {step.hint && <Text style={styles.hint}>👉 {step.hint}</Text>}
-          <View style={styles.buttons}>
-            <TouchableOpacity style={styles.skipButton} onPress={() => save({ step: progress!.step, done: true })} hitSlop={8}>
-              <Text style={styles.skip}>Пропустить обучение</Text>
-            </TouchableOpacity>
-            {step.action && (
-              <TouchableOpacity style={styles.next} onPress={onOpenMarket}>
-                <Text style={styles.nextText}>{step.action.label}</Text>
-              </TouchableOpacity>
-            )}
-            {!step.doneWhen && (
-              <TouchableOpacity
-                style={styles.next}
-                onPress={() => save(last ? { step: progress!.step + 1, done: true } : { step: progress!.step + 1, done: false })}
-              >
-                <Text style={styles.nextText}>{last ? 'Спасибо!' : 'Дальше'}</Text>
-              </TouchableOpacity>
-            )}
+        <View style={styles.top}>
+          <GameIcon source={MENTOR_AVATAR} size={48} />
+          <View style={styles.body}>
+            <Text style={styles.name}>
+              {MENTOR_NAME} · {progress!.step + 1}/{STEPS.length}
+            </Text>
+            <Text style={styles.text}>{step.text}</Text>
+            {step.hint && <Text style={styles.hint}>👉 {step.hint}</Text>}
           </View>
+        </View>
+        {/* Кнопки — на всю ширину карточки (и под аватаром), чтобы обе всегда были в одной строке */}
+        <View style={styles.buttons}>
+          <TouchableOpacity style={styles.skipButton} onPress={() => save({ step: progress!.step, done: true })} hitSlop={8}>
+            <Text style={styles.skip}>Пропустить обучение</Text>
+          </TouchableOpacity>
+          {step.action && (
+            <TouchableOpacity style={styles.next} onPress={onOpenMarket}>
+              <Text style={styles.nextText}>{step.action.label}</Text>
+            </TouchableOpacity>
+          )}
+          {!step.doneWhen && (
+            <TouchableOpacity
+              style={styles.next}
+              onPress={() => save(last ? { step: progress!.step + 1, done: true } : { step: progress!.step + 1, done: false })}
+            >
+              <Text style={styles.nextText}>{last ? 'Спасибо!' : 'Дальше'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
@@ -192,7 +195,6 @@ const styles = StyleSheet.create({
   // Карточка лежит поверх экрана над меню: за её рамкой нет полосы фона, углы не обрезаны
   wrap: { position: 'absolute', left: 0, right: 0, bottom: WRAP_BOTTOM, paddingHorizontal: SCREEN_INSET },
   card: {
-    flexDirection: 'row',
     gap: 10,
     padding: 12,
     borderRadius: CARD_RADIUS,
@@ -200,14 +202,14 @@ const styles = StyleSheet.create({
     borderColor: '#F59E0B',
     backgroundColor: colors.cardBg,
   },
+  top: { flexDirection: 'row', gap: 10 },
   body: { flex: 1, gap: 4 },
   name: { fontSize: 12, fontWeight: '800', color: '#F59E0B' },
   text: { fontSize: 13, lineHeight: 18, color: colors.textPrimary },
   hint: { fontSize: 12, fontWeight: '700', color: colors.textTertiary },
-  // Не помещаются в строку — основная кнопка переносится вниз и остаётся справа
-  buttons: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 8, marginTop: 4 },
+  buttons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   skipButton: { flexShrink: 1 },
   skip: { fontSize: 12, color: colors.textTertiary, textDecorationLine: 'underline' },
-  next: { marginLeft: 'auto', backgroundColor: '#F59E0B', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 7 },
+  next: { marginLeft: 'auto', flexShrink: 0, backgroundColor: '#F59E0B', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 7 },
   nextText: { fontSize: 13, fontWeight: '800', color: '#111827' },
 });

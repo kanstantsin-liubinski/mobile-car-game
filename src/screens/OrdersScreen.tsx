@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TutorialSpacer } from '@hooks/TutorialInset';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
+import { SCREEN_SCROLL_BOTTOM, SCREEN_SCROLL_TOP } from '@styles/styles';
 import { colors } from '@styles/colors';
 import { LocationHeader } from '@components/LocationHeader';
 import { ReputationInfo } from '@components/orders/ReputationInfo';
@@ -38,10 +39,14 @@ export const OrdersScreen = () => {
   const board = orders.board.filter((o) => o.kind === tab);
   const history = orders.closed.filter((o) => o.kind === tab).slice(0, 5);
 
+  const lastMargin =
+    history.length > 0 ? styles.historyRow.marginBottom : board.length > 0 ? styles.card.marginBottom : styles.empty.marginBottom;
+
   return (
     <View style={{ flex: 1 }}>
       <LocationHeader title="Заказы" icon={ICONS.money} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
+      {/* В конце прокрутки — ровно SCREEN_SCROLL_BOTTOM: отступ последнего элемента входит в него */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.container, { paddingBottom: SCREEN_SCROLL_BOTTOM - lastMargin }]}>
         <View style={styles.repCard}>
           <View style={styles.rowBetween}>
             <Text style={styles.repTitle} numberOfLines={1}>
@@ -110,13 +115,8 @@ export const OrdersScreen = () => {
             {o.repDelta ? ` · репутация ${o.repDelta > 0 ? '+' : ''}${o.repDelta}` : ''}
           </Text>
         ))}
-        {/* Просвет над карточкой обучения: нижний отступ экрана и отступ последнего элемента */}
-        <TutorialSpacer
-          slack={
-            styles.container.paddingBottom +
-            (history.length > 0 ? styles.historyRow.marginBottom : board.length > 0 ? styles.card.marginBottom : styles.empty.marginBottom)
-          }
-        />
+        {/* Просвет над карточкой обучения: нижний отступ экрана уже даёт часть места */}
+        <TutorialSpacer slack={SCREEN_SCROLL_BOTTOM} />
     </ScrollView>
     </View>
   );
@@ -296,7 +296,7 @@ const PickingDetails = ({ order }: { order: PickingOrder }) => (
 
 const styles = StyleSheet.create({
   // Отступы внутри прокрутки: полоса прокрутки идёт по краю экрана, а не поверх карточек
-  container: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 },
+  container: { paddingHorizontal: 16, paddingTop: SCREEN_SCROLL_TOP },
   repCard: {
     backgroundColor: colors.cardBg,
     borderRadius: 12,
@@ -312,7 +312,8 @@ const styles = StyleSheet.create({
   track: { height: 8, borderRadius: 4, backgroundColor: colors.border, overflow: 'hidden' },
   fill: { height: '100%', backgroundColor: '#FBBF24' },
   muted: { fontSize: 12, color: colors.textTertiary, lineHeight: 17 },
-  tabs: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  // Вместе с marginTop заголовка раздела — те же 12, что между карточкой репутации и вкладками
+  tabs: { flexDirection: 'row', gap: 8, marginBottom: 2 },
   tab: {
     flex: 1,
     paddingVertical: 10,
