@@ -8,11 +8,14 @@ import { CARD_RADIUS, SCREEN_INSET } from '@styles/styles';
 import { MECHANIC_AVATARS } from '@img/gameIcons';
 import { useEconomy, useGameClock } from '@hooks/EconomyContext';
 import { useGarageContext } from '@hooks/GarageContext';
+import { useSetTutorialInset } from '@hooks/TutorialInset';
 import type { Screen } from '@/types';
 import { LEGACY_MIN_LEVEL, LEGACY_MIN_NET_WORTH } from '../../economy/balance';
 import { formatMoney } from '../../economy/format';
 
 const TUTORIAL_KEY = 'game_tutorial';
+/** Карточка висит над меню на таком расстоянии */
+const WRAP_BOTTOM = 8;
 /** Наставник — седой механик в очках из набора аватаров */
 const MENTOR_AVATAR = MECHANIC_AVATARS[7];
 const MENTOR_NAME = 'Дядя Миша';
@@ -97,6 +100,7 @@ export const MentorTutorial = ({ screen, onOpenMarket }: { screen: Screen; onOpe
   const { paydayPending } = useGameClock();
   const { garage, mechanicRepairs, activeSells } = useGarageContext();
   const [progress, setProgress] = useState<Progress | null>(null);
+  const setInset = useSetTutorialInset();
 
   // Загрузка прогресса. Игрок, который уже торговал до появления обучения, его не увидит
   useEffect(() => {
@@ -135,11 +139,23 @@ export const MentorTutorial = ({ screen, onOpenMarket }: { screen: Screen; onOpe
     save(next >= STEPS.length ? { step: next, done: true } : { step: next, done: false });
   }, [reached, progress?.step]);
 
-  if (!step || paydayPending || state.bankruptcy) return null;
+  const visible = !!step && !paydayPending && !state.bankruptcy;
+  // Карточка скрыта — экранам не нужен запас снизу
+  useEffect(() => {
+    if (!visible) setInset(0);
+  }, [visible, setInset]);
+  useEffect(() => () => setInset(0), [setInset]);
+
+  if (!visible) return null;
   const last = progress!.step === STEPS.length - 1;
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View
+      style={styles.wrap}
+      pointerEvents="box-none"
+      // Высота карточки + два отступа как до меню: над карточкой такой же просвет, как под ней
+      onLayout={(e) => setInset(Math.ceil(e.nativeEvent.layout.height) + 2 * WRAP_BOTTOM)}
+    >
       <View style={styles.card}>
         <GameIcon source={MENTOR_AVATAR} size={48} />
         <View style={styles.body}>
@@ -174,7 +190,7 @@ export const MentorTutorial = ({ screen, onOpenMarket }: { screen: Screen; onOpe
 
 const styles = StyleSheet.create({
   // Карточка лежит поверх экрана над меню: за её рамкой нет полосы фона, углы не обрезаны
-  wrap: { position: 'absolute', left: 0, right: 0, bottom: 8, paddingHorizontal: SCREEN_INSET },
+  wrap: { position: 'absolute', left: 0, right: 0, bottom: WRAP_BOTTOM, paddingHorizontal: SCREEN_INSET },
   card: {
     flexDirection: 'row',
     gap: 10,

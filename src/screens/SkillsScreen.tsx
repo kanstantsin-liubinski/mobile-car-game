@@ -1,4 +1,5 @@
 import React from 'react';
+import { TutorialSpacer } from '@hooks/TutorialInset';
 import { View, Text, ScrollView } from 'react-native';
 import { skillsStyles } from '@styles/styles';
 import { LocationHeader } from '@components/LocationHeader';
@@ -154,7 +155,9 @@ export const SkillsScreen = () => {
           },
           'Практика: +80 за продажу с доходностью от 10%, +20 — с меньшей прибылью, +160 за прибыльный месяц, +200 за выполненный заказ клиента. Раз в 10 игровых дней на авторынке может появиться горящее предложение — машина на 15–30% дешевле, всего на 2–4 игровых дня.',
         )}
-      </ScrollView>
+        {/* Просвет над карточкой обучения: нижний отступ экрана и подписи последнего навыка */}
+        <TutorialSpacer slack={Number(skillsStyles.scrollContent.paddingBottom) + noteStyle.marginBottom} />
+    </ScrollView>
     </View>
   );
 };

@@ -294,6 +294,14 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
   const paint = car.paintCondition ?? car.condition;
   const atMax = car.condition >= car.maxCondition;
   const tapPartsCents = repairPartsCents(car, car.condition, Math.min(car.maxCondition, car.condition + tapRepairPercent));
+  // На сколько подорожает своя машина от следующего тапа (для кнопки и всплывающей награды)
+  const tapGainCents = isClient
+    ? 0
+    : Math.round(
+        (carValue(car.basePrice, { ...car, condition: Math.min(car.maxCondition, car.condition + tapRepairPercent) }) -
+          carValue(car.basePrice, car)) *
+          100,
+      );
   const busy = carBusyReason(car.id);
   const hiredPainter = painters.find((p) => p.hired);
   const tiles: TileSpec[] = [];
@@ -319,14 +327,7 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         key: 'repair',
         icon: ICONS.repair,
         title: 'Ремонт',
-        // Цена тапа видна сразу: раньше детали списывались молча, и новичок не понимал, куда уходят деньги
-        subtitle: atMax
-          ? `Максимум ${car.maxCondition}%`
-          : repairing
-            ? 'Чинит механик'
-            : isClient
-              ? `+${fmtNum(tapRepairPercent)}% за тап`
-              : `+${fmtNum(tapRepairPercent)}% · ${formatMoney(tapPartsCents)}`,
+        subtitle: atMax ? 'Машина максимально отремонтирована' : repairing ? 'Чинит механик' : 'Тапай или держи палец',
         state: atMax ? 'done' : repairing ? 'locked' : 'ready',
         accent: ACTION_COLORS.repair,
         info: `Ручной ремонт: каждый тап добавляет ${fmtNum(tapRepairPercent)}% технического состояния, до максимума ${car.maxCondition}%.${
@@ -337,13 +338,20 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
         onPress: onRepair,
         repeat: true,
         hero: true,
-        // Что всплывёт над кнопкой: на сколько подорожает своя машина от этого тапа
-        popup: () => {
-          if (isClient) return `+${fmtNum(tapRepairPercent)}%`;
-          const to = Math.min(car.maxCondition, car.condition + tapRepairPercent);
-          const gain = carValue(car.basePrice, { ...car, condition: to }) - carValue(car.basePrice, car);
-          return gain > 0 ? formatMoney(Math.round(gain * 100), { sign: true }) : `+${fmtNum(tapRepairPercent)}%`;
-        },
+        progress: { value: car.condition, max: car.maxCondition },
+        // Цена тапа видна сразу: раньше детали списывались молча, и новичок не понимал, куда уходят деньги
+        stats: isClient
+          ? [
+              { label: 'за тап', value: `+${fmtNum(tapRepairPercent)}%`, color: '#60A5FA' },
+              { label: 'до цели', value: `${fmtNum(Math.max(0, car.maxCondition - car.condition), 1)}%`, color: '#A78BFA' },
+            ]
+          : [
+              { label: 'за тап', value: `+${fmtNum(tapRepairPercent)}%`, color: '#60A5FA' },
+              { label: 'детали', value: formatMoney(-tapPartsCents), color: '#F59E0B' },
+              { label: 'цена', value: formatMoney(tapGainCents, { sign: true }), color: '#4ADE80' },
+            ],
+        // Всплывает над кнопкой: на сколько подорожала своя машина от этого тапа
+        popup: () => (tapGainCents > 0 ? formatMoney(tapGainCents, { sign: true }) : `+${fmtNum(tapRepairPercent)}%`),
       });
 
       if (repairing) {
@@ -393,8 +401,14 @@ export const CarActions = ({ car, mechanic, tapRepairPercent, onRepair, onSell, 
           key: 'tap',
           emoji: '🖌️',
           title: 'Покрасить',
-          subtitle: `+${fmtNum(PLAYER_PAINT_PER_TAP * paintTapMultiplier)} п. ЛКП`,
+          subtitle: 'Тапай или держи палец',
           state: 'ready',
+          progress: { value: paint, max: car.paintTarget ?? 100 },
+          stats: [
+            { label: 'за тап', value: `+${fmtNum(PLAYER_PAINT_PER_TAP * paintTapMultiplier)} ЛКП`, color: '#38BDF8' },
+            { label: 'до цели', value: `${fmtNum(Math.max(0, (car.paintTarget ?? 100) - paint), 1)} п.`, color: '#A78BFA' },
+          ],
+          cheers: ['Ровный слой!', 'Ни одной капли!', 'Блестит!', 'Как с завода!', 'Отлично!', 'Мастер кисти!', 'Красота!', 'Так держать!', 'Ровнее не бывает!', 'Глянец!'],
           accent: ACTION_COLORS.paint,
           info: `Каждый тап добавляет ${fmtNum(PLAYER_PAINT_PER_TAP * paintTapMultiplier)} п. ЛКП (растёт с навыком «Маляр») и даёт 1 практику. Материалы уже оплачены.`,
           onPress: () => paintTap(),

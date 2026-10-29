@@ -19,6 +19,8 @@ export interface TouchableProps {
    * делаются сериями тапов: ремонт в сотни тапов иначе утомлял пальцы, а не голову.
    */
   repeatMs?: number;
+  /** Своя анимация нажатия у вызывающего (например, вся кнопка сжимается пружиной) — без стандартной */
+  noPressEffect?: boolean;
   children?: React.ReactNode;
 }
 
@@ -34,6 +36,7 @@ export const TouchableOpacity = ({
   hitSlop,
   accessibilityLabel,
   repeatMs,
+  noPressEffect,
   children,
 }: TouchableProps) => {
   const [pressed, setPressed] = useState(false);
@@ -93,7 +96,7 @@ export const TouchableOpacity = ({
 
   return (
     <Pressable
-      style={[style, pressed && !disabled && { opacity: Math.min(activeOpacity ?? 0.55, 0.6), transform: [{ scale: 0.96 }] }]}
+      style={[style, pressed && !disabled && !noPressEffect && { opacity: Math.min(activeOpacity ?? 0.55, 0.6), transform: [{ scale: 0.96 }] }]}
       onPress={handlePress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}

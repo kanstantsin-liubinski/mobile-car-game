@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { TutorialSpacer } from '@hooks/TutorialInset';
 import { View, Text, ScrollView } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
 import { marketStyles } from '@styles/styles';
@@ -141,7 +142,9 @@ export const DealershipScreen = ({ onBack }: DealershipScreenProps) => {
         </View>
 
         <SlotPickerModal car={carToBuy} onCancel={() => setCarToBuy(null)} onConfirm={confirmPurchase} />
-      </ScrollView>
+        {/* Просвет над карточкой обучения: отступы экрана и списка уже дают часть места */}
+      <TutorialSpacer slack={Number(marketStyles.container.paddingVertical) + Number(marketStyles.carsList.paddingBottom)} />
+    </ScrollView>
     </View>
   );
 };

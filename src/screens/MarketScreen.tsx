@@ -1,4 +1,5 @@
 import { formatMoney } from '../economy/format';
+import { TutorialSpacer } from '@hooks/TutorialInset';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
@@ -188,6 +189,8 @@ export const MarketScreen = ({ marketId, onBack, focus }: MarketScreenProps) => 
       </View>
 
       <SlotPickerModal car={carToBuy} onCancel={() => setCarToBuy(null)} onConfirm={confirmPurchase} />
+      {/* Просвет над карточкой обучения: отступы экрана и списка уже дают часть места */}
+      <TutorialSpacer slack={Number(marketStyles.container.paddingVertical) + Number(marketStyles.carsList.paddingBottom)} />
     </ScrollView>
     </View>
   );

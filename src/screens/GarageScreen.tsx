@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { TutorialSpacer } from "@hooks/TutorialInset";
 import {
   View,
   Text,
@@ -847,6 +848,10 @@ export const GarageScreen = ({ onOpenMarket }: GarageScreenProps) => {
           }}
         />
       </PainterModal>
+      {/* Нижний отступ экрана и списка машин уже дают часть просвета над карточкой обучения */}
+      <TutorialSpacer
+        slack={Number(garageStyles.scrollContent.paddingBottom) + (garage.length > 0 ? Number(garageStyles.carsList.paddingBottom) : 0)}
+      />
     </ScrollView>
     </View>
   );

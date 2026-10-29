@@ -27,6 +27,7 @@ import { ToastProvider } from '@components/toast/ToastContext';
 import { ProgressionToasts } from '@components/toast/ProgressionToasts';
 import { HotOfferNotifier } from '@components/toast/HotOfferNotifier';
 import { MentorTutorial } from '@components/tutorial/MentorTutorial';
+import { TutorialInsetProvider } from '@hooks/TutorialInset';
 import { commonStyles } from '@styles/styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -64,6 +65,7 @@ function GameContent() {
             onPressXp={() => setXpOpen(true)}
           />
           
+          <TutorialInsetProvider>
           <View style={commonStyles.content}>
             {currentScreen === 'garage' && (
               <GarageScreen onOpenMarket={() => openMarket(DEFAULT_MARKET_ID)} />
@@ -83,6 +85,7 @@ function GameContent() {
             {/* Наставник ведёт новичка по первому циклу: карточка поверх экрана над меню */}
             <MentorTutorial screen={currentScreen} onOpenMarket={() => openMarket(DEFAULT_MARKET_ID)} />
           </View>
+          </TutorialInsetProvider>
           <BottomMenu currentScreen={currentScreen} onScreenChange={goToScreen} />
 
           {/* Финансы: панель по нажатию на баланс, обязательный отчёт в зарплатный день, банкротство */}

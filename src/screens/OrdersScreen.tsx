@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { TutorialSpacer } from '@hooks/TutorialInset';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { TouchableOpacity } from '@components/Touchable';
 import { colors } from '@styles/colors';
@@ -109,7 +110,14 @@ export const OrdersScreen = () => {
             {o.repDelta ? ` · репутация ${o.repDelta > 0 ? '+' : ''}${o.repDelta}` : ''}
           </Text>
         ))}
-      </ScrollView>
+        {/* Просвет над карточкой обучения: нижний отступ экрана и отступ последнего элемента */}
+        <TutorialSpacer
+          slack={
+            styles.container.paddingBottom +
+            (history.length > 0 ? styles.historyRow.marginBottom : board.length > 0 ? styles.card.marginBottom : styles.empty.marginBottom)
+          }
+        />
+    </ScrollView>
     </View>
   );
 };
